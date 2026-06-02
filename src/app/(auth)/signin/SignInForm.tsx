@@ -4,7 +4,13 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { LogIn } from "lucide-react";
 
-export function SignInForm({ devLoginEnabled }: { devLoginEnabled: boolean }) {
+export function SignInForm({
+  devLoginEnabled,
+  googleEnabled,
+}: {
+  devLoginEnabled: boolean;
+  googleEnabled: boolean;
+}) {
   const [devEmail, setDevEmail] = useState("demo@example.com");
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -13,17 +19,26 @@ export function SignInForm({ devLoginEnabled }: { devLoginEnabled: boolean }) {
       <h1 className="mb-1 text-xl font-semibold">Welcome back</h1>
       <p className="mb-6 text-sm text-muted">Sign in to your household finances.</p>
 
-      <button
-        onClick={() => {
-          setLoading("google");
-          signIn("google", { callbackUrl: "/" });
-        }}
-        disabled={loading !== null}
-        className="btn-ghost w-full py-2.5"
-      >
-        <GoogleGlyph />
-        {loading === "google" ? "Redirecting…" : "Continue with Google"}
-      </button>
+      {googleEnabled && (
+        <button
+          onClick={() => {
+            setLoading("google");
+            signIn("google", { callbackUrl: "/" });
+          }}
+          disabled={loading !== null}
+          className="btn-ghost w-full py-2.5"
+        >
+          <GoogleGlyph />
+          {loading === "google" ? "Redirecting…" : "Continue with Google"}
+        </button>
+      )}
+
+      {!googleEnabled && !devLoginEnabled && (
+        <p className="rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-muted">
+          No sign-in method is configured. Set <code className="text-text">AUTH_GOOGLE_ID</code> and{" "}
+          <code className="text-text">AUTH_GOOGLE_SECRET</code> in your environment.
+        </p>
+      )}
 
       {devLoginEnabled && (
         <>
