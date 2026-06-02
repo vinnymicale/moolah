@@ -28,7 +28,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full">
+      <body className="min-h-full" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>
