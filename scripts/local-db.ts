@@ -74,6 +74,11 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // Keep the process alive until a signal arrives. When we started Postgres
+  // ourselves the embedded-postgres bindings do this implicitly; when
+  // attaching to an already-running instance we need to block explicitly.
+  await new Promise(() => {});
 }
 
 main().catch((err) => {
