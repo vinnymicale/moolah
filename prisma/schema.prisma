@@ -28,6 +28,7 @@ model Household {
   recurring    RecurringRule[]
   budgets      Budget[]
   savingsGoals SavingsGoal[]
+  plaidItems   PlaidItem[]
 }
 
 model User {
@@ -139,9 +140,10 @@ model FinancialAccount {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  snapshots      AccountSnapshot[]
-  transactions   Transaction[]
-  recurring      RecurringRule[]
+  snapshots           AccountSnapshot[]
+  transactions        Transaction[]
+  recurring           RecurringRule[]
+  plaidLinkedAccounts PlaidLinkedAccount[]
 
   @@index([householdId])
 }
@@ -204,6 +206,9 @@ model Transaction {
 
   recurringRuleId String?
   recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+
+  // Set when the transaction was imported via Plaid. Null for manual/CSV entries.
+  plaidTransactionId String?   @unique
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -280,4 +285,55 @@ model SavingsGoal {
   updatedAt     DateTime  @updatedAt
 
   @@index([householdId])
+}
+
+// ── Plaid bank connections ────────────────────────────────────────────────────
+
+model PlaidItem {
+  id              String    @id @default(cuid())
+  householdId     String
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  // The Plaid access token is server-side only — never exposed to the browser.
+  accessToken     String
+  itemId          String    @unique
+  institutionId   String?
+  institutionName String?
+  // Cursor for /transactions/sync — null means "first sync not yet done".
+  cursor          String?
+  lastSyncedAt    DateTime?
+  error           String?   // last sync error message, if any
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  linkedAccounts  PlaidLinkedAccount[]
+
+  @@index([householdId])
+}
+
+model PlaidLinkedAccount {
+  id                 String            @id @default(cuid())
+  plaidItemId        String
+  plaidItem          PlaidItem         @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+
+  // Plaid's stable identifier for this account (used for dedup).
+  plaidAccountId     String            @unique
+  // The local FinancialAccount this syncs into. Null until linked by the user.
+  financialAccountId String?
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+
+  name               String
+  officialName       String?
+  mask               String?  // last 4 digits
+  plaidType          String   // depository | credit | loan | investment | other
+  plaidSubtype       String?  // checking | savings | credit card | …
+  // Current balance as reported by Plaid (updated on each sync).
+  availableBalance   Decimal? @db.Decimal(14, 2)
+  currentBalance     Decimal? @db.Decimal(14, 2)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([plaidItemId])
 }
