@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Copy } from "lucide-react";
 import { Modal } from "./Modal";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import {
@@ -45,6 +46,7 @@ export function TransactionModal(props: TransactionModalProps) {
   const [accountId, setAccountId] = useState(
     transaction?.accountId ?? accounts.find((a) => a.includeInCash)?.id ?? accounts[0]?.id ?? "",
   );
+  const [note, setNote] = useState(transaction?.note ?? "");
   const [cleared, setCleared] = useState(transaction?.cleared ?? true);
   const [recurring, setRecurring] = useState(false);
   const [frequency, setFrequency] = useState<Frequency>("MONTHLY");
@@ -63,6 +65,7 @@ export function TransactionModal(props: TransactionModalProps) {
         amount,
         date,
         description,
+        note: note || null,
         categoryId: categoryId || null,
         accountId: accountId || null,
         cleared,
@@ -98,6 +101,28 @@ export function TransactionModal(props: TransactionModalProps) {
     start(async () => {
       if (!transaction) return;
       await deleteTransactionAction(transaction.id);
+      onClose();
+    });
+
+  // Create a fresh copy from the current form values (handy for similar entries).
+  const duplicate = () =>
+    start(async () => {
+      setError(null);
+      const res = await createTransactionAction({
+        type,
+        amount,
+        date,
+        description,
+        note: note || null,
+        categoryId: categoryId || null,
+        accountId: accountId || null,
+        cleared,
+        recurring: null,
+      });
+      if (!res.ok) {
+        setError(res.error ?? "Something went wrong.");
+        return;
+      }
       onClose();
     });
 
@@ -182,6 +207,17 @@ export function TransactionModal(props: TransactionModalProps) {
           </div>
         </div>
 
+        <div>
+          <label className="label">Note (optional)</label>
+          <textarea
+            className="input min-h-16 resize-y"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Any extra detail…"
+            rows={2}
+          />
+        </div>
+
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={cleared} onChange={(e) => setCleared(e.target.checked)} />
           <span>Already {type === "INCOME" ? "received" : "paid"} (uncheck if it&apos;s expected/upcoming)</span>
@@ -233,9 +269,14 @@ export function TransactionModal(props: TransactionModalProps) {
 
         <div className="flex items-center justify-between pt-1">
           {editing ? (
-            <button onClick={remove} disabled={pending} className="btn-danger">
-              Delete
-            </button>
+            <div className="flex gap-2">
+              <button onClick={remove} disabled={pending} className="btn-danger">
+                Delete
+              </button>
+              <button onClick={duplicate} disabled={pending} className="btn-ghost" title="Create a copy">
+                <Copy size={14} /> Duplicate
+              </button>
+            </div>
           ) : (
             <span />
           )}
