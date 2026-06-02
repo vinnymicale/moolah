@@ -7,11 +7,12 @@ import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
   Settings, Plus, Menu, Wallet, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
-  GripVertical, RotateCcw,
+  GripVertical, RotateCcw, ChevronsLeft, Keyboard,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
+import { Modal } from "./Modal";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
 const NAV = [
@@ -28,6 +29,7 @@ const NAV = [
 ];
 
 const NAV_ORDER_KEY = "navOrder";
+const NAV_COLLAPSED_KEY = "navCollapsed";
 const DEFAULT_ORDER = NAV.map((n) => n.href);
 const NAV_BY_HREF = new Map(NAV.map((n) => [n.href, n] as const));
 
@@ -63,20 +65,55 @@ export function AppChrome({
   // client render on the default order to avoid a hydration mismatch.
   const [navOrder, setNavOrder] = useState<string[]>(DEFAULT_ORDER);
   const [mounted, setMounted] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [dragOverHref, setDragOverHref] = useState<string | null>(null);
   const navDragHref = useRef<string | null>(null);
 
   useEffect(() => {
-    let stored: unknown = null;
+    let storedOrder: unknown = null;
+    let storedCollapsed = false;
     try {
       const raw = localStorage.getItem(NAV_ORDER_KEY);
-      if (raw) stored = JSON.parse(raw);
+      if (raw) storedOrder = JSON.parse(raw);
+      storedCollapsed = localStorage.getItem(NAV_COLLAPSED_KEY) === "1";
     } catch {
       // ignore unavailable/corrupt storage
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted nav order
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted nav prefs
     setMounted(true);
-    if (Array.isArray(stored)) setNavOrder(mergeNavOrder(stored as string[]));
+    if (Array.isArray(storedOrder)) setNavOrder(mergeNavOrder(storedOrder as string[]));
+    if (storedCollapsed) setCollapsed(true);
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(NAV_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // ignore unavailable storage
+      }
+      return next;
+    });
+  };
+
+  // Global keyboard shortcuts (ignored while typing in a field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === "n") { e.preventDefault(); setAddOpen(true); }
+      else if (e.key === "i") { e.preventDefault(); fileInputRef.current?.click(); }
+      else if (e.key === "?") { e.preventDefault(); setShortcutsOpen(true); }
+      else if (e.key === "/") {
+        const el = document.querySelector<HTMLInputElement>('[data-search="true"]');
+        if (el) { e.preventDefault(); el.focus(); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const persistOrder = (next: string[]) => {
@@ -106,6 +143,7 @@ export function AppChrome({
     .map((h) => NAV_BY_HREF.get(h))
     .filter((x): x is (typeof NAV)[number] => !!x);
   const customized = mounted && navOrder.join() !== DEFAULT_ORDER.join();
+  const isCollapsed = mounted && collapsed;
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -160,25 +198,43 @@ export function AppChrome({
     };
   }, []);
 
-  const SidebarBody = (
+  const renderSidebar = (compact: boolean, allowCollapse: boolean) => (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-4 py-4 text-brand">
-        <Wallet size={22} />
-        <span className="font-semibold text-text">Household Finance</span>
+      <div className={`flex items-center py-4 ${compact ? "justify-center px-2" : "justify-between px-4"}`}>
+        {!compact && (
+          <div className="flex items-center gap-2 text-brand">
+            <Wallet size={22} />
+            <span className="font-semibold text-text">Household Finance</span>
+          </div>
+        )}
+        {allowCollapse && (
+          <button
+            onClick={toggleCollapsed}
+            className="btn-ghost h-8 w-8 !p-0"
+            title={compact ? "Expand menu" : "Collapse menu"}
+            aria-label={compact ? "Expand menu" : "Collapse menu"}
+          >
+            {compact ? <Wallet size={20} className="text-brand" /> : <ChevronsLeft size={18} />}
+          </button>
+        )}
       </div>
-      <div className="space-y-2 px-3 pb-2">
-        <button onClick={() => { setAddOpen(true); setNavOpen(false); }} className="btn-primary w-full">
-          <Plus size={16} /> Add transaction
+      <div className={`space-y-2 pb-2 ${compact ? "px-2" : "px-3"}`}>
+        <button
+          onClick={() => { setAddOpen(true); setNavOpen(false); }}
+          className={`btn-primary w-full ${compact ? "justify-center !px-0" : ""}`}
+          title="Add transaction"
+        >
+          <Plus size={16} /> {!compact && "Add transaction"}
         </button>
         <button
           onClick={() => { fileInputRef.current?.click(); setNavOpen(false); }}
-          className="btn-ghost w-full justify-start text-sm"
+          className={`btn-ghost w-full text-sm ${compact ? "justify-center !px-0" : "justify-start"}`}
           title="Import transactions from a bank CSV"
         >
-          <Upload size={15} /> Import CSV
+          <Upload size={15} /> {!compact && "Import CSV"}
         </button>
       </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
+      <nav className={`flex-1 space-y-0.5 overflow-y-auto py-2 ${compact ? "px-2" : "px-3"}`}>
         {orderedNav.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -186,7 +242,7 @@ export function AppChrome({
           return (
             <div
               key={item.href}
-              draggable
+              draggable={!compact}
               onDragStart={(e) => { navDragHref.current = item.href; e.dataTransfer.effectAllowed = "move"; }}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -195,23 +251,24 @@ export function AppChrome({
               }}
               onDrop={(e) => { e.preventDefault(); handleNavDrop(item.href); }}
               onDragEnd={() => { navDragHref.current = null; setDragOverHref(null); }}
-              className={`group rounded-lg ${isOver ? "ring-2 ring-brand/50" : ""}`}
+              className={`group rounded-lg ${isOver && !compact ? "ring-2 ring-brand/50" : ""}`}
             >
               <Link
                 href={item.href}
                 onClick={() => setNavOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"
-                }`}
+                title={compact ? item.label : undefined}
+                className={`flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${
+                  compact ? "justify-center px-2" : "gap-3 px-3"
+                } ${active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"}`}
               >
                 <Icon size={18} />
-                <span className="flex-1">{item.label}</span>
-                <GripVertical size={14} className="cursor-grab text-muted opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />
+                {!compact && <span className="flex-1">{item.label}</span>}
+                {!compact && <GripVertical size={14} className="cursor-grab text-muted opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />}
               </Link>
             </div>
           );
         })}
-        {customized && (
+        {!compact && customized && (
           <button
             onClick={() => persistOrder(DEFAULT_ORDER)}
             className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface2 hover:text-text"
@@ -220,16 +277,27 @@ export function AppChrome({
           </button>
         )}
       </nav>
-      <div className="border-t border-line p-3">
-        <div className="mb-2 flex items-center gap-2 px-1">
+      <div className={`border-t border-line ${compact ? "p-2" : "p-3"}`}>
+        {!compact && (
+          <button onClick={() => setShortcutsOpen(true)} className="btn-ghost mb-1 w-full justify-start text-xs text-muted">
+            <Keyboard size={14} /> Keyboard shortcuts
+          </button>
+        )}
+        <div className={`mb-2 flex items-center ${compact ? "justify-center" : "gap-2 px-1"}`}>
           <Avatar user={user} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
-            <p className="truncate text-xs text-muted">{householdName}</p>
-          </div>
+          {!compact && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
+              <p className="truncate text-xs text-muted">{householdName}</p>
+            </div>
+          )}
         </div>
-        <button onClick={() => signOut({ callbackUrl: "/signin" })} className="btn-ghost w-full justify-start text-sm">
-          <LogOut size={15} /> Sign out
+        <button
+          onClick={() => signOut({ callbackUrl: "/signin" })}
+          className={`btn-ghost w-full text-sm ${compact ? "justify-center !px-0" : "justify-start"}`}
+          title="Sign out"
+        >
+          <LogOut size={15} /> {!compact && "Sign out"}
         </button>
       </div>
     </div>
@@ -238,15 +306,15 @@ export function AppChrome({
   return (
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r border-line bg-surface md:block">
-        <div className="sticky top-0 h-screen">{SidebarBody}</div>
+      <aside className={`hidden shrink-0 border-r border-line bg-surface transition-[width] duration-200 md:block ${isCollapsed ? "w-16" : "w-64"}`}>
+        <div className="sticky top-0 h-screen">{renderSidebar(isCollapsed, true)}</div>
       </aside>
 
       {/* Mobile drawer */}
       {navOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setNavOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-line bg-surface">{SidebarBody}</aside>
+          <aside className="absolute left-0 top-0 h-full w-64 border-r border-line bg-surface">{renderSidebar(false, false)}</aside>
         </div>
       )}
 
@@ -288,6 +356,8 @@ export function AppChrome({
         categories={categories}
       />
 
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
       {/* Drag-to-import overlay */}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-60 flex items-center justify-center bg-brand/10 backdrop-blur-sm">
@@ -299,6 +369,33 @@ export function AppChrome({
         </div>
       )}
     </div>
+  );
+}
+
+const SHORTCUTS: { keys: string[]; label: string }[] = [
+  { keys: ["n"], label: "Add a transaction" },
+  { keys: ["i"], label: "Import a CSV" },
+  { keys: ["/"], label: "Focus search (on pages with it)" },
+  { keys: ["?"], label: "Show this help" },
+];
+
+function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Keyboard shortcuts" widthClass="max-w-sm">
+      <ul className="space-y-2">
+        {SHORTCUTS.map((s) => (
+          <li key={s.label} className="flex items-center justify-between gap-4 text-sm">
+            <span className="text-muted">{s.label}</span>
+            <span className="flex gap-1">
+              {s.keys.map((k) => (
+                <kbd key={k} className="rounded border border-line bg-surface2 px-2 py-0.5 font-mono text-xs">{k}</kbd>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-xs text-muted">Shortcuts are ignored while you&apos;re typing in a field.</p>
+    </Modal>
   );
 }
 

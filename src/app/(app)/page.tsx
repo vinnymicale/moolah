@@ -7,6 +7,7 @@ import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } fro
 import { formatUSD } from "@/lib/money";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { PageHeader, StatCard } from "@/components/ui-bits";
+import { DashboardSections, type DashboardSection } from "./DashboardSections";
 
 function localTodayISO(): string {
   const d = new Date();
@@ -48,36 +49,11 @@ export default async function DashboardPage() {
   const totalBudget = budgeted.reduce((s, b) => s + b.limit, 0);
   const budgetSpent = budgeted.reduce((s, b) => s + b.actual, 0);
 
-  return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader title="Dashboard" subtitle="Your household at a glance." />
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
-        <StatCard label="Income this month" value={formatUSD(calendar.monthIncome)} tone="income" />
-        <StatCard
-          label="Spent this month"
-          value={formatUSD(calendar.monthExpense)}
-          tone="expense"
-          hint={
-            spendDeltaPct === null ? undefined : (
-              <span className={spendDeltaPct > 0 ? "text-expense" : spendDeltaPct < 0 ? "text-income" : "text-muted"}>
-                {spendDeltaPct > 0 ? "▲" : spendDeltaPct < 0 ? "▼" : "■"} {Math.abs(spendDeltaPct)}% vs last month
-              </span>
-            )
-          }
-        />
-        <StatCard
-          label="Savings rate"
-          value={savingsRate === null ? "—" : `${savingsRate}%`}
-          tone={savingsRate !== null && savingsRate >= 0 ? "income" : "expense"}
-          hint={`Net ${formatUSD(net)}`}
-        />
-      </div>
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        {/* Upcoming */}
-        <section className="card lg:col-span-2">
+  const sections: DashboardSection[] = [
+    {
+      id: "upcoming",
+      node: (
+        <section className="card">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="flex items-center gap-2 font-semibold">
               <CalendarClock size={18} className="text-brand" /> Upcoming (next 14 days)
@@ -114,8 +90,11 @@ export default async function DashboardPage() {
             </ul>
           )}
         </section>
-
-        {/* Cash projection summary */}
+      ),
+    },
+    {
+      id: "cashflow",
+      node: (
         <section className="card p-4">
           <h2 className="mb-3 font-semibold">Cash flow</h2>
           <div className="space-y-3">
@@ -131,129 +110,171 @@ export default async function DashboardPage() {
           </div>
           <Link href="/trends" className="btn-ghost mt-4 w-full">View trends</Link>
         </section>
-      </div>
-
-      {/* Budgets */}
-      <section className="card mt-5">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="flex items-center gap-2 font-semibold">
-            <PiggyBank size={18} className="text-brand" /> Budgets this month
-          </h2>
-          <Link href="/budgets" className="text-sm text-brand hover:underline">
-            Manage <ArrowRight size={14} className="inline" />
-          </Link>
-        </div>
-        {budgeted.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">
-            No budgets set. <Link href="/budgets" className="text-brand hover:underline">Set monthly limits</Link> to track spending here.
-          </p>
-        ) : (
-          <div className="px-4 py-3">
-            <div className="mb-3 flex items-center justify-between text-sm">
-              <span className="text-muted">{formatUSD(budgetSpent)} of {formatUSD(totalBudget)} spent</span>
-              <span className={`font-semibold tabular-nums ${totalBudget - budgetSpent >= 0 ? "text-income" : "text-expense"}`}>
-                {formatUSD(totalBudget - budgetSpent)} left
-              </span>
-            </div>
-            <ul className="space-y-2.5">
-              {budgeted.slice(0, 4).map((b) => {
-                const pct = b.limit > 0 ? Math.min(100, (b.actual / b.limit) * 100) : 0;
-                const over = b.actual > b.limit;
-                return (
-                  <li key={b.categoryId}>
-                    <div className="mb-1 flex justify-between text-xs">
-                      <Link href={`/transactions?category=${b.categoryId}`} className="font-medium hover:text-brand hover:underline">
-                        {b.name}
-                      </Link>
-                      <span className={`tabular-nums ${over ? "text-expense" : "text-muted"}`}>
-                        {formatUSD(b.actual)} / {formatUSD(b.limit)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "#dc2626" : b.color }} />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-      </section>
-
-      {/* Savings goals */}
-      {goals.length > 0 && (
-        <section className="card mt-5">
+      ),
+    },
+    {
+      id: "budgets",
+      node: (
+        <section className="card">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="flex items-center gap-2 font-semibold">
-              <Target size={18} className="text-brand" /> Savings goals
+              <PiggyBank size={18} className="text-brand" /> Budgets this month
             </h2>
-            <Link href="/goals" className="text-sm text-brand hover:underline">
+            <Link href="/budgets" className="text-sm text-brand hover:underline">
               Manage <ArrowRight size={14} className="inline" />
             </Link>
           </div>
-          <div className="px-4 py-3">
-            <div className="mb-3 text-sm text-muted">
-              Saved <span className="font-semibold text-text">{formatUSD(goalsSaved)}</span> of {formatUSD(goalsTarget)}
-            </div>
-            <ul className="space-y-2.5">
-              {topGoals.map((g) => {
-                const pct = g.targetAmount > 0 ? Math.min(100, (g.currentAmount / g.targetAmount) * 100) : 0;
-                const complete = g.currentAmount >= g.targetAmount;
-                return (
-                  <li key={g.id}>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 font-medium">
-                        <span className="flex h-5 w-5 items-center justify-center rounded" style={{ backgroundColor: `${g.color}22`, color: g.color }}>
-                          <CategoryIcon name={g.icon} size={12} />
+          {budgeted.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-muted">
+              No budgets set. <Link href="/budgets" className="text-brand hover:underline">Set monthly limits</Link> to track spending here.
+            </p>
+          ) : (
+            <div className="px-4 py-3">
+              <div className="mb-3 flex items-center justify-between text-sm">
+                <span className="text-muted">{formatUSD(budgetSpent)} of {formatUSD(totalBudget)} spent</span>
+                <span className={`font-semibold tabular-nums ${totalBudget - budgetSpent >= 0 ? "text-income" : "text-expense"}`}>
+                  {formatUSD(totalBudget - budgetSpent)} left
+                </span>
+              </div>
+              <ul className="space-y-2.5">
+                {budgeted.slice(0, 4).map((b) => {
+                  const pct = b.limit > 0 ? Math.min(100, (b.actual / b.limit) * 100) : 0;
+                  const over = b.actual > b.limit;
+                  return (
+                    <li key={b.categoryId}>
+                      <div className="mb-1 flex justify-between text-xs">
+                        <Link href={`/transactions?category=${b.categoryId}`} className="font-medium hover:text-brand hover:underline">
+                          {b.name}
+                        </Link>
+                        <span className={`tabular-nums ${over ? "text-expense" : "text-muted"}`}>
+                          {formatUSD(b.actual)} / {formatUSD(b.limit)}
                         </span>
-                        {g.name}
-                      </span>
-                      <span className="tabular-nums text-muted">
-                        {formatUSD(g.currentAmount)} / {formatUSD(g.targetAmount)} · {Math.round(pct)}%
-                      </span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "#dc2626" : b.color }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </section>
+      ),
+    },
+    ...(goals.length > 0
+      ? [{
+          id: "goals",
+          node: (
+            <section className="card">
+              <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                <h2 className="flex items-center gap-2 font-semibold">
+                  <Target size={18} className="text-brand" /> Savings goals
+                </h2>
+                <Link href="/goals" className="text-sm text-brand hover:underline">
+                  Manage <ArrowRight size={14} className="inline" />
+                </Link>
+              </div>
+              <div className="px-4 py-3">
+                <div className="mb-3 text-sm text-muted">
+                  Saved <span className="font-semibold text-text">{formatUSD(goalsSaved)}</span> of {formatUSD(goalsTarget)}
+                </div>
+                <ul className="space-y-2.5">
+                  {topGoals.map((g) => {
+                    const pct = g.targetAmount > 0 ? Math.min(100, (g.currentAmount / g.targetAmount) * 100) : 0;
+                    const complete = g.currentAmount >= g.targetAmount;
+                    return (
+                      <li key={g.id}>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <span className="flex h-5 w-5 items-center justify-center rounded" style={{ backgroundColor: `${g.color}22`, color: g.color }}>
+                              <CategoryIcon name={g.icon} size={12} />
+                            </span>
+                            {g.name}
+                          </span>
+                          <span className="tabular-nums text-muted">
+                            {formatUSD(g.currentAmount)} / {formatUSD(g.targetAmount)} · {Math.round(pct)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? "#16a34a" : g.color }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </section>
+          ),
+        }]
+      : []),
+    {
+      id: "recent",
+      node: (
+        <section className="card">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <h2 className="font-semibold">Recent activity</h2>
+            <Link href="/transactions" className="text-sm text-brand hover:underline">All transactions <ArrowRight size={14} className="inline" /></Link>
+          </div>
+          {recent.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-muted">No transactions yet this month.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {recent.map((t) => {
+                const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
+                return (
+                  <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
+                      <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{t.description}</p>
+                      <p className="text-xs text-muted">{formatDay(t.date)}{cat ? ` · ${cat.name}` : ""}</p>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? "#16a34a" : g.color }} />
-                    </div>
+                    <span className={`shrink-0 tabular-nums text-sm font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
+                      {t.type === "INCOME" ? "+" : "−"}
+                      {formatUSD(t.amount)}
+                    </span>
                   </li>
                 );
               })}
             </ul>
-          </div>
+          )}
         </section>
-      )}
+      ),
+    },
+  ];
 
-      {/* Recent activity */}
-      <section className="card mt-5">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="font-semibold">Recent activity</h2>
-          <Link href="/transactions" className="text-sm text-brand hover:underline">All transactions <ArrowRight size={14} className="inline" /></Link>
-        </div>
-        {recent.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">No transactions yet this month.</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {recent.map((t) => {
-              const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
-              return (
-                <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
-                    <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{t.description}</p>
-                    <p className="text-xs text-muted">{formatDay(t.date)}{cat ? ` · ${cat.name}` : ""}</p>
-                  </div>
-                  <span className={`shrink-0 tabular-nums text-sm font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                    {t.type === "INCOME" ? "+" : "−"}
-                    {formatUSD(t.amount)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHeader title="Dashboard" subtitle="Your household at a glance." />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
+        <StatCard label="Income this month" value={formatUSD(calendar.monthIncome)} tone="income" />
+        <StatCard
+          label="Spent this month"
+          value={formatUSD(calendar.monthExpense)}
+          tone="expense"
+          hint={
+            spendDeltaPct === null ? undefined : (
+              <span className={spendDeltaPct > 0 ? "text-expense" : spendDeltaPct < 0 ? "text-income" : "text-muted"}>
+                {spendDeltaPct > 0 ? "▲" : spendDeltaPct < 0 ? "▼" : "■"} {Math.abs(spendDeltaPct)}% vs last month
+              </span>
+            )
+          }
+        />
+        <StatCard
+          label="Savings rate"
+          value={savingsRate === null ? "—" : `${savingsRate}%`}
+          tone={savingsRate !== null && savingsRate >= 0 ? "income" : "expense"}
+          hint={`Net ${formatUSD(net)}`}
+        />
+      </div>
+
+      <div className="mt-5">
+        <DashboardSections sections={sections} />
+      </div>
     </div>
   );
 }
