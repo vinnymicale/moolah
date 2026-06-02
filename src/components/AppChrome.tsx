@@ -278,10 +278,17 @@ export function AppChrome({
         )}
       </nav>
       <div className={`border-t border-line ${compact ? "p-2" : "p-3"}`}>
-        {!compact && (
-          <button onClick={() => setShortcutsOpen(true)} className="btn-ghost mb-1 w-full justify-start text-xs text-muted">
-            <Keyboard size={14} /> Keyboard shortcuts
-          </button>
+        {compact ? (
+          <div className="mb-1 flex justify-center">
+            <ThemeToggle />
+          </div>
+        ) : (
+          <div className="mb-1 flex items-center gap-1">
+            <button onClick={() => setShortcutsOpen(true)} className="btn-ghost flex-1 justify-start text-xs text-muted">
+              <Keyboard size={14} /> Keyboard shortcuts
+            </button>
+            <ThemeToggle />
+          </div>
         )}
         <div className={`mb-2 flex items-center ${compact ? "justify-center" : "gap-2 px-1"}`}>
           <Avatar user={user} />
@@ -319,19 +326,18 @@ export function AppChrome({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur md:px-6">
-          <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 !p-0 md:hidden" aria-label="Open menu">
+        {/* Top bar — mobile only (desktop header is just wasted space) */}
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur md:hidden">
+          <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Open menu">
             <Menu size={18} />
           </button>
-          <div className="flex items-center gap-2 font-semibold md:hidden">
+          <div className="flex items-center gap-2 font-semibold">
             <Wallet size={18} className="text-brand" />
           </div>
           <div className="flex-1" />
-          <button onClick={() => setAddOpen(true)} className="btn-primary h-9 md:hidden">
+          <button onClick={() => setAddOpen(true)} className="btn-primary h-9">
             <Plus size={16} />
           </button>
-          <ThemeToggle />
         </header>
 
         <main className="flex-1 px-4 py-5 md:px-6 md:py-6">{children}</main>

@@ -15,7 +15,7 @@ import type { TxnType } from "@/generated/prisma/enums";
 
 // ── Plaid category → our default-category name (best-effort) ─────────────────
 
-const CATEGORY_MAP: Record<string, string> = {
+export const CATEGORY_MAP: Record<string, string> = {
   INCOME: "Salary",
   INCOME_DIVIDENDS: "Investment Income",
   INCOME_INTEREST_EARNED: "Interest",
@@ -59,11 +59,10 @@ const CATEGORY_MAP: Record<string, string> = {
   TRAVEL_LODGING: "Travel",
 };
 
-function plaidCategoryToName(primaryCategory: string, detailCategory?: string): string | null {
-  if (detailCategory) {
-    const key = `${primaryCategory}_${detailCategory.replace(/ /g, "_").toUpperCase()}`;
-    if (CATEGORY_MAP[key]) return CATEGORY_MAP[key];
-  }
+export function plaidCategoryToName(primaryCategory: string, detailCategory?: string): string | null {
+  // Plaid's detailed category already includes the primary prefix
+  // (e.g. "FOOD_AND_DRINK_RESTAURANT"), so use it directly as the map key.
+  if (detailCategory && CATEGORY_MAP[detailCategory]) return CATEGORY_MAP[detailCategory];
   return CATEGORY_MAP[primaryCategory] ?? null;
 }
 
@@ -76,7 +75,13 @@ export interface SyncResult {
   balancesUpdated: number;
 }
 
-export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
+export interface SyncOptions {
+  /** Re-fetch all historical transactions from Plaid and fill in any categoryId
+   *  that is currently null, without overwriting categories the user set manually. */
+  recategorizeOnly?: boolean;
+}
+
+export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Promise<SyncResult> {
   const item = await prisma.plaidItem.findUniqueOrThrow({
     where: { id: plaidItemId },
     include: {
@@ -157,7 +162,9 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
   const result: SyncResult = { added: 0, modified: 0, removed: 0, balancesUpdated: 0 };
 
   // ── Paginated transaction sync ──────────────────────────────────────────────
-  let cursor = item.cursor ?? undefined;
+  // recategorizeOnly: start from the beginning of history so all transactions
+  // are visited, but do not advance the item's real cursor when done.
+  let cursor = opts?.recategorizeOnly ? undefined : (item.cursor ?? undefined);
   let hasMore = true;
 
   while (hasMore) {
@@ -192,15 +199,9 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
 
       await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
-        update: {
-          amount,
-          description: txn.name,
-          date: txnDate,
-          type,
-          categoryId,
-          cleared: !txn.pending,
-          recurringRuleId,
-        },
+        update: opts?.recategorizeOnly
+          ? { amount, description: txn.name, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
+          : { amount, description: txn.name, date: txnDate, type, categoryId, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
         create: {
           householdId: item.householdId,
           accountId: linked.financialAccountId,
@@ -212,8 +213,19 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
           cleared: !txn.pending,
           plaidTransactionId: txn.transaction_id,
           recurringRuleId,
+          plaidPrimaryCategory: primaryCat || null,
+          plaidDetailedCategory: detailCat || null,
         },
       });
+
+      // In recategorize mode, fill in the category only if the row has none.
+      if (opts?.recategorizeOnly && categoryId) {
+        await prisma.transaction.updateMany({
+          where: { plaidTransactionId: txn.transaction_id, categoryId: null },
+          data: { categoryId },
+        });
+      }
+
       result.added++;
     }
 
@@ -236,16 +248,19 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
 
       await prisma.transaction.updateMany({
         where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
-        data: {
-          amount,
-          description: txn.name,
-          date: modDate,
-          type,
-          categoryId,
-          cleared: !txn.pending,
-          recurringRuleId: modRuleId,
-        },
+        data: opts?.recategorizeOnly
+          ? { amount, description: txn.name, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
+          : { amount, description: txn.name, date: modDate, type, categoryId, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
       });
+
+      // In recategorize mode, fill in the category only if the row has none.
+      if (opts?.recategorizeOnly && categoryId) {
+        await prisma.transaction.updateMany({
+          where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId, categoryId: null },
+          data: { categoryId },
+        });
+      }
+
       result.modified++;
     }
 
@@ -289,11 +304,14 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
     }
   }
 
-  // Persist the cursor and last-synced time.
-  await prisma.plaidItem.update({
-    where: { id: plaidItemId },
-    data: { cursor, lastSyncedAt: new Date(), error: null },
-  });
+  // Persist the cursor and last-synced time (skipped in recategorize mode so
+  // the real sync position is not disturbed).
+  if (!opts?.recategorizeOnly) {
+    await prisma.plaidItem.update({
+      where: { id: plaidItemId },
+      data: { cursor, lastSyncedAt: new Date(), error: null },
+    });
+  }
 
   return result;
 }

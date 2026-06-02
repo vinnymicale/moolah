@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2 } from "lucide-react";
+import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2, Tag } from "lucide-react";
 import { formatUSD } from "@/lib/money";
 import { Modal } from "@/components/Modal";
 import type { PlaidItemDTO } from "@/lib/queries";
@@ -80,6 +80,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
   const router = useRouter();
   const [syncing, setSyncing] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [recategorizing, setRecategorizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<PlaidItemDTO | null>(null);
   const [, start] = useTransition();
@@ -115,13 +116,39 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
     }
   };
 
+  const recategorize = async () => {
+    setRecategorizing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/plaid/recategorize", { method: "POST" });
+      const json = await res.json() as { ok?: boolean; error?: string; errors?: string[] };
+      if (!res.ok || !json.ok) throw new Error(json.errors?.join(", ") ?? json.error ?? "Recategorize failed");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Recategorize failed");
+    } finally {
+      setRecategorizing(false);
+    }
+  };
+
   if (items.length === 0) return null;
 
   return (
     <div className="card mt-6 overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <Building2 size={18} className="text-brand" />
-        <h2 className="font-semibold">Connected banks</h2>
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Building2 size={18} className="text-brand" />
+          <h2 className="font-semibold">Connected banks</h2>
+        </div>
+        <button
+          onClick={() => void recategorize()}
+          disabled={recategorizing || syncing !== null}
+          className="btn-ghost h-8 text-xs"
+          title="Re-check Plaid categories for all uncategorized transactions"
+        >
+          {recategorizing ? <Loader2 size={14} className="animate-spin" /> : <Tag size={14} />}
+          Fix categories
+        </button>
       </div>
 
       {error && (

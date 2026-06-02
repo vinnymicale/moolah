@@ -75,7 +75,10 @@ export default async function TransactionsPage({
         prevMonthISO={isoDay(addUTCMonths(monthFirst, -1))}
         nextMonthISO={isoDay(addUTCMonths(monthFirst, 1))}
         initialAccountId={account && accounts.some((a) => a.id === account) ? account : ""}
-        initialCategoryId={category && categories.some((c) => c.id === category) ? category : ""}
+        initialCategoryId={
+          category === "__uncategorized__" ? "__uncategorized__" :
+          (category && categories.some((c) => c.id === category) ? category : "")
+        }
       />
     </div>
   );

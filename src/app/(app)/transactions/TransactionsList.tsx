@@ -58,7 +58,8 @@ export function TransactionsList({
     if (typeFilter !== "ALL" && t.type !== typeFilter) return false;
     if (statusFilter === "CLEARED" && !t.cleared) return false;
     if (statusFilter === "PENDING" && t.cleared) return false;
-    if (catFilter && t.categoryId !== catFilter) return false;
+    if (catFilter === "__uncategorized__" && t.categoryId !== null) return false;
+    if (catFilter && catFilter !== "__uncategorized__" && t.categoryId !== catFilter) return false;
     if (acctFilter && t.accountId !== (acctFilter === "__none__" ? null : acctFilter)) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -190,6 +191,7 @@ export function TransactionsList({
         </select>
         <select className="input w-auto" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
           <option value="">All categories</option>
+          <option value="__uncategorized__">Uncategorized</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
