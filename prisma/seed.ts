@@ -15,7 +15,9 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 const DEMO_INVITE = "DEMO-2026";
-const DEMO_EMAIL = (process.env.ALLOWED_EMAILS?.split(",")[0]?.trim()) || "demo@example.com";
+// Always use a fixed throwaway email for the demo account so that running
+// db:seed never touches a real user's household assignment.
+const DEMO_EMAIL = "demo@example.com";
 
 // Work relative to a fixed "today" derived from the system clock.
 const today = new Date();
@@ -33,9 +35,12 @@ async function main() {
     create: { name: "Our Household", inviteCode: DEMO_INVITE },
   });
 
+  // Only set householdId on the demo user if it has none yet, so re-running
+  // the seed can never steal a real user away from their own household.
+  const existingDemo = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
   await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { householdId: household.id },
+    update: existingDemo?.householdId ? {} : { householdId: household.id },
     create: { email: DEMO_EMAIL, name: "Demo User", householdId: household.id },
   });
   const demoUser = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });

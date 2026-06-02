@@ -33,8 +33,19 @@ async function main() {
     await pg.initialise();
   }
 
-  await pg.start();
-  console.log(`Postgres started on port ${PORT}.`);
+  let alreadyRunning = false;
+  try {
+    await pg.start();
+    console.log(`Postgres started on port ${PORT}.`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("postmaster.pid") || msg.includes("already exists") || msg.includes("already running")) {
+      alreadyRunning = true;
+      console.log(`Postgres is already running on port ${PORT} — attaching.`);
+    } else {
+      throw err;
+    }
+  }
 
   try {
     await pg.createDatabase(DB_NAME);
@@ -50,7 +61,8 @@ async function main() {
 
   const shutdown = async () => {
     console.log("\nStopping Postgres …");
-    await pg.stop();
+    // Only stop the server if we're the one who started it.
+    if (!alreadyRunning) await pg.stop();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
