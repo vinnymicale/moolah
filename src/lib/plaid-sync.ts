@@ -8,6 +8,7 @@
 import { plaidClient } from "./plaid";
 import { prisma } from "./prisma";
 import { parseISODay } from "./dates";
+import { expandOccurrences } from "./recurrence";
 import type { TxnType } from "@/generated/prisma/enums";
 
 // ── Plaid account type → our AccountType ─────────────────────────────────────
@@ -92,6 +93,67 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
   const categories = await prisma.category.findMany({ where: { householdId: item.householdId } });
   const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
 
+  // Load recurring rules for matching. When a Plaid transaction lands on (or
+  // within 2 days of) a rule's scheduled occurrence, we link the transaction
+  // to that rule so the calendar suppresses the virtual projection in favour
+  // of the live bank data.
+  const rules = await prisma.recurringRule.findMany({
+    where: { householdId: item.householdId, archived: false },
+  });
+
+  /** Tokenise a description to meaningful lowercase words (length ≥ 3). */
+  function tokens(s: string): Set<string> {
+    const NOISE = new Set(["ach", "the", "and", "from", "purchase", "payment", "withdrawal", "autopay", "early", "pay"]);
+    return new Set(
+      s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !NOISE.has(t))
+    );
+  }
+
+  /** True if the two descriptions share at least one meaningful token. */
+  function descriptionMatches(txnDesc: string, ruleDesc: string): boolean {
+    const ta = tokens(txnDesc);
+    const tb = tokens(ruleDesc);
+    for (const t of tb) if (ta.has(t)) return true;
+    // Also check substring: "sunrun" inside "SUNRUN PURCHASE"
+    const la = txnDesc.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const lb = ruleDesc.toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (const t of tb) if (t.length >= 5 && la.includes(t)) return true;
+    for (const t of ta) if (t.length >= 5 && lb.includes(t)) return true;
+    return false;
+  }
+
+  /**
+   * Return the best-matching rule id for a transaction, or null.
+   *
+   * Matching criteria:
+   * - Amount within 15% of the rule amount
+   * - A scheduled occurrence falls within ±2 days of the transaction date
+   * - EXPENSE: description must share a token with the rule name
+   *   (prevents coincidental amount matches, e.g. Shell ≈ YouTube)
+   * - INCOME: no description check (bank ACH descriptions never match
+   *   human-readable names like "Vinny's Paycheck")
+   */
+  function matchRule(type: TxnType, date: Date, amount: number, description: string): string | null {
+    const tolerance = amount * 0.15;
+    const windowMs = 2 * 86_400_000;
+    const windowStart = new Date(date.getTime() - windowMs);
+    const windowEnd = new Date(date.getTime() + windowMs);
+
+    for (const rule of rules) {
+      if (rule.type !== type) continue;
+      if (Math.abs(Number(rule.amount) - amount) > tolerance) continue;
+      if (type === "EXPENSE" && !descriptionMatches(description, rule.description)) continue;
+
+      const occs = expandOccurrences(
+        { frequency: rule.frequency, interval: rule.interval, startDate: rule.startDate, endDate: rule.endDate, dayOfMonth: rule.dayOfMonth, weekday: rule.weekday },
+        windowStart,
+        windowEnd,
+      );
+      if (occs.length > 0) return rule.id;
+    }
+    return null;
+  }
+
   const result: SyncResult = { added: 0, modified: 0, removed: 0, balancesUpdated: 0 };
 
   // ── Paginated transaction sync ──────────────────────────────────────────────
@@ -125,15 +187,19 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
 
+      const txnDate = parseISODay(txn.date);
+      const recurringRuleId = matchRule(type, txnDate, amount, txn.name);
+
       await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
         update: {
           amount,
           description: txn.name,
-          date: parseISODay(txn.date),
+          date: txnDate,
           type,
           categoryId,
           cleared: !txn.pending,
+          recurringRuleId,
         },
         create: {
           householdId: item.householdId,
@@ -141,10 +207,11 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
           categoryId,
           type,
           amount,
-          date: parseISODay(txn.date),
+          date: txnDate,
           description: txn.name,
           cleared: !txn.pending,
           plaidTransactionId: txn.transaction_id,
+          recurringRuleId,
         },
       });
       result.added++;
@@ -164,15 +231,19 @@ export async function syncPlaidItem(plaidItemId: string): Promise<SyncResult> {
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
 
+      const modDate = parseISODay(txn.date);
+      const modRuleId = matchRule(type, modDate, amount, txn.name);
+
       await prisma.transaction.updateMany({
         where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
         data: {
           amount,
           description: txn.name,
-          date: parseISODay(txn.date),
+          date: modDate,
           type,
           categoryId,
           cleared: !txn.pending,
+          recurringRuleId: modRuleId,
         },
       });
       result.modified++;
