@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Search, Plus, Download, Clock,
-  CheckSquare, Square, Trash2, X, CheckCircle2,
+  CheckSquare, Square, Trash2, X, CheckCircle2, StickyNote,
 } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -42,6 +42,7 @@ export function TransactionsList({
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "INCOME" | "EXPENSE">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "CLEARED" | "PENDING">("ALL");
   const [catFilter, setCatFilter] = useState(initialCategoryId);
   const [acctFilter, setAcctFilter] = useState(initialAccountId);
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
@@ -55,12 +56,21 @@ export function TransactionsList({
 
   const filtered = transactions.filter((t) => {
     if (typeFilter !== "ALL" && t.type !== typeFilter) return false;
+    if (statusFilter === "CLEARED" && !t.cleared) return false;
+    if (statusFilter === "PENDING" && t.cleared) return false;
     if (catFilter && t.categoryId !== catFilter) return false;
     if (acctFilter && t.accountId !== (acctFilter === "__none__" ? null : acctFilter)) return false;
     if (search) {
       const q = search.toLowerCase();
       const cat = t.categoryId ? catById.get(t.categoryId)?.name ?? "" : "";
-      if (!t.description.toLowerCase().includes(q) && !cat.toLowerCase().includes(q)) return false;
+      const note = t.note ?? "";
+      if (
+        !t.description.toLowerCase().includes(q) &&
+        !cat.toLowerCase().includes(q) &&
+        !note.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
     }
     return true;
   });
@@ -105,7 +115,7 @@ export function TransactionsList({
   };
 
   const exportCsv = () => {
-    const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared"];
+    const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note"];
     const rows = filtered.map((t) => [
       t.date,
       t.type,
@@ -114,6 +124,7 @@ export function TransactionsList({
       csv(t.categoryId ? catById.get(t.categoryId)?.name ?? "" : ""),
       csv(t.accountId ? acctById.get(t.accountId)?.name ?? "" : ""),
       t.cleared ? "yes" : "no",
+      csv(t.note ?? ""),
     ]);
     const content = [header, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([content], { type: "text/csv" });
@@ -171,6 +182,11 @@ export function TransactionsList({
           <option value="ALL">All types</option>
           <option value="EXPENSE">Expenses</option>
           <option value="INCOME">Income</option>
+        </select>
+        <select className="input w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+          <option value="ALL">All status</option>
+          <option value="CLEARED">Cleared</option>
+          <option value="PENDING">Pending</option>
         </select>
         <select className="input w-auto" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
           <option value="">All categories</option>
@@ -291,6 +307,9 @@ export function TransactionsList({
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {t.description}
+                      {t.note && (
+                        <StickyNote size={12} className="ml-1.5 inline align-middle text-muted" aria-label="Has a note" />
+                      )}
                       {!t.cleared && (
                         <span className="ml-2 inline-flex items-center gap-1 align-middle text-[11px] text-warning">
                           <Clock size={11} /> expected
@@ -301,6 +320,7 @@ export function TransactionsList({
                       {t.date}
                       {cat ? ` · ${cat.name}` : ""}
                       {acct ? ` · ${acct.name}` : ""}
+                      {t.note ? ` · ${t.note}` : ""}
                     </p>
                   </div>
                   <span className={`shrink-0 tabular-nums font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
