@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
-  Settings, Plus, Menu, X, Wallet, LogOut,
+  Settings, Plus, Menu, Wallet, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
+  GripVertical, RotateCcw,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransactionModal } from "./TransactionModal";
+import { ImportReview } from "./ImportReview";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
 const NAV = [
@@ -18,10 +20,23 @@ const NAV = [
   { href: "/transactions", label: "Transactions", icon: Receipt },
   { href: "/accounts", label: "Accounts", icon: Landmark },
   { href: "/recurring", label: "Recurring", icon: Repeat },
+  { href: "/budgets", label: "Budgets", icon: PiggyBank },
+  { href: "/goals", label: "Goals", icon: Target },
   { href: "/categories", label: "Categories", icon: Tags },
   { href: "/trends", label: "Trends", icon: LineChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+const NAV_ORDER_KEY = "navOrder";
+const DEFAULT_ORDER = NAV.map((n) => n.href);
+const NAV_BY_HREF = new Map(NAV.map((n) => [n.href, n] as const));
+
+/** Keep the stored order but drop hrefs that no longer exist and append any new ones. */
+function mergeNavOrder(stored: string[]): string[] {
+  const valid = stored.filter((h) => NAV_BY_HREF.has(h));
+  const missing = DEFAULT_ORDER.filter((h) => !valid.includes(h));
+  return [...valid, ...missing];
+}
 
 export function AppChrome({
   children,
@@ -39,8 +54,111 @@ export function AppChrome({
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [importCsv, setImportCsv] = useState<{ text: string; name: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+
+  // Customisable, persisted sidebar order. `mounted` keeps SSR and the first
+  // client render on the default order to avoid a hydration mismatch.
+  const [navOrder, setNavOrder] = useState<string[]>(DEFAULT_ORDER);
+  const [mounted, setMounted] = useState(false);
+  const [dragOverHref, setDragOverHref] = useState<string | null>(null);
+  const navDragHref = useRef<string | null>(null);
+
+  useEffect(() => {
+    let stored: unknown = null;
+    try {
+      const raw = localStorage.getItem(NAV_ORDER_KEY);
+      if (raw) stored = JSON.parse(raw);
+    } catch {
+      // ignore unavailable/corrupt storage
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted nav order
+    setMounted(true);
+    if (Array.isArray(stored)) setNavOrder(mergeNavOrder(stored as string[]));
+  }, []);
+
+  const persistOrder = (next: string[]) => {
+    setNavOrder(next);
+    try {
+      localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(next));
+    } catch {
+      // ignore unavailable storage
+    }
+  };
+
+  const handleNavDrop = (targetHref: string) => {
+    const src = navDragHref.current;
+    navDragHref.current = null;
+    setDragOverHref(null);
+    if (!src || src === targetHref) return;
+    const next = [...navOrder];
+    const from = next.indexOf(src);
+    const to = next.indexOf(targetHref);
+    if (from < 0 || to < 0) return;
+    next.splice(from, 1);
+    next.splice(to, 0, src);
+    persistOrder(next);
+  };
+
+  const orderedNav = (mounted ? navOrder : DEFAULT_ORDER)
+    .map((h) => NAV_BY_HREF.get(h))
+    .filter((x): x is (typeof NAV)[number] => !!x);
+  const customized = mounted && navOrder.join() !== DEFAULT_ORDER.join();
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+
+  const openFile = async (file: File) => {
+    const text = await file.text();
+    setImportCsv({ text, name: file.name });
+  };
+
+  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void openFile(file);
+    e.target.value = ""; // allow re-importing the same file
+  };
+
+  // Global drag-and-drop: dropping a CSV anywhere opens the import review.
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => e.dataTransfer?.types?.includes("Files");
+
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current++;
+      setDragging(true);
+    };
+    const onOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault(); // allow drop
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragging(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      dragDepth.current = 0;
+      setDragging(false);
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const file = e.dataTransfer?.files?.[0];
+      if (file && /\.csv$|text\/csv|text\/plain/i.test(`${file.name} ${file.type}`)) {
+        void openFile(file);
+      }
+    };
+
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
 
   const SidebarBody = (
     <div className="flex h-full flex-col">
@@ -48,29 +166,59 @@ export function AppChrome({
         <Wallet size={22} />
         <span className="font-semibold text-text">Household Finance</span>
       </div>
-      <div className="px-3 pb-2">
+      <div className="space-y-2 px-3 pb-2">
         <button onClick={() => { setAddOpen(true); setNavOpen(false); }} className="btn-primary w-full">
           <Plus size={16} /> Add transaction
         </button>
+        <button
+          onClick={() => { fileInputRef.current?.click(); setNavOpen(false); }}
+          className="btn-ghost w-full justify-start text-sm"
+          title="Import transactions from a bank CSV"
+        >
+          <Upload size={15} /> Import CSV
+        </button>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {NAV.map((item) => {
+        {orderedNav.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
+          const isOver = dragOverHref === item.href;
           return (
-            <Link
+            <div
               key={item.href}
-              href={item.href}
-              onClick={() => setNavOpen(false)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"
-              }`}
+              draggable
+              onDragStart={(e) => { navDragHref.current = item.href; e.dataTransfer.effectAllowed = "move"; }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                const over = navDragHref.current === item.href ? null : item.href;
+                if (dragOverHref !== over) setDragOverHref(over);
+              }}
+              onDrop={(e) => { e.preventDefault(); handleNavDrop(item.href); }}
+              onDragEnd={() => { navDragHref.current = null; setDragOverHref(null); }}
+              className={`group rounded-lg ${isOver ? "ring-2 ring-brand/50" : ""}`}
             >
-              <Icon size={18} />
-              {item.label}
-            </Link>
+              <Link
+                href={item.href}
+                onClick={() => setNavOpen(false)}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"
+                }`}
+              >
+                <Icon size={18} />
+                <span className="flex-1">{item.label}</span>
+                <GripVertical size={14} className="cursor-grab text-muted opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />
+              </Link>
+            </div>
           );
         })}
+        {customized && (
+          <button
+            onClick={() => persistOrder(DEFAULT_ORDER)}
+            className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface2 hover:text-text"
+          >
+            <RotateCcw size={12} /> Reset menu order
+          </button>
+        )}
       </nav>
       <div className="border-t border-line p-3">
         <div className="mb-2 flex items-center gap-2 px-1">
@@ -122,6 +270,34 @@ export function AppChrome({
       </div>
 
       <TransactionModal open={addOpen} onClose={() => setAddOpen(false)} accounts={accounts} categories={categories} />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv,text/plain"
+        className="hidden"
+        onChange={onFilePicked}
+      />
+
+      <ImportReview
+        open={!!importCsv}
+        onClose={() => setImportCsv(null)}
+        csvText={importCsv?.text ?? null}
+        filename={importCsv?.name}
+        accounts={accounts}
+        categories={categories}
+      />
+
+      {/* Drag-to-import overlay */}
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-60 flex items-center justify-center bg-brand/10 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-brand bg-surface px-10 py-8 text-center shadow-lg">
+            <FileSpreadsheet size={36} className="text-brand" />
+            <p className="font-semibold">Drop your bank CSV to import</p>
+            <p className="text-sm text-muted">We&apos;ll parse it and let you review before adding anything.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

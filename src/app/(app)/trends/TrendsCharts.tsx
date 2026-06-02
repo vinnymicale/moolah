@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, PieChart, Pie, Cell,
@@ -84,10 +85,16 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
             </ResponsiveContainer>
             <ul className="flex-1 space-y-1.5 overflow-y-auto" style={{ maxHeight: 220 }}>
               {categorySpending.slice(0, 8).map((s) => (
-                <li key={s.name} className="flex items-center gap-2 text-sm">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
-                  <span className="flex-1 truncate text-muted">{s.name}</span>
-                  <span className="tabular-nums font-medium">{formatUSD(s.value)}</span>
+                <li key={s.name}>
+                  <Link
+                    href={s.id ? `/transactions?category=${s.id}` : "/transactions"}
+                    className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-surface2"
+                    title={`View ${s.name} transactions`}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
+                    <span className="flex-1 truncate text-muted">{s.name}</span>
+                    <span className="tabular-nums font-medium">{formatUSD(s.value)}</span>
+                  </Link>
                 </li>
               ))}
             </ul>

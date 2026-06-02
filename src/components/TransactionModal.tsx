@@ -7,6 +7,7 @@ import {
   createTransactionAction,
   updateTransactionAction,
   deleteTransactionAction,
+  convertToRecurringAction,
 } from "@/actions/transactions";
 import type { Frequency } from "@/generated/prisma/enums";
 
@@ -34,6 +35,7 @@ const FREQUENCIES: { value: Frequency; label: string }[] = [
 export function TransactionModal(props: TransactionModalProps) {
   const { open, onClose, accounts, categories, defaultDate, transaction } = props;
   const editing = !!transaction;
+  const alreadyRecurring = !!transaction?.recurringRuleId;
 
   const [type, setType] = useState<TxType>(transaction?.type ?? "EXPENSE");
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : "");
@@ -75,6 +77,19 @@ export function TransactionModal(props: TransactionModalProps) {
       if (!res.ok) {
         setError(res.error ?? "Something went wrong.");
         return;
+      }
+      // When editing an existing one-off, turning on "recurring" promotes it to
+      // a series (the create path handles its own recurring inline).
+      if (editing && recurring && !alreadyRecurring) {
+        const conv = await convertToRecurringAction(transaction!.id, {
+          frequency,
+          interval,
+          endDate: endDate || null,
+        });
+        if (!conv.ok) {
+          setError(conv.error ?? "Saved, but couldn't make it recurring.");
+          return;
+        }
       }
       onClose();
     });
@@ -172,12 +187,23 @@ export function TransactionModal(props: TransactionModalProps) {
           <span>Already {type === "INCOME" ? "received" : "paid"} (uncheck if it&apos;s expected/upcoming)</span>
         </label>
 
-        {!editing && (
+        {alreadyRecurring && (
+          <p className="rounded-lg border border-line bg-surface2/50 px-3 py-2 text-xs text-muted">
+            Part of a recurring series. Edit the schedule on the Recurring page.
+          </p>
+        )}
+
+        {!alreadyRecurring && (
           <div className="rounded-lg border border-line p-3">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />
               Make this recurring
             </label>
+            {editing && recurring && (
+              <p className="mt-2 text-xs text-muted">
+                Creates a recurring series starting on this transaction&apos;s date.
+              </p>
+            )}
             {recurring && (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div>

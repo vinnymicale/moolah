@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Repeat } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { formatUSD } from "@/lib/money";
 import { describeFrequency } from "@/lib/recurrence";
-import type { AccountDTO, CategoryDTO, RecurringDTO } from "@/lib/queries";
+import type { AccountDTO, CategoryDTO, RecurringDTO, RecurringSuggestion } from "@/lib/queries";
 import {
   createRecurringAction, updateRecurringAction, deleteRecurringAction, type RecurringInput,
 } from "@/actions/recurring";
 import type { Frequency, TxnType } from "@/generated/prisma/enums";
+
+const DISMISSED_KEY = "dismissedRecurringSuggestions";
 
 const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: "WEEKLY", label: "Weekly" },
@@ -24,14 +26,48 @@ export function RecurringManager({
   rules,
   accounts,
   categories,
+  suggestions = [],
 }: {
   rules: RecurringDTO[];
   accounts: AccountDTO[];
   categories: CategoryDTO[];
+  suggestions?: RecurringSuggestion[];
 }) {
   const [editing, setEditing] = useState<RecurringDTO | null>(null);
   const [adding, setAdding] = useState(false);
+  const [prefill, setPrefill] = useState<RecurringSuggestion | null>(null);
+  // Dismissed suggestions persist in localStorage so they don't reappear on
+  // reload. `mounted` keeps SSR output (no stored data) matching the first
+  // client render, avoiding a hydration mismatch.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [mounted, setMounted] = useState(false);
   const catById = new Map(categories.map((c) => [c.id, c]));
+
+  useEffect(() => {
+    let stored = new Set<string>();
+    try {
+      const raw = localStorage.getItem(DISMISSED_KEY);
+      if (raw) stored = new Set(JSON.parse(raw) as string[]);
+    } catch {
+      // ignore unavailable/corrupt storage
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted UI state
+    setMounted(true);
+    if (stored.size) setDismissed(stored);
+  }, []);
+
+  const dismiss = (key: string) => {
+    const next = new Set(dismissed).add(key);
+    setDismissed(next);
+    try {
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]));
+    } catch {
+      // ignore unavailable storage
+    }
+  };
+
+  const visibleSuggestions = mounted ? suggestions.filter((s) => !dismissed.has(s.key)) : [];
+  const closeForm = () => { setAdding(false); setEditing(null); setPrefill(null); };
 
   return (
     <>
@@ -40,6 +76,15 @@ export function RecurringManager({
           <Plus size={16} /> Add recurring
         </button>
       </div>
+
+      {visibleSuggestions.length > 0 && (
+        <SuggestionsPanel
+          suggestions={visibleSuggestions}
+          catById={catById}
+          onReview={(s) => setPrefill(s)}
+          onDismiss={dismiss}
+        />
+      )}
 
       {rules.length === 0 ? (
         <div className="card flex flex-col items-center px-6 py-12 text-center">
@@ -74,10 +119,99 @@ export function RecurringManager({
         </div>
       )}
 
-      {(adding || editing) && (
-        <RecurringForm rule={editing} accounts={accounts} categories={categories} onClose={() => { setAdding(false); setEditing(null); }} />
+      {(adding || editing || prefill) && (
+        <RecurringForm rule={editing} prefill={prefill} accounts={accounts} categories={categories} onClose={closeForm} />
       )}
     </>
+  );
+}
+
+function SuggestionsPanel({
+  suggestions,
+  catById,
+  onReview,
+  onDismiss,
+}: {
+  suggestions: RecurringSuggestion[];
+  catById: Map<string, CategoryDTO>;
+  onReview: (s: RecurringSuggestion) => void;
+  onDismiss: (key: string) => void;
+}) {
+  return (
+    <div className="card mb-5 overflow-hidden border-brand/40">
+      <div className="flex items-center gap-2 border-b border-line bg-brand/5 px-4 py-3">
+        <Sparkles size={16} className="text-brand" />
+        <h2 className="font-semibold">Suggested recurring</h2>
+        <span className="text-xs text-muted">found in your history</span>
+      </div>
+      <ul className="divide-y divide-line">
+        {suggestions.map((s) => (
+          <SuggestionRow key={s.key} s={s} cat={s.categoryId ? catById.get(s.categoryId) : undefined} onReview={onReview} onDismiss={onDismiss} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SuggestionRow({
+  s,
+  cat,
+  onReview,
+  onDismiss,
+}: {
+  s: RecurringSuggestion;
+  cat?: CategoryDTO;
+  onReview: (s: RecurringSuggestion) => void;
+  onDismiss: (key: string) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const quickAdd = () =>
+    start(async () => {
+      setError(null);
+      const res = await createRecurringAction({
+        type: s.type,
+        amount: String(s.amount),
+        description: s.description,
+        categoryId: s.categoryId,
+        accountId: s.accountId,
+        frequency: s.frequency,
+        interval: String(s.interval),
+        startDate: s.startDate,
+        endDate: null,
+      });
+      // On success the page revalidates and this suggestion drops out (it now
+      // matches an existing rule); on failure surface the message.
+      if (!res.ok) setError(res.error);
+    });
+
+  return (
+    <li className="flex items-center gap-3 px-4 py-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
+        <CategoryIcon name={cat?.icon ?? "repeat"} size={16} />
+      </span>
+      <button onClick={() => onReview(s)} className="min-w-0 flex-1 text-left" title="Review & edit before adding">
+        <p className="truncate font-medium">{s.description}</p>
+        <p className="truncate text-xs text-muted">
+          Seen {s.count}× · {s.cadence}
+          {cat ? ` · ${cat.name}` : ""}
+        </p>
+        {error && <p className="text-xs text-expense">{error}</p>}
+      </button>
+      <span className={`shrink-0 tabular-nums font-semibold ${s.type === "INCOME" ? "text-income" : "text-expense"}`}>
+        {s.type === "INCOME" ? "+" : "−"}
+        {formatUSD(s.amount)}
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={quickAdd} disabled={pending} className="btn-primary h-8 text-xs" title="Add as recurring">
+          {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Add
+        </button>
+        <button onClick={() => onDismiss(s.key)} className="btn-ghost h-8 w-8 !p-0" title="Dismiss" aria-label="Dismiss suggestion">
+          <X size={15} />
+        </button>
+      </div>
+    </li>
   );
 }
 
@@ -88,24 +222,26 @@ function todayISO() {
 
 function RecurringForm({
   rule,
+  prefill,
   accounts,
   categories,
   onClose,
 }: {
   rule: RecurringDTO | null;
+  prefill?: RecurringSuggestion | null;
   accounts: AccountDTO[];
   categories: CategoryDTO[];
   onClose: () => void;
 }) {
   const editing = !!rule;
-  const [type, setType] = useState<TxnType>(rule?.type ?? "EXPENSE");
-  const [amount, setAmount] = useState(rule ? String(rule.amount) : "");
-  const [description, setDescription] = useState(rule?.description ?? "");
-  const [categoryId, setCategoryId] = useState(rule?.categoryId ?? "");
-  const [accountId, setAccountId] = useState(rule?.accountId ?? accounts.find((a) => a.includeInCash)?.id ?? "");
-  const [frequency, setFrequency] = useState<Frequency>(rule?.frequency ?? "MONTHLY");
-  const [interval, setInterval] = useState(String(rule?.interval ?? 1));
-  const [startDate, setStartDate] = useState(rule?.startDate ?? todayISO());
+  const [type, setType] = useState<TxnType>(rule?.type ?? prefill?.type ?? "EXPENSE");
+  const [amount, setAmount] = useState(rule ? String(rule.amount) : prefill ? String(prefill.amount) : "");
+  const [description, setDescription] = useState(rule?.description ?? prefill?.description ?? "");
+  const [categoryId, setCategoryId] = useState(rule?.categoryId ?? prefill?.categoryId ?? "");
+  const [accountId, setAccountId] = useState(rule?.accountId ?? prefill?.accountId ?? accounts.find((a) => a.includeInCash)?.id ?? "");
+  const [frequency, setFrequency] = useState<Frequency>(rule?.frequency ?? prefill?.frequency ?? "MONTHLY");
+  const [interval, setInterval] = useState(String(rule?.interval ?? prefill?.interval ?? 1));
+  const [startDate, setStartDate] = useState(rule?.startDate ?? prefill?.startDate ?? todayISO());
   const [endDate, setEndDate] = useState(rule?.endDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();

@@ -9,7 +9,7 @@ import { getAccounts, getSnapshots } from "@/lib/queries";
 
 export interface NetWorthPoint { label: string; value: number; }
 export interface IncomeExpensePoint { label: string; income: number; expense: number; net: number; }
-export interface CategorySlice { name: string; value: number; color: string; }
+export interface CategorySlice { id: string | null; name: string; value: number; color: string; }
 export interface BudgetRow { name: string; color: string; budget: number; actual: number; }
 
 export interface Reports {
@@ -111,6 +111,7 @@ export async function computeReports(householdId: string, todayISO: string): Pro
   }
   const categorySpending: CategorySlice[] = Array.from(catTotals.entries())
     .map(([id, value]) => ({
+      id: id === "uncategorized" ? null : id,
       name: id === "uncategorized" ? "Uncategorized" : catById.get(id)?.name ?? "Uncategorized",
       color: id === "uncategorized" ? "#94a3b8" : catById.get(id)?.color ?? "#94a3b8",
       value: round(value),

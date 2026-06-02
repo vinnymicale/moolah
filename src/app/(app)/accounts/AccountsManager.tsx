@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Pencil, TrendingUp, Archive, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Pencil, TrendingUp, Archive, Trash2, Receipt } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Dot } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
@@ -106,6 +107,9 @@ function AccountGroup({
                   {lastSnap && <p className="text-[11px] text-muted">as of {lastSnap.date}</p>}
                 </div>
                 <div className="flex shrink-0 gap-1">
+                  <Link href={`/transactions?account=${a.id}`} className="btn-ghost h-8 w-8 !p-0" title="View transactions">
+                    <Receipt size={14} />
+                  </Link>
                   <button onClick={() => onSnapshot(a)} className="btn-ghost h-8 w-8 !p-0" title="Update balance">
                     <TrendingUp size={14} />
                   </button>

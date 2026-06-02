@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Repeat, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarClock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
 import { requireHousehold } from "@/lib/session";
-import { getNetWorth, getCategories, getTransactionsBetween } from "@/lib/queries";
+import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
-import { endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
+import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { formatUSD } from "@/lib/money";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { PageHeader, StatCard } from "@/components/ui-bits";
@@ -19,19 +19,34 @@ export default async function DashboardPage() {
   const monthFirst = startOfUTCMonth(parseISODay(todayISO));
   const monthISO = isoDay(monthFirst);
 
-  const [netWorth, calendar, upcoming, categories, monthTxns] = await Promise.all([
+  const lastMonthFirst = addUTCMonths(monthFirst, -1);
+  const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals] = await Promise.all([
     getNetWorth(householdId),
     getCalendarMonth(householdId, monthISO, todayISO),
     getUpcoming(householdId, todayISO, 14),
     getCategories(householdId),
     getTransactionsBetween(householdId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
+    getBudgetMonth(householdId, monthISO),
+    getTransactionsBetween(householdId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
+    getSavingsGoals(householdId),
   ]);
+
+  const topGoals = goals.slice(0, 3);
+  const goalsSaved = goals.reduce((s, g) => s + g.currentAmount, 0);
+  const goalsTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
+
+  const lastMonthExpense = lastMonthTxns.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+  const spendDeltaPct = lastMonthExpense > 0 ? Math.round(((calendar.monthExpense - lastMonthExpense) / lastMonthExpense) * 100) : null;
 
   const catById = new Map(categories.map((c) => [c.id, c]));
   const net = calendar.monthIncome - calendar.monthExpense;
   const savingsRate = calendar.monthIncome > 0 ? Math.round((net / calendar.monthIncome) * 100) : null;
   const projectedEnd = calendar.projection.at(-1)?.balance ?? calendar.anchorBalance;
   const recent = monthTxns.slice(0, 6);
+
+  const budgeted = budgetLines.filter((b) => b.limit > 0).sort((a, b) => b.limit - a.limit);
+  const totalBudget = budgeted.reduce((s, b) => s + b.limit, 0);
+  const budgetSpent = budgeted.reduce((s, b) => s + b.actual, 0);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -40,7 +55,18 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
         <StatCard label="Income this month" value={formatUSD(calendar.monthIncome)} tone="income" />
-        <StatCard label="Spent this month" value={formatUSD(calendar.monthExpense)} tone="expense" />
+        <StatCard
+          label="Spent this month"
+          value={formatUSD(calendar.monthExpense)}
+          tone="expense"
+          hint={
+            spendDeltaPct === null ? undefined : (
+              <span className={spendDeltaPct > 0 ? "text-expense" : spendDeltaPct < 0 ? "text-income" : "text-muted"}>
+                {spendDeltaPct > 0 ? "▲" : spendDeltaPct < 0 ? "▼" : "■"} {Math.abs(spendDeltaPct)}% vs last month
+              </span>
+            )
+          }
+        />
         <StatCard
           label="Savings rate"
           value={savingsRate === null ? "—" : `${savingsRate}%`}
@@ -106,6 +132,96 @@ export default async function DashboardPage() {
           <Link href="/trends" className="btn-ghost mt-4 w-full">View trends</Link>
         </section>
       </div>
+
+      {/* Budgets */}
+      <section className="card mt-5">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h2 className="flex items-center gap-2 font-semibold">
+            <PiggyBank size={18} className="text-brand" /> Budgets this month
+          </h2>
+          <Link href="/budgets" className="text-sm text-brand hover:underline">
+            Manage <ArrowRight size={14} className="inline" />
+          </Link>
+        </div>
+        {budgeted.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-muted">
+            No budgets set. <Link href="/budgets" className="text-brand hover:underline">Set monthly limits</Link> to track spending here.
+          </p>
+        ) : (
+          <div className="px-4 py-3">
+            <div className="mb-3 flex items-center justify-between text-sm">
+              <span className="text-muted">{formatUSD(budgetSpent)} of {formatUSD(totalBudget)} spent</span>
+              <span className={`font-semibold tabular-nums ${totalBudget - budgetSpent >= 0 ? "text-income" : "text-expense"}`}>
+                {formatUSD(totalBudget - budgetSpent)} left
+              </span>
+            </div>
+            <ul className="space-y-2.5">
+              {budgeted.slice(0, 4).map((b) => {
+                const pct = b.limit > 0 ? Math.min(100, (b.actual / b.limit) * 100) : 0;
+                const over = b.actual > b.limit;
+                return (
+                  <li key={b.categoryId}>
+                    <div className="mb-1 flex justify-between text-xs">
+                      <Link href={`/transactions?category=${b.categoryId}`} className="font-medium hover:text-brand hover:underline">
+                        {b.name}
+                      </Link>
+                      <span className={`tabular-nums ${over ? "text-expense" : "text-muted"}`}>
+                        {formatUSD(b.actual)} / {formatUSD(b.limit)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "#dc2626" : b.color }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {/* Savings goals */}
+      {goals.length > 0 && (
+        <section className="card mt-5">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <Target size={18} className="text-brand" /> Savings goals
+            </h2>
+            <Link href="/goals" className="text-sm text-brand hover:underline">
+              Manage <ArrowRight size={14} className="inline" />
+            </Link>
+          </div>
+          <div className="px-4 py-3">
+            <div className="mb-3 text-sm text-muted">
+              Saved <span className="font-semibold text-text">{formatUSD(goalsSaved)}</span> of {formatUSD(goalsTarget)}
+            </div>
+            <ul className="space-y-2.5">
+              {topGoals.map((g) => {
+                const pct = g.targetAmount > 0 ? Math.min(100, (g.currentAmount / g.targetAmount) * 100) : 0;
+                const complete = g.currentAmount >= g.targetAmount;
+                return (
+                  <li key={g.id}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span className="flex h-5 w-5 items-center justify-center rounded" style={{ backgroundColor: `${g.color}22`, color: g.color }}>
+                          <CategoryIcon name={g.icon} size={12} />
+                        </span>
+                        {g.name}
+                      </span>
+                      <span className="tabular-nums text-muted">
+                        {formatUSD(g.currentAmount)} / {formatUSD(g.targetAmount)} · {Math.round(pct)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? "#16a34a" : g.color }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* Recent activity */}
       <section className="card mt-5">

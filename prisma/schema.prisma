@@ -27,6 +27,7 @@ model Household {
   transactions Transaction[]
   recurring    RecurringRule[]
   budgets      Budget[]
+  savingsGoals SavingsGoal[]
 }
 
 model User {
@@ -259,5 +260,24 @@ model Budget {
   limit       Decimal  @db.Decimal(14, 2)
 
   @@unique([householdId, categoryId, month])
+  @@index([householdId])
+}
+
+model SavingsGoal {
+  id            String    @id @default(cuid())
+  householdId   String
+  household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  name          String
+  targetAmount  Decimal   @db.Decimal(14, 2)
+  // Amount saved so far. Updated manually via contributions.
+  currentAmount Decimal   @default(0) @db.Decimal(14, 2)
+  targetDate    DateTime?
+  color         String    @default("#16a34a")
+  icon          String    @default("piggy-bank")
+  archived      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
   @@index([householdId])
 }

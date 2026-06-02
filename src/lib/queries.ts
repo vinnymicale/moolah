@@ -3,9 +3,16 @@
 // are never sent across that boundary.
 
 import { prisma } from "@/lib/prisma";
-import { toNumber } from "@/lib/money";
-import { isoDay } from "@/lib/dates";
+import { fromCents, toCents, toNumber } from "@/lib/money";
+import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
+import {
+  detectRecurringCandidates,
+  type RecurringSuggestion,
+  type TxnForDetect,
+} from "@/lib/recurring-suggestions";
 import type { AccountType, CategoryKind, TxnType, Frequency } from "@/generated/prisma/enums";
+
+export type { RecurringSuggestion } from "@/lib/recurring-suggestions";
 
 export interface AccountDTO {
   id: string;
@@ -153,6 +160,151 @@ export async function getTransactionsBetween(
     cleared: t.cleared,
     recurringRuleId: t.recurringRuleId,
     createdBy: t.createdBy,
+  }));
+}
+
+export interface BudgetLineDTO {
+  categoryId: string;
+  name: string;
+  color: string;
+  icon: string;
+  /** Monthly limit, or 0 if no budget is set for this category. */
+  limit: number;
+  /** Actual expense spending in the month. */
+  actual: number;
+}
+
+/**
+ * Budget vs. actual for every expense category in a given month. `monthISO` is
+ * any day in the target month ("YYYY-MM-01" by convention). Categories without
+ * a budget come back with limit 0 so the UI can offer to set one.
+ */
+export async function getBudgetMonth(householdId: string, monthISO: string): Promise<BudgetLineDTO[]> {
+  const monthStart = parseISODay(`${monthISO.slice(0, 7)}-01`);
+  const monthEnd = endOfUTCMonth(monthStart);
+
+  const [cats, budgets, txns] = await Promise.all([
+    prisma.category.findMany({ where: { householdId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
+    prisma.budget.findMany({ where: { householdId, month: monthStart } }),
+    prisma.transaction.findMany({
+      where: { householdId, type: "EXPENSE", date: { gte: monthStart, lte: monthEnd } },
+      select: { categoryId: true, amount: true },
+    }),
+  ]);
+
+  const limitByCat = new Map(budgets.map((b) => [b.categoryId, toNumber(b.limit)]));
+  const actualCentsByCat = new Map<string, number>();
+  for (const t of txns) {
+    if (!t.categoryId) continue;
+    actualCentsByCat.set(t.categoryId, (actualCentsByCat.get(t.categoryId) ?? 0) + toCents(t.amount));
+  }
+
+  return cats.map((c) => ({
+    categoryId: c.id,
+    name: c.name,
+    color: c.color,
+    icon: c.icon,
+    limit: limitByCat.get(c.id) ?? 0,
+    actual: fromCents(actualCentsByCat.get(c.id) ?? 0),
+  }));
+}
+
+/**
+ * Suggest recurring rules by scanning the last ~8 months of transactions for
+ * regularly-repeating charges that aren't already covered by a rule.
+ */
+export async function getRecurringSuggestions(householdId: string, todayISO: string): Promise<RecurringSuggestion[]> {
+  const since = startOfUTCMonth(addUTCMonths(parseISODay(todayISO), -8));
+
+  const [txns, rules] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { householdId, date: { gte: since } },
+      select: { date: true, description: true, amount: true, type: true, categoryId: true, accountId: true, recurringRuleId: true },
+      orderBy: { date: "asc" },
+    }),
+    prisma.recurringRule.findMany({ where: { householdId }, select: { description: true } }),
+  ]);
+
+  const existingDescriptions = rules.map((r) => r.description);
+  const mapped: TxnForDetect[] = txns.map((t) => ({
+    date: isoDay(t.date),
+    description: t.description,
+    amount: toNumber(t.amount),
+    type: t.type,
+    categoryId: t.categoryId,
+    accountId: t.accountId,
+    recurringRuleId: t.recurringRuleId,
+  }));
+
+  return detectRecurringCandidates(mapped, { existingDescriptions });
+}
+
+export interface BudgetMonthSummaryDTO {
+  monthISO: string;
+  label: string;
+  budget: number;
+  actual: number;
+}
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Budgeted vs. actual spending for each of the 12 months of `year`. */
+export async function getBudgetYear(householdId: string, year: number): Promise<BudgetMonthSummaryDTO[]> {
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year, 11, 31));
+
+  const [budgets, txns] = await Promise.all([
+    prisma.budget.findMany({ where: { householdId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
+    prisma.transaction.findMany({
+      where: { householdId, type: "EXPENSE", date: { gte: yearStart, lte: yearEnd } },
+      select: { date: true, amount: true },
+    }),
+  ]);
+
+  const budgetByMonth = new Map<number, number>();
+  for (const b of budgets) {
+    const mi = b.month.getUTCMonth();
+    budgetByMonth.set(mi, (budgetByMonth.get(mi) ?? 0) + toNumber(b.limit));
+  }
+  const actualCentsByMonth = new Map<number, number>();
+  for (const t of txns) {
+    const mi = t.date.getUTCMonth();
+    actualCentsByMonth.set(mi, (actualCentsByMonth.get(mi) ?? 0) + toCents(t.amount));
+  }
+
+  return Array.from({ length: 12 }, (_, i) => ({
+    monthISO: `${year}-${String(i + 1).padStart(2, "0")}-01`,
+    label: MONTHS_SHORT[i],
+    budget: budgetByMonth.get(i) ?? 0,
+    actual: fromCents(actualCentsByMonth.get(i) ?? 0),
+  }));
+}
+
+export interface SavingsGoalDTO {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate: string | null;
+  color: string;
+  icon: string;
+  archived: boolean;
+}
+
+export async function getSavingsGoals(householdId: string, includeArchived = false): Promise<SavingsGoalDTO[]> {
+  const rows = await prisma.savingsGoal.findMany({
+    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((g) => ({
+    id: g.id,
+    name: g.name,
+    targetAmount: toNumber(g.targetAmount),
+    currentAmount: toNumber(g.currentAmount),
+    targetDate: g.targetDate ? isoDay(g.targetDate) : null,
+    color: g.color,
+    icon: g.icon,
+    archived: g.archived,
   }));
 }
 

@@ -35,5 +35,40 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
     }
     revalidatePath("/trends");
     revalidatePath("/budgets");
+    revalidatePath("/");
+  });
+}
+
+const copySchema = z.object({
+  fromMonth: z.string().min(1),
+  toMonth: z.string().min(1),
+});
+
+export type CopyBudgetsInput = z.input<typeof copySchema>;
+
+/** Copy every category limit from one month into another (upserting). */
+export async function copyBudgetsAction(input: CopyBudgetsInput): Promise<ActionResult> {
+  return run(async () => {
+    const { householdId } = await requireHousehold();
+    const { fromMonth, toMonth } = copySchema.parse(input);
+    const from = parseISODay(fromMonth);
+    const to = parseISODay(toMonth);
+
+    const prior = await prisma.budget.findMany({ where: { householdId, month: from } });
+    if (prior.length === 0) throw new Error("No budgets in that month to copy.");
+
+    await prisma.$transaction(
+      prior.map((b) =>
+        prisma.budget.upsert({
+          where: { householdId_categoryId_month: { householdId, categoryId: b.categoryId, month: to } },
+          update: { limit: b.limit },
+          create: { householdId, categoryId: b.categoryId, month: to, limit: b.limit },
+        }),
+      ),
+    );
+
+    revalidatePath("/budgets");
+    revalidatePath("/trends");
+    revalidatePath("/");
   });
 }
