@@ -7,11 +7,13 @@ import { LogIn } from "lucide-react";
 export function SignInForm({
   devLoginEnabled,
   googleEnabled,
+  defaultDevEmail = "demo@example.com",
 }: {
   devLoginEnabled: boolean;
   googleEnabled: boolean;
+  defaultDevEmail?: string;
 }) {
-  const [devEmail, setDevEmail] = useState("demo@example.com");
+  const [devEmail, setDevEmail] = useState(defaultDevEmail);
   const [loading, setLoading] = useState<string | null>(null);
 
   return (
@@ -68,7 +70,7 @@ export function SignInForm({
             </button>
           </form>
           <p className="mt-3 text-center text-xs text-muted">
-            Local development only. Use <code className="text-text">demo@example.com</code> to open the seeded household.
+            Local development only — bypasses Google. Use an email on your sign-in allow-list.
           </p>
         </>
       )}
