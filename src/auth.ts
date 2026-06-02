@@ -61,12 +61,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user }) {
       return isAllowedEmail(user.email);
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user }) {
       if (user?.id) token.uid = user.id;
       const uid = token.uid as string | undefined;
-      // Resolve the household once, and refresh it when the client calls
-      // `update()` (e.g. right after creating or joining a household).
-      if (uid && (token.householdId === undefined || trigger === "update")) {
+      // Always resolve the current household from the DB so the session never
+      // goes stale (e.g. right after creating or joining a household). This is
+      // a single indexed lookup per session check — negligible for this app.
+      if (uid) {
         const dbUser = await prisma.user.findUnique({
           where: { id: uid },
           select: { householdId: true },
