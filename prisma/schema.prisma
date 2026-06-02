@@ -1,0 +1,263 @@
+// Personal Finance & Net Worth Tracker — data model
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Household & Auth (Auth.js / NextAuth models live here so users are shared)
+// ---------------------------------------------------------------------------
+
+model Household {
+  id           String   @id @default(cuid())
+  name         String
+  inviteCode   String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users        User[]
+  accounts     FinancialAccount[]
+  categories   Category[]
+  transactions Transaction[]
+  recurring    RecurringRule[]
+  budgets      Budget[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  householdId   String?
+  household     Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  accounts      Account[] // OAuth accounts (Auth.js)
+  sessions      Session[]
+  createdTxns   Transaction[] @relation("TxnCreatedBy")
+}
+
+// Auth.js OAuth account link
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Financial domain
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  RETIREMENT
+  INVESTMENT
+  VEHICLE
+  PROPERTY
+  LOAN
+  CASH
+  OTHER_ASSET
+  OTHER_LIABILITY
+}
+
+enum TxnType {
+  INCOME
+  EXPENSE
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model FinancialAccount {
+  id             String      @id @default(cuid())
+  householdId    String
+  household      Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  name           String
+  type           AccountType
+  institution    String?
+  // Current balance. For liabilities (credit cards, loans) store a positive
+  // number representing the amount owed; isAsset distinguishes the sign for
+  // net-worth math.
+  currentBalance Decimal     @default(0) @db.Decimal(14, 2)
+  isAsset        Boolean     @default(true)
+  // Include this account's running balance in the calendar cash projection
+  // (typically checking / savings / cash).
+  includeInCash  Boolean     @default(false)
+  color          String      @default("#64748b")
+  archived       Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  snapshots      AccountSnapshot[]
+  transactions   Transaction[]
+  recurring      RecurringRule[]
+
+  @@index([householdId])
+}
+
+model AccountSnapshot {
+  id        String           @id @default(cuid())
+  accountId String
+  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date      DateTime
+  balance   Decimal          @db.Decimal(14, 2)
+  note      String?
+  createdAt DateTime         @default(now())
+
+  @@index([accountId, date])
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  householdId String
+  household   Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  name        String
+  kind        CategoryKind
+  color       String       @default("#64748b")
+  icon        String       @default("tag")
+  isSystem    Boolean      @default(false)
+
+  parentId    String?
+  parent      Category?    @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[]   @relation("CategoryChildren")
+
+  transactions Transaction[]
+  recurring    RecurringRule[]
+  budgets      Budget[]
+
+  @@index([householdId])
+}
+
+model Transaction {
+  id              String        @id @default(cuid())
+  householdId     String
+  household       Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  accountId       String?
+  account         FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  categoryId      String?
+  category        Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  createdById     String?
+  createdBy       User?         @relation("TxnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  type            TxnType
+  amount          Decimal       @db.Decimal(14, 2)
+  date            DateTime
+  description     String
+  note            String?
+  // false = still expected / projected, true = actually happened.
+  cleared         Boolean       @default(true)
+
+  recurringRuleId String?
+  recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([householdId, date])
+  @@index([accountId])
+  @@index([categoryId])
+}
+
+model RecurringRule {
+  id           String     @id @default(cuid())
+  householdId  String
+  household    Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  accountId    String?
+  account      FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  categoryId   String?
+  category     Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  type         TxnType
+  amount       Decimal    @db.Decimal(14, 2)
+  description  String
+  note         String?
+
+  frequency    Frequency
+  interval     Int        @default(1) // every N units of frequency
+  startDate    DateTime
+  endDate      DateTime?
+  // Anchor day of month for MONTHLY/YEARLY (1-31); ignored otherwise.
+  dayOfMonth   Int?
+  // Anchor weekday for WEEKLY/BIWEEKLY (0=Sun..6=Sat); ignored otherwise.
+  weekday      Int?
+
+  archived     Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  transactions Transaction[]
+
+  @@index([householdId])
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // First day of the budgeted month (UTC midnight).
+  month       DateTime
+  limit       Decimal  @db.Decimal(14, 2)
+
+  @@unique([householdId, categoryId, month])
+  @@index([householdId])
+}

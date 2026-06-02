@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* Manual dark mode via a `.dark` class on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --line: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --brand: #4f46e5;
+  --brand-fg: #ffffff;
+  --income: #16a34a;
+  --expense: #dc2626;
+  --warning: #d97706;
+}
+
+.dark {
+  --bg: #0b1020;
+  --surface: #141b2d;
+  --surface-2: #1b2438;
+  --line: #2a344b;
+  --text: #e6eaf2;
+  --muted: #93a1b8;
+  --brand: #818cf8;
+  --brand-fg: #0b1020;
+  --income: #4ade80;
+  --expense: #f87171;
+  --warning: #fbbf24;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-warning: var(--warning);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Reusable component classes (kept small; most styling is utility-first). */
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-sm;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+      transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+      transition-colors disabled:opacity-50 disabled:pointer-events-none bg-brand text-brand-fg hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+      transition-colors disabled:opacity-50 disabled:pointer-events-none border border-line bg-surface hover:bg-surface2 text-text;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+      transition-colors disabled:opacity-50 disabled:pointer-events-none border border-expense/40 text-expense hover:bg-expense/10;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-text
+      outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 placeholder:text-muted;
+  }
+  .label {
+    @apply block text-xs font-medium text-muted mb-1;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+}
+
+/* Thin, theme-aware scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
