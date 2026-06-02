@@ -7,7 +7,7 @@
  *
  * Usage:  npm run db:local      (leave it running in its own terminal)
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
 
@@ -33,18 +33,25 @@ async function main() {
     await pg.initialise();
   }
 
+  // Check if another postgres process is already running in our data dir
+  // by reading the PID from postmaster.pid and seeing if that process is alive.
+  const pidFile = resolve(DATA_DIR, "postmaster.pid");
   let alreadyRunning = false;
-  try {
+  if (existsSync(pidFile)) {
+    try {
+      const pid = parseInt(readFileSync(pidFile, "utf8").split("\n")[0], 10);
+      // Signal 0 just checks for process existence without sending a signal.
+      process.kill(pid, 0);
+      alreadyRunning = true;
+      console.log(`Postgres is already running (PID ${pid}) on port ${PORT} — attaching.`);
+    } catch {
+      // PID file exists but process is gone — stale lockfile, proceed to start normally.
+    }
+  }
+
+  if (!alreadyRunning) {
     await pg.start();
     console.log(`Postgres started on port ${PORT}.`);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("postmaster.pid") || msg.includes("already exists") || msg.includes("already running")) {
-      alreadyRunning = true;
-      console.log(`Postgres is already running on port ${PORT} — attaching.`);
-    } else {
-      throw err;
-    }
   }
 
   try {
