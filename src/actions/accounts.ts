@@ -16,13 +16,26 @@ const accountSchema = z.object({
   institution: z.string().max(80).optional().nullable(),
   currentBalance: z.coerce.number().finite(),
   includeInCash: z.boolean().optional().default(false),
+  includeInNetWorth: z.boolean().optional().default(true),
   color: z.string().max(20).optional(),
+  // Debt-only — sent for liability accounts to power the payoff planner.
+  interestRate: z.coerce.number().min(0).max(100).optional().nullable(),
+  minimumPayment: z.coerce.number().min(0).finite().optional().nullable(),
 });
 
 export type AccountInput = z.input<typeof accountSchema>;
 
 function isAssetType(type: AccountType): boolean {
   return !LIABILITY_TYPES.includes(type);
+}
+
+/** Debt fields apply only to liabilities; nulled out for assets. */
+function debtFields(type: AccountType, data: z.infer<typeof accountSchema>) {
+  if (isAssetType(type)) return { interestRate: null, minimumPayment: null };
+  return {
+    interestRate: data.interestRate ?? null,
+    minimumPayment: data.minimumPayment ?? null,
+  };
 }
 
 async function ownedAccount(id: string, householdId: string) {
@@ -44,7 +57,9 @@ export async function createAccountAction(input: AccountInput): Promise<ActionRe
         currentBalance: data.currentBalance,
         isAsset: isAssetType(data.type),
         includeInCash: data.includeInCash ?? false,
+        includeInNetWorth: data.includeInNetWorth ?? true,
         color: data.color || "#64748b",
+        ...debtFields(data.type, data),
       },
     });
     revalidatePath("/accounts");
@@ -66,11 +81,36 @@ export async function updateAccountAction(id: string, input: AccountInput): Prom
         currentBalance: data.currentBalance,
         isAsset: isAssetType(data.type),
         includeInCash: data.includeInCash ?? false,
+        includeInNetWorth: data.includeInNetWorth ?? true,
         color: data.color || "#64748b",
+        ...debtFields(data.type, data),
       },
     });
     revalidatePath("/accounts");
     revalidatePath("/");
+  });
+}
+
+const debtTermsSchema = z.object({
+  interestRate: z.coerce.number().min(0).max(100),
+  minimumPayment: z.coerce.number().min(0).finite(),
+});
+
+export type DebtTermsInput = z.input<typeof debtTermsSchema>;
+
+/** Update only the payoff-planner terms (APR + minimum) for a liability. */
+export async function updateDebtTermsAction(id: string, input: DebtTermsInput): Promise<ActionResult> {
+  return run(async () => {
+    const { householdId } = await requireHousehold();
+    const acct = await ownedAccount(id, householdId);
+    if (isAssetType(acct.type)) throw new Error("Only debt accounts have payoff terms.");
+    const data = debtTermsSchema.parse(input);
+    await prisma.financialAccount.update({
+      where: { id },
+      data: { interestRate: data.interestRate, minimumPayment: data.minimumPayment },
+    });
+    revalidatePath("/debt");
+    revalidatePath("/accounts");
   });
 }
 

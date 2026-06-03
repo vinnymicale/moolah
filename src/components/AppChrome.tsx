@@ -7,12 +7,13 @@ import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
   Settings, Plus, Menu, Wallet, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
-  GripVertical, RotateCcw, ChevronsLeft, Keyboard,
+  GripVertical, RotateCcw, ChevronsLeft, Keyboard, Search, TrendingDown,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
 import { Modal } from "./Modal";
+import { CommandPalette } from "./CommandPalette";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
 const NAV = [
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/goals", label: "Goals", icon: Target },
+  { href: "/debt", label: "Debt payoff", icon: TrendingDown },
   { href: "/categories", label: "Categories", icon: Tags },
   { href: "/trends", label: "Trends", icon: LineChart },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -56,6 +58,7 @@ export function AppChrome({
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [importCsv, setImportCsv] = useState<{ text: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,6 +104,12 @@ export function AppChrome({
   // Global keyboard shortcuts (ignored while typing in a field).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘K / Ctrl+K opens global search — handled even while typing.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
@@ -227,6 +236,18 @@ export function AppChrome({
           <Plus size={16} /> {!compact && "Add transaction"}
         </button>
         <button
+          onClick={() => { setSearchOpen(true); setNavOpen(false); }}
+          className={`btn-ghost w-full text-sm ${compact ? "justify-center !px-0" : "justify-between"}`}
+          title="Search all transactions (⌘K)"
+        >
+          <span className="flex items-center gap-2">
+            <Search size={15} /> {!compact && "Search"}
+          </span>
+          {!compact && (
+            <kbd className="rounded border border-line bg-surface2 px-1.5 py-0.5 font-mono text-[10px] text-muted">⌘K</kbd>
+          )}
+        </button>
+        <button
           onClick={() => { fileInputRef.current?.click(); setNavOpen(false); }}
           className={`btn-ghost w-full text-sm ${compact ? "justify-center !px-0" : "justify-start"}`}
           title="Import transactions from a bank CSV"
@@ -335,6 +356,9 @@ export function AppChrome({
             <Wallet size={18} className="text-brand" />
           </div>
           <div className="flex-1" />
+          <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Search">
+            <Search size={18} />
+          </button>
           <button onClick={() => setAddOpen(true)} className="btn-primary h-9">
             <Plus size={16} />
           </button>
@@ -342,6 +366,8 @@ export function AppChrome({
 
         <main className="flex-1 px-4 py-5 md:px-6 md:py-6">{children}</main>
       </div>
+
+      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} categories={categories} accounts={accounts} />
 
       <TransactionModal open={addOpen} onClose={() => setAddOpen(false)} accounts={accounts} categories={categories} />
 
@@ -379,6 +405,7 @@ export function AppChrome({
 }
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
+  { keys: ["⌘", "K"], label: "Search all transactions" },
   { keys: ["n"], label: "Add a transaction" },
   { keys: ["i"], label: "Import a CSV" },
   { keys: ["/"], label: "Focus search (on pages with it)" },

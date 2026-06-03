@@ -7,9 +7,11 @@ import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } fro
 import { formatUSD } from "@/lib/money";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { PageHeader, StatCard } from "@/components/ui-bits";
+import { computeMilestones } from "@/lib/milestones";
 import { DashboardSections, type DashboardSection } from "./DashboardSections";
 import { SafeTransferCard } from "./SafeTransferCard";
 import { SpendingAlertsCard } from "./SpendingAlertsCard";
+import { MilestonesBanner } from "./MilestonesBanner";
 
 function localTodayISO(): string {
   const d = new Date();
@@ -53,6 +55,8 @@ export default async function DashboardPage() {
   const budgeted = budgetLines.filter((b) => b.limit > 0).sort((a, b) => b.limit - a.limit);
   const totalBudget = budgeted.reduce((s, b) => s + b.limit, 0);
   const budgetSpent = budgeted.reduce((s, b) => s + b.actual, 0);
+
+  const milestones = computeMilestones({ netWorth: netWorth.net, goals, savingsRate, net });
 
   const sections: DashboardSection[] = [
     {
@@ -298,6 +302,8 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Dashboard" subtitle="Your household at a glance." />
+
+      <MilestonesBanner milestones={milestones} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />

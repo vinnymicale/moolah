@@ -4,7 +4,8 @@ import { addUTCMonths, endOfUTCMonth, isoDay, monthLabel, parseISODay, startOfUT
 import { PageHeader } from "@/components/ui-bits";
 import { TransactionsList } from "./TransactionsList";
 
-const RANGES = new Set(["month", "3m", "12m", "ytd", "all"]);
+const RANGES = new Set(["month", "3m", "12m", "ytd", "all", "custom"]);
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 function localTodayISO(): string {
   const d = new Date();
@@ -14,11 +15,15 @@ function localTodayISO(): string {
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; account?: string; range?: string; category?: string }>;
+  searchParams: Promise<{ m?: string; account?: string; range?: string; category?: string; focus?: string; from?: string; to?: string }>;
 }) {
   const { householdId } = await requireHousehold();
-  const { m, account, range: rangeParam, category } = await searchParams;
-  const range = RANGES.has(rangeParam ?? "") ? (rangeParam as string) : "month";
+  const { m, account, range: rangeParam, category, focus, from, to } = await searchParams;
+  let range = RANGES.has(rangeParam ?? "") ? (rangeParam as string) : "month";
+  // A valid from/to pair forces custom mode regardless of the range param.
+  const hasCustom = ISO_DAY.test(from ?? "") && ISO_DAY.test(to ?? "") && (from as string) <= (to as string);
+  if (range === "custom" && !hasCustom) range = "month";
+  if (hasCustom) range = "custom";
 
   const todayISO = localTodayISO();
   const today = parseISODay(todayISO);
@@ -50,6 +55,11 @@ export default async function TransactionsPage({
       endISO = "2999-12-31";
       rangeLabel = "All time";
       break;
+    case "custom":
+      startISO = from as string;
+      endISO = to as string;
+      rangeLabel = `${customLabel(startISO)} – ${customLabel(endISO)}`;
+      break;
     default:
       startISO = monthISO;
       endISO = isoDay(endOfUTCMonth(monthFirst));
@@ -61,6 +71,21 @@ export default async function TransactionsPage({
     getCategories(householdId),
     getTransactionsBetween(householdId, startISO, endISO),
   ]);
+
+  // Validate comma-separated category/account filters from the URL, keeping
+  // only ids that exist (plus the sentinel "uncategorized" / "no account").
+  const catIds = new Set(categories.map((c) => c.id));
+  const acctIds = new Set(accounts.map((a) => a.id));
+  const initialCategoryId = (category ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((v) => v === "__uncategorized__" || catIds.has(v))
+    .join(",");
+  const initialAccountId = (account ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((v) => v === "__none__" || acctIds.has(v))
+    .join(",");
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -74,12 +99,16 @@ export default async function TransactionsPage({
         monthISO={monthISO}
         prevMonthISO={isoDay(addUTCMonths(monthFirst, -1))}
         nextMonthISO={isoDay(addUTCMonths(monthFirst, 1))}
-        initialAccountId={account && accounts.some((a) => a.id === account) ? account : ""}
-        initialCategoryId={
-          category === "__uncategorized__" ? "__uncategorized__" :
-          (category && categories.some((c) => c.id === category) ? category : "")
-        }
+        initialAccountId={initialAccountId}
+        initialCategoryId={initialCategoryId}
+        focusId={focus ?? ""}
+        customFrom={range === "custom" ? startISO : ""}
+        customTo={range === "custom" ? endISO : ""}
       />
     </div>
   );
+}
+
+function customLabel(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }

@@ -100,6 +100,7 @@ function AccountGroup({
                     {ACCOUNT_TYPE_LABELS[a.type]}
                     {a.institution ? ` · ${a.institution}` : ""}
                     {a.includeInCash ? " · in cash flow" : ""}
+                    {!a.includeInNetWorth ? " · not in net worth" : ""}
                   </p>
                 </div>
                 <div className="text-right">
@@ -133,10 +134,15 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
   const [institution, setInstitution] = useState(account?.institution ?? "");
   const [balance, setBalance] = useState(account ? String(account.currentBalance) : "");
   const [includeInCash, setIncludeInCash] = useState(account?.includeInCash ?? defaultIncludeInCash("CHECKING"));
+  const [includeInNetWorth, setIncludeInNetWorth] = useState(account?.includeInNetWorth ?? true);
   const [color, setColor] = useState(account?.color ?? COLORS[0]);
   const [touchedCash, setTouchedCash] = useState(false);
+  const [interestRate, setInterestRate] = useState(account?.interestRate !== null && account?.interestRate !== undefined ? String(account.interestRate) : "");
+  const [minimumPayment, setMinimumPayment] = useState(account?.minimumPayment !== null && account?.minimumPayment !== undefined ? String(account.minimumPayment) : "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  const isLiability = !ACCOUNT_TYPE_OPTIONS.find((o) => o.value === type)?.isAsset;
 
   const onType = (t: AccountType) => {
     setType(t);
@@ -146,7 +152,11 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
   const submit = () =>
     start(async () => {
       setError(null);
-      const input: AccountInput = { name, type, institution, currentBalance: balance, includeInCash, color };
+      const input: AccountInput = {
+        name, type, institution, currentBalance: balance, includeInCash, includeInNetWorth, color,
+        interestRate: isLiability && interestRate !== "" ? interestRate : null,
+        minimumPayment: isLiability && minimumPayment !== "" ? minimumPayment : null,
+      };
       const res = editing ? await updateAccountAction(account!.id, input) : await createAccountAction(input);
       if (!res.ok) {
         setError(res.error ?? "Error");
@@ -184,12 +194,31 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
           </div>
         </div>
         <div>
-          <label className="label">Current balance {!ACCOUNT_TYPE_OPTIONS.find((o) => o.value === type)?.isAsset && "(amount owed)"}</label>
+          <label className="label">Current balance {isLiability && "(amount owed)"}</label>
           <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">$</span>
             <input className="input pl-7" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0.00" />
           </div>
         </div>
+        {isLiability && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Interest rate (APR)</label>
+              <div className="relative">
+                <input className="input pr-7" inputMode="decimal" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} placeholder="19.99" />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">%</span>
+              </div>
+            </div>
+            <div>
+              <label className="label">Minimum payment</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">$</span>
+                <input className="input pl-7" inputMode="decimal" value={minimumPayment} onChange={(e) => setMinimumPayment(e.target.value)} placeholder="35" />
+              </div>
+            </div>
+            <p className="col-span-2 -mt-1 text-xs text-muted">Used by the <span className="text-brand">Debt payoff</span> planner.</p>
+          </div>
+        )}
         <div>
           <label className="label">Color</label>
           <div className="flex flex-wrap gap-2">
@@ -214,6 +243,14 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
             }}
           />
           <span>Include in calendar cash-flow projection</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={includeInNetWorth}
+            onChange={(e) => setIncludeInNetWorth(e.target.checked)}
+          />
+          <span>Count toward net worth</span>
         </label>
 
         {error && <p className="text-sm text-expense">{error}</p>}

@@ -135,6 +135,13 @@ model FinancialAccount {
   // Include this account's running balance in the calendar cash projection
   // (typically checking / savings / cash).
   includeInCash  Boolean     @default(false)
+  // Include this account's balance in net-worth totals. Lets the user track an
+  // account (e.g. a student loan) without it dragging down their net worth.
+  includeInNetWorth Boolean  @default(true)
+  // Debt-only fields powering the payoff planner. Annual interest rate as a
+  // percentage (e.g. 19.99) and the minimum monthly payment. Null for assets.
+  interestRate   Decimal?    @db.Decimal(6, 3)
+  minimumPayment Decimal?    @db.Decimal(14, 2)
   color          String      @default("#64748b")
   archived       Boolean     @default(false)
   createdAt      DateTime    @default(now())

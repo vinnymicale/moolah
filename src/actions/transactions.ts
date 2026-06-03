@@ -262,6 +262,65 @@ export async function materializeOccurrenceAction(ruleId: string, dateISO: strin
   });
 }
 
+// ---------------------------------------------------------------------------
+// Global search — queries the entire transaction history (all accounts, all
+// time) by description/note text, with an optional amount match. Drives the
+// ⌘K command palette.
+// ---------------------------------------------------------------------------
+
+export interface SearchHit {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: TxnType;
+  categoryId: string | null;
+  accountId: string | null;
+  note: string | null;
+}
+
+export async function searchTransactionsAction(query: string): Promise<SearchHit[]> {
+  const { householdId } = await requireHousehold();
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  // If the query looks like a number, also match transactions at that amount
+  // (within a cent) so "42.50" finds the $42.50 charge.
+  const numeric = Number(q.replace(/[$,]/g, ""));
+  const amountClause =
+    Number.isFinite(numeric) && numeric > 0
+      ? [{ amount: { gte: numeric - 0.005, lte: numeric + 0.005 } }]
+      : [];
+
+  const rows = await prisma.transaction.findMany({
+    where: {
+      householdId,
+      OR: [
+        { description: { contains: q, mode: "insensitive" } },
+        { note: { contains: q, mode: "insensitive" } },
+        ...amountClause,
+      ],
+    },
+    orderBy: { date: "desc" },
+    take: 50,
+    select: {
+      id: true, date: true, description: true, amount: true,
+      type: true, categoryId: true, accountId: true, note: true,
+    },
+  });
+
+  return rows.map((t) => ({
+    id: t.id,
+    date: t.date.toISOString().slice(0, 10),
+    description: t.description,
+    amount: Number(t.amount),
+    type: t.type,
+    categoryId: t.categoryId,
+    accountId: t.accountId,
+    note: t.note,
+  }));
+}
+
 function revalidateAll() {
   revalidatePath("/");
   revalidatePath("/calendar");

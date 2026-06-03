@@ -66,19 +66,23 @@ async function main() {
   );
   console.log("Leave this running. Press Ctrl+C to stop.\n");
 
+  // Keep the Node event loop alive until a signal arrives. A bare unresolved
+  // promise is NOT enough — without an active handle (child process, timer,
+  // socket) Node considers the loop idle and exits. When we start Postgres
+  // ourselves embedded-postgres holds the child handle, but when *attaching*
+  // to an already-running instance there is no such handle, so we register an
+  // explicit no-op interval to pin the loop open.
+  const keepAlive = setInterval(() => {}, 1 << 30);
+
   const shutdown = async () => {
     console.log("\nStopping Postgres …");
+    clearInterval(keepAlive);
     // Only stop the server if we're the one who started it.
     if (!alreadyRunning) await pg.stop();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-
-  // Keep the process alive until a signal arrives. When we started Postgres
-  // ourselves the embedded-postgres bindings do this implicitly; when
-  // attaching to an already-running instance we need to block explicitly.
-  await new Promise(() => {});
 }
 
 main().catch((err) => {

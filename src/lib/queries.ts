@@ -23,8 +23,11 @@ export interface AccountDTO {
   currentBalance: number;
   isAsset: boolean;
   includeInCash: boolean;
+  includeInNetWorth: boolean;
   color: string;
   archived: boolean;
+  interestRate: number | null;
+  minimumPayment: number | null;
 }
 
 export interface CategoryDTO {
@@ -79,8 +82,11 @@ export async function getAccounts(householdId: string, includeArchived = false):
     currentBalance: toNumber(a.currentBalance),
     isAsset: a.isAsset,
     includeInCash: a.includeInCash,
+    includeInNetWorth: a.includeInNetWorth,
     color: a.color,
     archived: a.archived,
+    interestRate: a.interestRate !== null ? toNumber(a.interestRate) : null,
+    minimumPayment: a.minimumPayment !== null ? toNumber(a.minimumPayment) : null,
   }));
 }
 
@@ -133,6 +139,7 @@ export async function getNetWorth(householdId: string): Promise<NetWorth> {
   let assets = 0;
   let liabilities = 0;
   for (const a of accounts) {
+    if (!a.includeInNetWorth) continue;
     if (a.isAsset) assets += a.currentBalance;
     else liabilities += a.currentBalance;
   }

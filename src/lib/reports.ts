@@ -63,6 +63,7 @@ export async function computeReports(householdId: string, todayISO: string): Pro
     const me = endOfUTCMonth(addUTCMonths(monthStart, -i));
     let net = 0;
     for (const a of accounts) {
+      if (!a.includeInNetWorth) continue;
       const bal = balanceAt(a.id, a.currentBalance, me);
       net += a.isAsset ? bal : -bal;
     }

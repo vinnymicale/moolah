@@ -1,14 +1,19 @@
 import { requireHousehold } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { getAccounts, getCategories } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
-import { HouseholdNameForm, InviteCode } from "./SettingsForm";
+import { HouseholdNameForm, InviteCode, ExportData } from "./SettingsForm";
 
 export default async function SettingsPage() {
   const { householdId } = await requireHousehold();
-  const household = await prisma.household.findUnique({
-    where: { id: householdId },
-    include: { users: { select: { id: true, name: true, email: true, image: true } } },
-  });
+  const [household, accounts, categories] = await Promise.all([
+    prisma.household.findUnique({
+      where: { id: householdId },
+      include: { users: { select: { id: true, name: true, email: true, image: true } } },
+    }),
+    getAccounts(householdId),
+    getCategories(householdId),
+  ]);
   if (!household) return null;
 
   return (
@@ -26,6 +31,14 @@ export default async function SettingsPage() {
           Share this code so they can join from the welcome screen. Everyone in the household sees the same data.
         </p>
         <InviteCode code={household.inviteCode} />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Export your data</h2>
+        <p className="mb-3 text-sm text-muted">
+          Download your transactions as a CSV for taxes, backups, or spreadsheets.
+        </p>
+        <ExportData accounts={accounts} categories={categories} />
       </section>
 
       <section className="card p-5">
