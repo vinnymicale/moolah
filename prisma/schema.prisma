@@ -142,6 +142,14 @@ model FinancialAccount {
   // percentage (e.g. 19.99) and the minimum monthly payment. Null for assets.
   interestRate   Decimal?    @db.Decimal(6, 3)
   minimumPayment Decimal?    @db.Decimal(14, 2)
+  // Credit card fields — populated from Plaid Liabilities on each sync.
+  creditLimit           Decimal?  @db.Decimal(14, 2)
+  lastStatementBalance  Decimal?  @db.Decimal(14, 2)
+  lastStatementDate     DateTime?
+  lastPaymentAmount     Decimal?  @db.Decimal(14, 2)
+  lastPaymentDate       DateTime?
+  nextPaymentDueDate    DateTime?
+  isOverdue             Boolean?
   color          String      @default("#64748b")
   archived       Boolean     @default(false)
   createdAt      DateTime    @default(now())
@@ -337,9 +345,10 @@ model PlaidLinkedAccount {
   mask               String?  // last 4 digits
   plaidType          String   // depository | credit | loan | investment | other
   plaidSubtype       String?  // checking | savings | credit card | …
-  // Current balance as reported by Plaid (updated on each sync).
+  // Balances as reported by Plaid (updated on each sync).
   availableBalance   Decimal? @db.Decimal(14, 2)
   currentBalance     Decimal? @db.Decimal(14, 2)
+  creditLimit        Decimal? @db.Decimal(14, 2)
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

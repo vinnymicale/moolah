@@ -28,6 +28,13 @@ export interface AccountDTO {
   archived: boolean;
   interestRate: number | null;
   minimumPayment: number | null;
+  creditLimit: number | null;
+  lastStatementBalance: number | null;
+  lastStatementDate: string | null; // ISO day
+  lastPaymentAmount: number | null;
+  lastPaymentDate: string | null;   // ISO day
+  nextPaymentDueDate: string | null; // ISO day
+  isOverdue: boolean | null;
 }
 
 export interface CategoryDTO {
@@ -50,6 +57,7 @@ export interface TransactionDTO {
   categoryId: string | null;
   cleared: boolean;
   recurringRuleId: string | null;
+  plaidTransactionId: string | null;
   createdBy: { id: string; name: string | null; image: string | null } | null;
 }
 
@@ -87,6 +95,13 @@ export async function getAccounts(householdId: string, includeArchived = false):
     archived: a.archived,
     interestRate: a.interestRate !== null ? toNumber(a.interestRate) : null,
     minimumPayment: a.minimumPayment !== null ? toNumber(a.minimumPayment) : null,
+    creditLimit: a.creditLimit !== null ? toNumber(a.creditLimit) : null,
+    lastStatementBalance: a.lastStatementBalance !== null ? toNumber(a.lastStatementBalance) : null,
+    lastStatementDate: a.lastStatementDate ? isoDay(a.lastStatementDate) : null,
+    lastPaymentAmount: a.lastPaymentAmount !== null ? toNumber(a.lastPaymentAmount) : null,
+    lastPaymentDate: a.lastPaymentDate ? isoDay(a.lastPaymentDate) : null,
+    nextPaymentDueDate: a.nextPaymentDueDate ? isoDay(a.nextPaymentDueDate) : null,
+    isOverdue: a.isOverdue ?? null,
   }));
 }
 
@@ -167,6 +182,7 @@ export async function getTransactionsBetween(
     categoryId: t.categoryId,
     cleared: t.cleared,
     recurringRuleId: t.recurringRuleId,
+    plaidTransactionId: t.plaidTransactionId,
     createdBy: t.createdBy,
   }));
 }

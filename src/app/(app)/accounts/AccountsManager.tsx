@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Plus, Pencil, TrendingUp, Archive, Trash2, Receipt } from "lucide-react";
+import { Plus, Pencil, TrendingUp, Archive, Trash2, Receipt, AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Dot } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
@@ -92,32 +92,48 @@ function AccountGroup({
           {accounts.map((a) => {
             const lastSnap = snapshots.filter((s) => s.accountId === a.id).at(-1);
             return (
-              <li key={a.id} className="flex items-center gap-3 px-4 py-3">
-                <Dot color={a.color} size={12} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{a.name}</p>
-                  <p className="text-xs text-muted">
-                    {ACCOUNT_TYPE_LABELS[a.type]}
-                    {a.institution ? ` · ${a.institution}` : ""}
-                    {a.includeInCash ? " · in cash flow" : ""}
-                    {!a.includeInNetWorth ? " · not in net worth" : ""}
-                  </p>
+              <li key={a.id} className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <Dot color={a.color} size={12} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {a.name}
+                      {a.isOverdue && (
+                        <span className="ml-2 inline-flex items-center gap-0.5 align-middle text-[11px] font-semibold text-expense">
+                          <AlertTriangle size={11} /> overdue
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {ACCOUNT_TYPE_LABELS[a.type]}
+                      {a.institution ? ` · ${a.institution}` : ""}
+                      {a.includeInCash ? " · in cash flow" : ""}
+                      {!a.includeInNetWorth ? " · not in net worth" : ""}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="tabular-nums font-semibold">{formatUSD(a.currentBalance)}</p>
+                    {a.creditLimit ? (
+                      <p className="text-[11px] text-muted">
+                        {Math.round((a.currentBalance / a.creditLimit) * 100)}% of {formatUSD(a.creditLimit)}
+                      </p>
+                    ) : lastSnap ? (
+                      <p className="text-[11px] text-muted">as of {lastSnap.date}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Link href={`/transactions?account=${a.id}`} className="btn-ghost h-8 w-8 !p-0" title="View transactions">
+                      <Receipt size={14} />
+                    </Link>
+                    <button onClick={() => onSnapshot(a)} className="btn-ghost h-8 w-8 !p-0" title="Update balance">
+                      <TrendingUp size={14} />
+                    </button>
+                    <button onClick={() => onEdit(a)} className="btn-ghost h-8 w-8 !p-0" title="Edit">
+                      <Pencil size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="tabular-nums font-semibold">{formatUSD(a.currentBalance)}</p>
-                  {lastSnap && <p className="text-[11px] text-muted">as of {lastSnap.date}</p>}
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <Link href={`/transactions?account=${a.id}`} className="btn-ghost h-8 w-8 !p-0" title="View transactions">
-                    <Receipt size={14} />
-                  </Link>
-                  <button onClick={() => onSnapshot(a)} className="btn-ghost h-8 w-8 !p-0" title="Update balance">
-                    <TrendingUp size={14} />
-                  </button>
-                  <button onClick={() => onEdit(a)} className="btn-ghost h-8 w-8 !p-0" title="Edit">
-                    <Pencil size={14} />
-                  </button>
-                </div>
+                <CreditCardDetails account={a} />
               </li>
             );
           })}
@@ -278,6 +294,42 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
       </div>
     </Modal>
   );
+}
+
+function CreditCardDetails({ account }: { account: AccountDTO }) {
+  const hasCreditData = account.lastStatementBalance !== null || account.nextPaymentDueDate !== null || account.lastPaymentAmount !== null;
+  if (!hasCreditData) return null;
+
+  const daysUntilDue = account.nextPaymentDueDate
+    ? Math.ceil((new Date(`${account.nextPaymentDueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000)
+    : null;
+
+  return (
+    <div className="ml-5 mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
+      {account.lastStatementBalance !== null && (
+        <span>
+          Statement: <span className="font-medium text-text">{formatUSD(account.lastStatementBalance)}</span>
+          {account.lastStatementDate && <span className="ml-1">({fmtDate(account.lastStatementDate)})</span>}
+        </span>
+      )}
+      {account.minimumPayment !== null && (
+        <span>Min payment: <span className="font-medium text-text">{formatUSD(account.minimumPayment)}</span></span>
+      )}
+      {daysUntilDue !== null && (
+        <span className={daysUntilDue <= 3 ? "font-semibold text-expense" : daysUntilDue <= 7 ? "text-warning" : ""}>
+          Due: {account.nextPaymentDueDate && fmtDate(account.nextPaymentDueDate)}
+          {daysUntilDue >= 0 ? ` (${daysUntilDue}d)` : " (past due)"}
+        </span>
+      )}
+      {account.lastPaymentAmount !== null && account.lastPaymentDate !== null && (
+        <span>Last payment: <span className="font-medium text-text">{formatUSD(account.lastPaymentAmount)}</span> on {fmtDate(account.lastPaymentDate)}</span>
+      )}
+    </div>
+  );
+}
+
+function fmtDate(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function SnapshotForm({ account, onClose }: { account: AccountDTO; onClose: () => void }) {

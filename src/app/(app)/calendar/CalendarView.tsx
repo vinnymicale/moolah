@@ -2,14 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus, CalendarCheck, Repeat } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CalendarCheck, Clock, CreditCard, Repeat } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { TransactionModal } from "@/components/TransactionModal";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import { monthLabel } from "@/lib/dates";
 import { materializeOccurrenceAction } from "@/actions/transactions";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
-import type { CalendarEvent, CalendarMonth } from "@/lib/calendar";
+import type { CalendarEvent, CalendarMonth, CcDueEvent } from "@/lib/calendar";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -17,7 +17,8 @@ type ModalState =
   | { kind: "add"; date: string }
   | { kind: "edit"; txn: TransactionDTO }
   | { kind: "occurrence"; event: CalendarEvent }
-  | { kind: "day"; iso: string; events: CalendarEvent[] }
+  | { kind: "day"; iso: string; events: CalendarEvent[]; ccDues: CcDueEvent[] }
+  | { kind: "cc_due"; due: CcDueEvent }
   | null;
 
 export function CalendarView({
@@ -100,6 +101,7 @@ export function CalendarView({
         <div className="grid grid-cols-7">
           {data.days.map((iso, i) => {
             const events = data.eventsByDay[iso] ?? [];
+            const ccDues = data.ccDueByDay[iso] ?? [];
             const proj = data.projectionByIso[iso];
             const inMonth = iso.slice(0, 7) === monthNum;
             const isToday = iso === data.todayISO;
@@ -108,6 +110,7 @@ export function CalendarView({
                 key={iso}
                 iso={iso}
                 events={events}
+                ccDues={ccDues}
                 projBalance={hasCash ? proj?.balance : undefined}
                 inMonth={inMonth}
                 isToday={isToday}
@@ -120,7 +123,8 @@ export function CalendarView({
                     ? setModal({ kind: "occurrence", event: e })
                     : setModal({ kind: "edit", txn: eventToTxn(e) })
                 }
-                onShowAll={(events) => setModal({ kind: "day", iso, events })}
+                onShowAll={(events) => setModal({ kind: "day", iso, events, ccDues })}
+                onCcDue={(due) => setModal({ kind: "cc_due", due })}
               />
             );
           })}
@@ -140,6 +144,7 @@ export function CalendarView({
         <DayEventsModal
           iso={modal.iso}
           events={modal.events}
+          ccDues={modal.ccDues}
           categories={categories}
           onEvent={(e) => {
             setModal(
@@ -148,8 +153,12 @@ export function CalendarView({
                 : { kind: "edit", txn: eventToTxn(e) },
             );
           }}
+          onCcDue={(due) => setModal({ kind: "cc_due", due })}
           onClose={() => setModal(null)}
         />
+      )}
+      {modal?.kind === "cc_due" && (
+        <CcDueModal due={modal.due} onClose={() => setModal(null)} />
       )}
     </div>
   );
@@ -158,6 +167,7 @@ export function CalendarView({
 function DayCell({
   iso,
   events,
+  ccDues,
   projBalance,
   inMonth,
   isToday,
@@ -167,9 +177,11 @@ function DayCell({
   onAdd,
   onEvent,
   onShowAll,
+  onCcDue,
 }: {
   iso: string;
   events: CalendarEvent[];
+  ccDues: CcDueEvent[];
   projBalance?: number;
   inMonth: boolean;
   isToday: boolean;
@@ -179,9 +191,12 @@ function DayCell({
   onAdd: () => void;
   onEvent: (e: CalendarEvent) => void;
   onShowAll: (events: CalendarEvent[]) => void;
+  onCcDue: (due: CcDueEvent) => void;
 }) {
   const day = Number(iso.slice(8, 10));
-  const visible = events.slice(0, 3);
+  // Reserve slots for CC due chips so they don't crowd out transactions.
+  const maxTxns = Math.max(0, 3 - ccDues.length);
+  const visible = events.slice(0, maxTxns);
   const extra = events.length - visible.length;
 
   return (
@@ -206,6 +221,24 @@ function DayCell({
         )}
       </div>
       <div className="space-y-1">
+        {ccDues.map((due) => {
+          const daysUntil = Math.ceil((new Date(`${due.dueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000);
+          const urgent = daysUntil <= 3;
+          return (
+            <button
+              key={due.accountId}
+              onClick={(ev) => { ev.stopPropagation(); onCcDue(due); }}
+              className="flex w-full items-center gap-1 rounded border border-warning/40 bg-warning/10 px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-warning/20"
+              title={`${due.accountName} payment due${due.statementBalance !== null ? ` · ${formatUSD(due.statementBalance)}` : ""}`}
+            >
+              <CreditCard size={10} className={`shrink-0 ${urgent ? "text-expense" : "text-warning"}`} />
+              <span className="hidden flex-1 truncate sm:inline" style={{ color: due.color }}>{due.accountName}</span>
+              <span className={`ml-auto shrink-0 tabular-nums ${urgent ? "text-expense" : "text-warning"}`}>
+                {due.statementBalance !== null ? compact(due.statementBalance) : "due"}
+              </span>
+            </button>
+          );
+        })}
         {visible.map((e) => (
           <button
             key={e.id}
@@ -216,9 +249,9 @@ function DayCell({
             className={`flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-surface2 ${
               e.isVirtual ? "opacity-60" : ""
             }`}
-            title={`${e.description} · ${formatUSD(e.amount)}${e.isVirtual ? " (expected)" : ""}`}
+            title={`${e.description} · ${formatUSD(e.amount)}${e.isVirtual ? " (expected)" : !e.cleared && e.plaidTransactionId ? " (pending)" : ""}`}
           >
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorFor(e) }} />
+            <span className={`h-2 w-2 shrink-0 rounded-full ${!e.cleared && !e.isVirtual ? "opacity-50" : ""}`} style={{ backgroundColor: colorFor(e) }} />
             <span className="hidden flex-1 truncate sm:inline">{e.description}</span>
             <span className={`ml-auto shrink-0 tabular-nums ${e.type === "INCOME" ? "text-income" : "text-expense"}`}>
               {e.type === "INCOME" ? "+" : "−"}
@@ -242,14 +275,18 @@ function DayCell({
 function DayEventsModal({
   iso,
   events,
+  ccDues,
   categories,
   onEvent,
+  onCcDue,
   onClose,
 }: {
   iso: string;
   events: CalendarEvent[];
+  ccDues: CcDueEvent[];
   categories: CategoryDTO[];
   onEvent: (e: CalendarEvent) => void;
+  onCcDue: (due: CcDueEvent) => void;
   onClose: () => void;
 }) {
   const catById = new Map(categories.map((c) => [c.id, c]));
@@ -259,6 +296,31 @@ function DayEventsModal({
   return (
     <Modal open onClose={onClose} title={formatDayLabel(iso)} widthClass="max-w-sm">
       <div className="space-y-1">
+        {ccDues.map((due) => {
+          const daysUntil = Math.ceil((new Date(`${due.dueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000);
+          return (
+            <button
+              key={due.accountId}
+              onClick={() => { onCcDue(due); onClose(); }}
+              className="flex w-full items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-left hover:bg-warning/20"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning/20 text-warning">
+                <CreditCard size={13} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium" style={{ color: due.color }}>{due.accountName}</p>
+                <p className={`text-xs ${daysUntil < 0 ? "text-expense" : "text-muted"}`}>
+                  Payment due · {daysUntil < 0 ? "past due" : daysUntil === 0 ? "today" : `${daysUntil}d`}
+                </p>
+              </div>
+              {due.statementBalance !== null && (
+                <span className="shrink-0 tabular-nums text-sm font-semibold text-expense">
+                  {formatUSD(due.statementBalance)}
+                </span>
+              )}
+            </button>
+          );
+        })}
         {events.map((e) => {
           const cat = e.categoryId ? catById.get(e.categoryId) : undefined;
           return (
@@ -274,7 +336,14 @@ function DayEventsModal({
                 {e.isVirtual ? <Repeat size={13} /> : <CalendarCheck size={13} />}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{e.description}</p>
+                <p className="truncate text-sm font-medium">
+                  {e.description}
+                  {!e.cleared && !e.isVirtual && (
+                    <span className="ml-2 inline-flex items-center gap-0.5 align-middle text-[11px] text-warning">
+                      <Clock size={11} /> {e.plaidTransactionId ? "pending" : "expected"}
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-muted">
                   {cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
                 </p>
@@ -360,8 +429,41 @@ function eventToTxn(e: CalendarEvent): TransactionDTO {
     categoryId: e.categoryId,
     cleared: e.cleared,
     recurringRuleId: e.recurringRuleId,
+    plaidTransactionId: e.plaidTransactionId,
     createdBy: e.createdBy,
   };
+}
+
+function CcDueModal({ due, onClose }: { due: CcDueEvent; onClose: () => void }) {
+  const daysUntil = Math.ceil((new Date(`${due.dueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000);
+  return (
+    <Modal open onClose={onClose} title={`${due.accountName} — Payment Due`} widthClass="max-w-sm">
+      <div className="space-y-3 text-sm">
+        <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
+          <p className="text-xs text-muted">Due date</p>
+          <p className="font-semibold">{formatDayLabel(due.dueDate)}</p>
+          <p className={`text-xs ${daysUntil < 0 ? "text-expense font-semibold" : daysUntil <= 3 ? "text-expense" : "text-muted"}`}>
+            {daysUntil < 0 ? "Past due" : daysUntil === 0 ? "Due today" : `${daysUntil} day${daysUntil === 1 ? "" : "s"} away`}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {due.statementBalance !== null && (
+            <div className="rounded-lg bg-surface2 px-3 py-2">
+              <p className="text-xs text-muted">Statement balance</p>
+              <p className="tabular-nums font-semibold text-expense">{formatUSD(due.statementBalance)}</p>
+            </div>
+          )}
+          {due.minimumPayment !== null && (
+            <div className="rounded-lg bg-surface2 px-3 py-2">
+              <p className="text-xs text-muted">Minimum payment</p>
+              <p className="tabular-nums font-semibold">{formatUSD(due.minimumPayment)}</p>
+            </div>
+          )}
+        </div>
+        <button onClick={onClose} className="btn-ghost w-full">Close</button>
+      </div>
+    </Modal>
+  );
 }
 
 function compact(n: number): string {

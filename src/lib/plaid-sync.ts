@@ -179,8 +179,6 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
 
     // --- ADDED ---
     for (const txn of data.added) {
-      if (txn.pending) continue; // only import posted transactions
-
       const linked = linkedByPlaidId.get(txn.account_id);
       if (!linked?.financialAccountId) continue; // account not linked to a local account yet
 
@@ -194,14 +192,17 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
 
-      const txnDate = parseISODay(txn.date);
-      const recurringRuleId = matchRule(type, txnDate, amount, txn.name);
+      // Use authorized_date when available — it's when the user actually made
+      // the purchase, vs. date which is the posting date for settled txns.
+      const txnDate = parseISODay(txn.authorized_date ?? txn.date);
+      const description = txn.merchant_name ?? txn.name;
+      const recurringRuleId = matchRule(type, txnDate, amount, description);
 
       await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
         update: opts?.recategorizeOnly
-          ? { amount, description: txn.name, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
-          : { amount, description: txn.name, date: txnDate, type, categoryId, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
+          ? { amount, description, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
+          : { amount, description, date: txnDate, type, categoryId, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
         create: {
           householdId: item.householdId,
           accountId: linked.financialAccountId,
@@ -209,7 +210,7 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
           type,
           amount,
           date: txnDate,
-          description: txn.name,
+          description,
           cleared: !txn.pending,
           plaidTransactionId: txn.transaction_id,
           recurringRuleId,
@@ -231,7 +232,6 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
 
     // --- MODIFIED ---
     for (const txn of data.modified) {
-      if (txn.pending) continue;
       const linked = linkedByPlaidId.get(txn.account_id);
       if (!linked?.financialAccountId) continue;
 
@@ -243,14 +243,15 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
 
-      const modDate = parseISODay(txn.date);
-      const modRuleId = matchRule(type, modDate, amount, txn.name);
+      const modDate = parseISODay(txn.authorized_date ?? txn.date);
+      const modDesc = txn.merchant_name ?? txn.name;
+      const modRuleId = matchRule(type, modDate, amount, modDesc);
 
       await prisma.transaction.updateMany({
         where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
         data: opts?.recategorizeOnly
-          ? { amount, description: txn.name, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
-          : { amount, description: txn.name, date: modDate, type, categoryId, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
+          ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
+          : { amount, description: modDesc, date: modDate, type, categoryId, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
       });
 
       // In recategorize mode, fill in the category only if the row has none.
@@ -285,23 +286,53 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
     const balances = acct.balances;
     const newCurrent = balances.current ?? null;
     const newAvailable = balances.available ?? null;
+    const newLimit = balances.limit ?? null;
 
     await prisma.plaidLinkedAccount.update({
       where: { id: linked.id },
       data: {
         currentBalance: newCurrent,
         availableBalance: newAvailable,
+        creditLimit: newLimit,
       },
     });
 
-    // Keep the linked FinancialAccount balance in sync.
+    // Keep the linked FinancialAccount balance and credit limit in sync.
     if (linked.financialAccountId && newCurrent !== null) {
       await prisma.financialAccount.update({
         where: { id: linked.financialAccountId },
-        data: { currentBalance: newCurrent },
+        data: {
+          currentBalance: newCurrent,
+          ...(newLimit !== null ? { creditLimit: newLimit } : {}),
+        },
       });
       result.balancesUpdated++;
     }
+  }
+
+  // ── Liabilities (statement balance, min payment, due date) ──────────────────
+  try {
+    const liabResp = await plaidClient.liabilitiesGet({ access_token: item.accessToken });
+    for (const card of liabResp.data.liabilities.credit ?? []) {
+      if (!card.account_id) continue;
+      const linked = linkedByPlaidId.get(card.account_id);
+      if (!linked?.financialAccountId) continue;
+      await prisma.financialAccount.update({
+        where: { id: linked.financialAccountId },
+        data: {
+          lastStatementBalance: card.last_statement_balance ?? null,
+          lastStatementDate: card.last_statement_issue_date ? new Date(`${card.last_statement_issue_date}T00:00:00Z`) : null,
+          lastPaymentAmount: card.last_payment_amount ?? null,
+          lastPaymentDate: card.last_payment_date ? new Date(`${card.last_payment_date}T00:00:00Z`) : null,
+          minimumPayment: card.minimum_payment_amount ?? null,
+          nextPaymentDueDate: card.next_payment_due_date ? new Date(`${card.next_payment_due_date}T00:00:00Z`) : null,
+          isOverdue: card.is_overdue ?? null,
+        },
+      });
+    }
+  } catch {
+    // Liabilities product may not be available for all items (e.g. non-credit
+    // accounts or items linked before Liabilities was added). Non-fatal.
   }
 
   // Persist the cursor and last-synced time (skipped in recategorize mode so

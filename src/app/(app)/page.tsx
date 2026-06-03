@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
 import { requireHousehold } from "@/lib/session";
 import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSafeToTransfer, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
@@ -282,7 +282,14 @@ export default async function DashboardPage() {
                       <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{t.description}</p>
+                      <p className="truncate text-sm font-medium">
+                        {t.description}
+                        {!t.cleared && (
+                          <span className="ml-2 inline-flex items-center gap-0.5 align-middle text-[11px] text-warning">
+                            <Clock size={11} /> {t.plaidTransactionId ? "pending" : "expected"}
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-muted">{formatDay(t.date)}{cat ? ` · ${cat.name}` : ""}</p>
                     </div>
                     <span className={`shrink-0 tabular-nums text-sm font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>

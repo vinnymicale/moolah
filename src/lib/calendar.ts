@@ -30,7 +30,17 @@ export interface CalendarEvent {
   /** True when projected from a recurring rule and not yet materialised. */
   isVirtual: boolean;
   recurringRuleId: string | null;
+  plaidTransactionId: string | null;
   createdBy: { id: string; name: string | null; image: string | null } | null;
+}
+
+export interface CcDueEvent {
+  accountId: string;
+  accountName: string;
+  color: string;
+  statementBalance: number | null;
+  minimumPayment: number | null;
+  dueDate: string; // ISO day
 }
 
 export interface DayProjectionDTO {
@@ -45,6 +55,7 @@ export interface CalendarMonth {
   monthISO: string;
   days: string[];
   eventsByDay: Record<string, CalendarEvent[]>;
+  ccDueByDay: Record<string, CcDueEvent[]>;
   projection: DayProjectionDTO[];
   projectionByIso: Record<string, DayProjectionDTO>;
   anchorBalance: number;
@@ -160,6 +171,7 @@ export async function getCalendarMonth(
     cleared: t.cleared,
     isVirtual: false,
     recurringRuleId: t.recurringRuleId,
+    plaidTransactionId: t.plaidTransactionId,
     createdBy: t.createdBy,
   }));
 
@@ -201,6 +213,7 @@ export async function getCalendarMonth(
         cleared: false,
         isVirtual: true,
         recurringRuleId: rule.id,
+        plaidTransactionId: null,
         createdBy: null,
       });
     }
@@ -247,10 +260,26 @@ export async function getCalendarMonth(
     list.sort((a, b) => (a.type === b.type ? b.amount - a.amount : a.type === "INCOME" ? -1 : 1));
   }
 
+  // Credit card payment due dates — show on the calendar for any account whose
+  // nextPaymentDueDate falls within the visible grid.
+  const ccDueByDay: Record<string, CcDueEvent[]> = {};
+  for (const acct of accounts) {
+    if (!acct.nextPaymentDueDate || !gridIso.has(acct.nextPaymentDueDate)) continue;
+    (ccDueByDay[acct.nextPaymentDueDate] ??= []).push({
+      accountId: acct.id,
+      accountName: acct.name,
+      color: acct.color,
+      statementBalance: acct.lastStatementBalance,
+      minimumPayment: acct.minimumPayment,
+      dueDate: acct.nextPaymentDueDate,
+    });
+  }
+
   return {
     monthISO: isoDay(monthDate),
     days: grid.map(isoDay),
     eventsByDay,
+    ccDueByDay,
     projection,
     projectionByIso,
     anchorBalance,

@@ -485,7 +485,7 @@ export function TransactionsList({
                       )}
                       {!t.cleared && (
                         <span className="ml-2 inline-flex items-center gap-1 align-middle text-[11px] text-warning">
-                          <Clock size={11} /> expected
+                          <Clock size={11} /> {t.plaidTransactionId ? "pending" : "expected"}
                         </span>
                       )}
                     </p>

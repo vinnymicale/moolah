@@ -25,5 +25,5 @@ const config = new Configuration({
 export const plaidClient = new PlaidApi(config);
 
 // Products and countries we request during Link.
-export const PLAID_PRODUCTS: Products[] = [Products.Transactions];
+export const PLAID_PRODUCTS: Products[] = [Products.Transactions, Products.Liabilities];
 export const PLAID_COUNTRY_CODES: CountryCode[] = [CountryCode.Us];
