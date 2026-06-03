@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, PieChart, Pie, Cell,
@@ -10,6 +11,80 @@ import type { Reports } from "@/lib/reports";
 
 const AXIS = "#94a3b8";
 const GRID = "rgba(148,163,184,0.2)";
+
+import type { CategorySlice } from "@/lib/reports";
+
+function CategoryMoMTable({ current, last }: { current: CategorySlice[]; last: CategorySlice[] }) {
+  const lastByName = new Map(last.map((s) => [s.name, s.value]));
+
+  // Union of categories that appear in either month, sorted by this month desc.
+  const allNames = Array.from(new Set([...current.map((s) => s.name), ...last.map((s) => s.name)]));
+  const currentByName = new Map(current.map((s) => [s.name, s]));
+
+  const rows = allNames
+    .map((name) => {
+      const cur = currentByName.get(name);
+      const lastVal = lastByName.get(name) ?? 0;
+      const thisVal = cur?.value ?? 0;
+      const diff = thisVal - lastVal;
+      const pct = lastVal > 0 ? (diff / lastVal) * 100 : null;
+      return { name, color: cur?.color ?? "#94a3b8", id: cur?.id ?? null, thisVal, lastVal, diff, pct };
+    })
+    .sort((a, b) => b.thisVal - a.thisVal);
+
+  if (rows.length === 0) return <p className="py-8 text-center text-sm text-muted">No data yet.</p>;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-line text-xs text-muted">
+            <th className="pb-2 text-left font-medium">Category</th>
+            <th className="pb-2 text-right font-medium">Last month</th>
+            <th className="pb-2 text-right font-medium">This month</th>
+            <th className="pb-2 text-right font-medium">Change</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {rows.map((r) => {
+            const upBad = r.diff > 0;
+            const changeColor = r.pct === null ? "text-muted" : upBad ? "text-expense" : r.diff < 0 ? "text-income" : "text-muted";
+            const Icon = r.pct === null || r.diff === 0 ? Minus : upBad ? TrendingUp : TrendingDown;
+            return (
+              <tr key={r.name} className="group">
+                <td className="py-2 pr-4">
+                  <Link
+                    href={r.id ? `/transactions?category=${r.id}` : `/transactions?category=__uncategorized__`}
+                    className="flex items-center gap-2 hover:underline"
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} />
+                    {r.name}
+                  </Link>
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums text-muted">
+                  {r.lastVal > 0 ? formatUSD(r.lastVal) : "—"}
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums font-medium">
+                  {r.thisVal > 0 ? formatUSD(r.thisVal) : "—"}
+                </td>
+                <td className={`py-2 text-right tabular-nums ${changeColor}`}>
+                  <span className="flex items-center justify-end gap-1">
+                    <Icon size={13} />
+                    {r.pct !== null
+                      ? `${r.diff > 0 ? "+" : ""}${Math.round(r.pct)}%`
+                      : r.thisVal > 0
+                      ? "new"
+                      : "gone"}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -37,7 +112,7 @@ function MoneyTooltip({ active, payload, label }: any) {
 }
 
 export function TrendsCharts({ reports }: { reports: Reports }) {
-  const { netWorthSeries, incomeExpenseSeries, categorySpending, budgetVsActual } = reports;
+  const { netWorthSeries, incomeExpenseSeries, categorySpending, categoryLastMonth, budgetVsActual } = reports;
   const hasSpending = categorySpending.length > 0;
 
   return (
@@ -103,6 +178,14 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
           <p className="py-12 text-center text-sm text-muted">No spending recorded this month yet.</p>
         )}
       </ChartCard>
+
+      {(categorySpending.length > 0 || categoryLastMonth.length > 0) && (
+        <div className="lg:col-span-2">
+          <ChartCard title="Category spending — this month vs. last month">
+            <CategoryMoMTable current={categorySpending} last={categoryLastMonth} />
+          </ChartCard>
+        </div>
+      )}
 
       <ChartCard title="Budget vs. actual (this month)">
         {budgetVsActual.length > 0 ? (

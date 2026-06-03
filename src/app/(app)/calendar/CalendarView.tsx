@@ -17,6 +17,7 @@ type ModalState =
   | { kind: "add"; date: string }
   | { kind: "edit"; txn: TransactionDTO }
   | { kind: "occurrence"; event: CalendarEvent }
+  | { kind: "day"; iso: string; events: CalendarEvent[] }
   | null;
 
 export function CalendarView({
@@ -119,6 +120,7 @@ export function CalendarView({
                     ? setModal({ kind: "occurrence", event: e })
                     : setModal({ kind: "edit", txn: eventToTxn(e) })
                 }
+                onShowAll={(events) => setModal({ kind: "day", iso, events })}
               />
             );
           })}
@@ -133,6 +135,21 @@ export function CalendarView({
       )}
       {modal?.kind === "occurrence" && (
         <OccurrenceModal event={modal.event} onClose={() => setModal(null)} />
+      )}
+      {modal?.kind === "day" && (
+        <DayEventsModal
+          iso={modal.iso}
+          events={modal.events}
+          categories={categories}
+          onEvent={(e) => {
+            setModal(
+              e.isVirtual
+                ? { kind: "occurrence", event: e }
+                : { kind: "edit", txn: eventToTxn(e) },
+            );
+          }}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );
@@ -149,6 +166,7 @@ function DayCell({
   colorFor,
   onAdd,
   onEvent,
+  onShowAll,
 }: {
   iso: string;
   events: CalendarEvent[];
@@ -160,6 +178,7 @@ function DayCell({
   colorFor: (e: CalendarEvent) => string;
   onAdd: () => void;
   onEvent: (e: CalendarEvent) => void;
+  onShowAll: (events: CalendarEvent[]) => void;
 }) {
   const day = Number(iso.slice(8, 10));
   const visible = events.slice(0, 3);
@@ -207,9 +226,74 @@ function DayCell({
             </span>
           </button>
         ))}
-        {extra > 0 && <p className="px-1 text-[10px] text-muted">+{extra} more</p>}
+        {extra > 0 && (
+          <button
+            onClick={(ev) => { ev.stopPropagation(); onShowAll(events); }}
+            className="px-1 text-[10px] text-brand hover:underline"
+          >
+            +{extra} more
+          </button>
+        )}
       </div>
     </div>
+  );
+}
+
+function DayEventsModal({
+  iso,
+  events,
+  categories,
+  onEvent,
+  onClose,
+}: {
+  iso: string;
+  events: CalendarEvent[];
+  categories: CategoryDTO[];
+  onEvent: (e: CalendarEvent) => void;
+  onClose: () => void;
+}) {
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  const income = events.filter((e) => e.type === "INCOME").reduce((s, e) => s + e.amount, 0);
+  const expense = events.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + e.amount, 0);
+
+  return (
+    <Modal open onClose={onClose} title={formatDayLabel(iso)} widthClass="max-w-sm">
+      <div className="space-y-1">
+        {events.map((e) => {
+          const cat = e.categoryId ? catById.get(e.categoryId) : undefined;
+          return (
+            <button
+              key={e.id}
+              onClick={() => { onEvent(e); onClose(); }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface2 ${e.isVirtual ? "opacity-60" : ""}`}
+            >
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs"
+                style={{ backgroundColor: `${cat?.color ?? (e.type === "INCOME" ? "#16a34a" : "#64748b")}22`, color: cat?.color ?? (e.type === "INCOME" ? "#16a34a" : "#64748b") }}
+              >
+                {e.isVirtual ? <Repeat size={13} /> : <CalendarCheck size={13} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{e.description}</p>
+                <p className="text-xs text-muted">
+                  {cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
+                </p>
+              </div>
+              <span className={`shrink-0 tabular-nums text-sm font-semibold ${e.type === "INCOME" ? "text-income" : "text-expense"}`}>
+                {e.type === "INCOME" ? "+" : "−"}{formatUSD(e.amount)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {events.length > 1 && (
+        <div className="mt-3 flex justify-between border-t border-line pt-3 text-sm">
+          <span className="text-income">+{formatUSD(income)}</span>
+          <span className="text-expense">−{formatUSD(expense)}</span>
+          <span className="font-semibold">Net {formatUSD(income - expense)}</span>
+        </div>
+      )}
+    </Modal>
   );
 }
 

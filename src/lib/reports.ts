@@ -16,6 +16,8 @@ export interface Reports {
   netWorthSeries: NetWorthPoint[];
   incomeExpenseSeries: IncomeExpensePoint[];
   categorySpending: CategorySlice[];
+  /** Same shape as categorySpending but for the previous calendar month. */
+  categoryLastMonth: CategorySlice[];
   budgetVsActual: BudgetRow[];
   currentMonthLabel: string;
   savingsRate: number | null;
@@ -94,29 +96,40 @@ export async function computeReports(householdId: string, todayISO: string): Pro
     net: round(r.income - r.expense),
   }));
 
-  // ── Spending by category, current month ──────────────────────────────────
+  // ── Spending by category, current and previous month ─────────────────────
   const catTotals = new Map<string, number>();
+  const catTotalsLastMonth = new Map<string, number>();
   let monthIncome = 0;
   let monthExpense = 0;
+  const currentMonthKey = isoDay(monthStart).slice(0, 7);
+  const lastMonthKey = isoDay(addUTCMonths(monthStart, -1)).slice(0, 7);
+
   for (const t of txns) {
-    if (isoDay(t.date).slice(0, 7) !== isoDay(monthStart).slice(0, 7)) continue;
+    const key = isoDay(t.date).slice(0, 7);
     const amt = toNumber(t.amount);
-    if (t.type === "INCOME") {
-      monthIncome += amt;
-      continue;
+    if (key === currentMonthKey) {
+      if (t.type === "INCOME") { monthIncome += amt; continue; }
+      monthExpense += amt;
+      const catKey = t.categoryId ?? "uncategorized";
+      catTotals.set(catKey, (catTotals.get(catKey) ?? 0) + amt);
+    } else if (key === lastMonthKey && t.type === "EXPENSE") {
+      const catKey = t.categoryId ?? "uncategorized";
+      catTotalsLastMonth.set(catKey, (catTotalsLastMonth.get(catKey) ?? 0) + amt);
     }
-    monthExpense += amt;
-    const key = t.categoryId ?? "uncategorized";
-    catTotals.set(key, (catTotals.get(key) ?? 0) + amt);
   }
-  const categorySpending: CategorySlice[] = Array.from(catTotals.entries())
-    .map(([id, value]) => ({
-      id: id === "uncategorized" ? null : id,
-      name: id === "uncategorized" ? "Uncategorized" : catById.get(id)?.name ?? "Uncategorized",
-      color: id === "uncategorized" ? "#94a3b8" : catById.get(id)?.color ?? "#94a3b8",
-      value: round(value),
-    }))
-    .sort((a, b) => b.value - a.value);
+
+  const sliceFrom = (totals: Map<string, number>): CategorySlice[] =>
+    Array.from(totals.entries())
+      .map(([id, value]) => ({
+        id: id === "uncategorized" ? null : id,
+        name: id === "uncategorized" ? "Uncategorized" : catById.get(id)?.name ?? "Uncategorized",
+        color: id === "uncategorized" ? "#94a3b8" : catById.get(id)?.color ?? "#94a3b8",
+        value: round(value),
+      }))
+      .sort((a, b) => b.value - a.value);
+
+  const categorySpending = sliceFrom(catTotals);
+  const categoryLastMonth = sliceFrom(catTotalsLastMonth);
 
   // ── Budget vs actual, current month ──────────────────────────────────────
   const budgets = await prisma.budget.findMany({ where: { householdId, month: monthStart } });
@@ -138,6 +151,7 @@ export async function computeReports(householdId: string, todayISO: string): Pro
     netWorthSeries,
     incomeExpenseSeries,
     categorySpending,
+    categoryLastMonth,
     budgetVsActual,
     currentMonthLabel: today.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
     savingsRate,
