@@ -2,6 +2,7 @@ import { requireHousehold } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { AppChrome } from "@/components/AppChrome";
+import { AutoPlaidSync } from "./AutoPlaidSync";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireHousehold();
@@ -18,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       accounts={accounts}
       categories={categories}
     >
+      <AutoPlaidSync />
       {children}
     </AppChrome>
   );
