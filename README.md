@@ -124,8 +124,9 @@ A built-in **dark theme** (toggle in the sidebar) carries across every page.
 
 ## Quick start (local, zero cloud setup)
 
-You need **Node 20+**. No Docker or system Postgres required — a real Postgres is downloaded and
-run for you by [`embedded-postgres`](https://www.npmjs.com/package/embedded-postgres).
+You need **Node 20.9+** (the minimum for Next.js 16). No Docker or system Postgres required — a real
+Postgres is downloaded and run for you by
+[`embedded-postgres`](https://www.npmjs.com/package/embedded-postgres).
 
 ```bash
 npm install
@@ -143,9 +144,9 @@ npm run start:all
 `npm run start:all` runs the bundled Postgres **and** the Next.js dev server side by side (via
 `concurrently`), so you only need one terminal. Open <http://localhost:3000>.
 
-Because `AUTH_DEV_LOGIN="true"` in your local `.env`, the sign-in screen shows a **Dev Login** —
+Because `.env.example` ships with `AUTH_DEV_LOGIN="true"`, the sign-in screen shows a **Dev Login** —
 enter `demo@example.com` to open the seeded household. (Google is not required for local
-development.)
+development; set up Google below when you want real sign-in, then turn the dev bypass off.)
 
 > **Heads up:** the web app needs the database running. Use `npm run start:all` (DB + web) rather
 > than `npm run dev` alone, or the app will fail to reach Postgres.
@@ -197,18 +198,55 @@ on the **Settings** page.
 
 ## Connecting banks with Plaid (optional)
 
-To enable automatic bank sync, add Plaid credentials to `.env`:
+Create a free account at the [Plaid Dashboard](https://dashboard.plaid.com/), grab your keys from
+**Developers → Keys**, and add them to `.env`:
 
 ```env
 PLAID_CLIENT_ID="..."
-PLAID_SECRET="..."
-PLAID_ENV="sandbox"        # sandbox | development | production
+PLAID_SECRET="..."           # use the secret that matches PLAID_ENV
+PLAID_ENV="sandbox"          # "sandbox" = fake test data; "production" = your real banks
 ```
 
-Get these from the [Plaid Dashboard](https://dashboard.plaid.com/). With `sandbox` you can link
-test institutions without real bank data. Once set, use **Connect a bank** on the Accounts page;
-balances and posted transactions sync automatically and are auto-categorised from the bank's
-category data. Linking is optional — manual and CSV entry work without Plaid.
+- **`sandbox`** lets you link Plaid's test institutions (use credentials like `user_good` /
+  `pass_good`) with fake data — perfect for trying everything out at no cost.
+- **`production`** connects your **real** banks. It requires requesting production access in the
+  Plaid Dashboard, and Plaid **bills you per linked item (bank connection)** — so avoid
+  re-linking the same bank (see [Backing up your data](#backing-up-your-data-and-your-plaid-connections)).
+- Plaid's old **`development`** environment has been retired and is no longer an option.
+
+Once set, use **Connect a bank** on the Accounts page; balances and posted transactions sync
+automatically and are auto-categorised from the bank's category data. Linking is optional — manual
+and CSV entry work without Plaid.
+
+---
+
+## Backing up your data (and your Plaid connections)
+
+When you run locally, **everything lives in one place**: the Postgres data directory `.pgdata/` in
+the project root. That includes your accounts, transactions, budgets, goals — **and your Plaid
+access tokens** (stored in the `PlaidItem.accessToken` column). If you lose `.pgdata/`, you have to
+re-link every bank, and on the **production** Plaid environment each re-link is a fresh, *billed*
+connection. So if you connect real banks, back this up.
+
+**The reassuring part:** a Plaid access token is tied to your `PLAID_CLIENT_ID` + `PLAID_SECRET` +
+`PLAID_ENV` — **not** to this computer or database. You can copy the token data to another machine
+(or a future packaged build) and keep using the same connections. **Restoring a saved token never
+costs a new Plaid item — only clicking "Connect a bank" does.**
+
+### How to back up
+
+1. **Stop the app** (so Postgres isn't writing mid-copy).
+2. Copy these two things somewhere safe — an external drive or a cloud folder:
+   - the **`.pgdata/`** directory — your entire database, including the Plaid tokens
+   - your **`.env`** file — the tokens are useless without the matching Plaid + `AUTH_SECRET` keys
+3. **To restore** (new machine, fresh clone, or recovery): drop both back into place and start the
+   app. Your banks reconnect with **no new Plaid items** and no re-linking.
+
+> ⚠️ Treat these backups as secrets — the access tokens are stored **unencrypted** and grant access
+> to your bank data through Plaid. Keep them somewhere private.
+
+> Never run `npm run db:reset` or delete `.pgdata/` without a current backup — both wipe your tokens.
+> _(A one-command `npm run db:backup` is on the roadmap; for now the copy above is the backup.)_
 
 ---
 
