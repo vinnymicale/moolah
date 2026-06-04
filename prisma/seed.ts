@@ -53,6 +53,7 @@ async function main() {
     where: { account: { householdId: household.id } },
   });
   await prisma.financialAccount.deleteMany({ where: { householdId: household.id } });
+  await prisma.savingsGoal.deleteMany({ where: { householdId: household.id } });
   await prisma.category.deleteMany({ where: { householdId: household.id } });
 
   // ── Categories ───────────────────────────────────────────────────────────
@@ -70,7 +71,21 @@ async function main() {
     data: { householdId: household.id, name: "Emergency Savings", type: "SAVINGS", institution: "Ally", currentBalance: 18400, isAsset: true, includeInCash: true, color: "#0891b2" },
   });
   const creditCard = await prisma.financialAccount.create({
-    data: { householdId: household.id, name: "Sapphire Card", type: "CREDIT_CARD", institution: "Chase", currentBalance: 1284.32, isAsset: false, includeInCash: false, color: "#dc2626" },
+    data: {
+      householdId: household.id, name: "Sapphire Card", type: "CREDIT_CARD", institution: "Chase",
+      currentBalance: 1284.32, isAsset: false, includeInCash: false, color: "#dc2626",
+      // Debt-payoff terms so the Debt page can build a plan.
+      interestRate: 19.99, minimumPayment: 35, includeInDebtPlanner: true,
+      // Statement / payment details (normally filled by Plaid) so the Accounts
+      // page shows credit-utilisation, statement balance and the due date.
+      creditLimit: 8000,
+      lastStatementBalance: 1106.54,
+      lastStatementDate: day(22, -1),
+      lastPaymentAmount: 980,
+      lastPaymentDate: day(18, -1),
+      nextPaymentDueDate: day(18, 0),
+      isOverdue: false,
+    },
   });
   const retirement401k = await prisma.financialAccount.create({
     data: { householdId: household.id, name: "401(k)", type: "RETIREMENT", institution: "Fidelity", currentBalance: 142500, isAsset: true, includeInCash: false, color: "#7c3aed" },
@@ -95,7 +110,7 @@ async function main() {
   // ── Concrete transactions for the current month ──────────────────────────
   const tx = (
     d: number, type: "INCOME" | "EXPENSE", amount: number, description: string,
-    catName: string, accountId: string, cleared = true,
+    catName: string, accountId: string, cleared = true, recurringRuleId: string | null = null,
   ) => ({
     householdId: household.id,
     accountId,
@@ -103,38 +118,66 @@ async function main() {
     createdById: demoUser?.id,
     type, amount, description, cleared,
     date: day(d),
+    // Link realized occurrences to their rule so the calendar shows them once
+    // (as paid) instead of also projecting the rule on the same day.
+    recurringRuleId,
   });
+
+  // Rule ids by creation order above, for linking realized occurrences.
+  const [rulePaycheck, ruleMortgage, ruleElectric, ruleNetflix, ruleSpotify, ruleSavings] =
+    rules.map((r) => r.id);
 
   await prisma.transaction.createMany({
     data: [
-      tx(2, "INCOME", 2600, "Paycheck", "Salary", checking.id),
-      tx(1, "EXPENSE", 2150, "Mortgage", "Rent / Mortgage", checking.id),
+      // Recurring occurrences are linked to their rule (last arg) so the
+      // calendar renders them once instead of also projecting the rule.
+      tx(1, "EXPENSE", 2150, "Mortgage", "Rent / Mortgage", checking.id, true, ruleMortgage),
       tx(3, "EXPENSE", 86.42, "Costco run", "Groceries", creditCard.id),
       tx(4, "EXPENSE", 54.18, "Dinner – Tavola", "Dining Out", creditCard.id),
-      tx(5, "EXPENSE", 500, "Auto-transfer to savings", "Savings / Investing", checking.id),
+      tx(5, "EXPENSE", 500, "Auto-transfer to savings", "Savings / Investing", checking.id, true, ruleSavings),
       tx(6, "EXPENSE", 42.3, "Shell gas", "Gas / Fuel", creditCard.id),
-      tx(8, "EXPENSE", 15.99, "Netflix", "Subscriptions", creditCard.id),
+      tx(8, "EXPENSE", 15.99, "Netflix", "Subscriptions", creditCard.id, true, ruleNetflix),
       tx(9, "EXPENSE", 121.74, "Whole Foods", "Groceries", creditCard.id),
       tx(11, "EXPENSE", 64.0, "Pharmacy", "Health", creditCard.id),
-      tx(12, "EXPENSE", 180, "Electric & Gas", "Utilities", checking.id),
-      // A couple of future / expected items this month.
-      tx(16, "INCOME", 2600, "Paycheck", "Salary", checking.id, false),
-      tx(20, "EXPENSE", 10.99, "Spotify", "Subscriptions", creditCard.id, false),
+      tx(12, "EXPENSE", 180, "Electric & Gas", "Utilities", checking.id, true, ruleElectric),
+      // Upcoming / expected items this month. Paydays land on the rule's
+      // biweekly cadence (13th & 27th) and are linked so they aren't doubled.
+      tx(13, "INCOME", 2600, "Paycheck", "Salary", checking.id, false, rulePaycheck),
+      tx(27, "INCOME", 2600, "Paycheck", "Salary", checking.id, false, rulePaycheck),
+      tx(20, "EXPENSE", 10.99, "Spotify", "Subscriptions", creditCard.id, false, ruleSpotify),
       tx(22, "EXPENSE", 95.0, "Date night", "Dining Out", creditCard.id, false),
     ],
   });
 
-  // Some last-month history so trends/charts have data.
+  // Some last-month history so trends/charts have data. The recurring ones are
+  // linked to their rule so last month's calendar de-dupes too.
   await prisma.transaction.createMany({
     data: [
-      tx(2, "INCOME", 2600, "Paycheck", "Salary", checking.id),
-      tx(16, "INCOME", 2600, "Paycheck", "Salary", checking.id),
-      tx(1, "EXPENSE", 2150, "Mortgage", "Rent / Mortgage", checking.id),
+      tx(2, "INCOME", 2600, "Paycheck", "Salary", checking.id, true, rulePaycheck),
+      tx(16, "INCOME", 2600, "Paycheck", "Salary", checking.id, true, rulePaycheck),
+      tx(1, "EXPENSE", 2150, "Mortgage", "Rent / Mortgage", checking.id, true, ruleMortgage),
       tx(7, "EXPENSE", 410.55, "Groceries (month)", "Groceries", creditCard.id),
       tx(14, "EXPENSE", 220.0, "Dining (month)", "Dining Out", creditCard.id),
       tx(18, "EXPENSE", 175.25, "Utilities", "Utilities", checking.id),
       tx(21, "EXPENSE", 60.0, "Gas", "Gas / Fuel", creditCard.id),
     ].map((t) => ({ ...t, date: day(t.date.getUTCDate(), -1) })),
+  });
+
+  // A repeating charge the user never turned into a rule — the Recurring page's
+  // detector (getRecurringSuggestions) spots it and suggests creating a rule.
+  await prisma.transaction.createMany({
+    data: [1, 2, 3, 4].map((k) => ({
+      householdId: household.id,
+      accountId: creditCard.id,
+      categoryId: cat("Personal Care"),
+      createdById: demoUser?.id,
+      type: "EXPENSE" as const,
+      amount: 24.99,
+      description: "Planet Fitness",
+      cleared: true,
+      date: day(15, -k),
+      recurringRuleId: null,
+    })),
   });
 
   // ── Budgets for the current month ────────────────────────────────────────
@@ -165,7 +208,16 @@ async function main() {
     }
   }
 
-  void rules;
+  // ── Savings goals ────────────────────────────────────────────────────────
+  await prisma.savingsGoal.createMany({
+    data: [
+      { householdId: household.id, name: "Emergency fund", targetAmount: 15000, currentAmount: 9200, color: "#16a34a", icon: "shield" },
+      { householdId: household.id, name: "Hawaii vacation", targetAmount: 6000, currentAmount: 2400, color: "#0891b2", icon: "plane", targetDate: new Date(Date.UTC(Y, 11, 1)) },
+      { householdId: household.id, name: "New car fund", targetAmount: 25000, currentAmount: 8500, color: "#7c3aed", icon: "car" },
+      { householdId: household.id, name: "House down payment", targetAmount: 60000, currentAmount: 18000, color: "#2563eb", icon: "home" },
+    ],
+  });
+
   console.log("✓ Seed complete.");
   console.log(`  Household: ${household.name}  (invite code: ${DEMO_INVITE})`);
   console.log(`  Sign in with dev login as: ${DEMO_EMAIL}`);
