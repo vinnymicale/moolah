@@ -8,10 +8,10 @@ category, set **savings goals**, plan your **debt payoff**, and watch your **net
 
 Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · Auth.js v5 · Plaid · Tailwind v4 · Recharts**.
 
-![Household Finance dashboard](docs/screenshot-dashboard.png)
+![Household Finance dashboard](docs/screenshots/dashboard.png)
 
 > The dashboard, showing net-worth milestones, the safe-to-transfer suggestion, spending alerts,
-> top payees, and savings goals. _(Sample data for illustration.)_
+> top payees, budgets, and recent activity. _(Sample data for illustration.)_
 
 ---
 
@@ -64,6 +64,56 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
   "who entered it" attribution.
 - **Extras** — dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and
   unit-tested recurrence / projection / debt-payoff math.
+
+---
+
+## Screenshots
+
+A tour of every page. _(Sample data — generated from the isolated `demo@example.com` household.)_
+
+### Money in & out
+
+**Monthly calendar** — each day shows its income/expense events and a projected end-of-day cash balance.
+![Calendar](docs/screenshots/calendar.png)
+
+**Transactions** — search, multi-select filters (type, status, category, account), date ranges, and CSV export.
+![Transactions](docs/screenshots/transactions.png)
+
+**Recurring** — paychecks, bills, and subscriptions that repeat automatically on the calendar.
+![Recurring](docs/screenshots/recurring.png)
+
+### Planning
+
+**Budgets** — set a monthly limit per category and track spent-vs-remaining, with copy-from-last-month.
+![Budgets](docs/screenshots/budgets.png)
+
+**Savings goals** — track progress toward targets (emergency fund, vacation, down payment) with contributions and target dates.
+![Savings goals](docs/screenshots/goals.png)
+
+**Debt payoff** — model **avalanche** or **snowball**, add an extra payment, and see your debt-free date, total interest, a balance-over-time chart, and per-debt payoff order.
+![Debt payoff](docs/screenshots/debt.png)
+
+### Accounts & insight
+
+**Accounts & net worth** — assets vs. liabilities with a live net-worth total and per-account balance history.
+![Accounts & net worth](docs/screenshots/accounts.png)
+
+**Trends** — net worth over time, income vs. expenses, spending by category, budget vs. actual, and month-over-month comparison.
+![Trends](docs/screenshots/trends.png)
+
+### Setup & organization
+
+**Categories** — organize how you classify income and spending, each with its own icon and color.
+![Categories](docs/screenshots/categories.png)
+
+**Settings** — rename your household, share the invite code, export data as CSV, and manage members.
+![Settings](docs/screenshots/settings.png)
+
+**Sign in & onboarding** — Google sign-in (with a local dev login), then create or join a shared household.
+
+| Sign in | Set up your household |
+| --- | --- |
+| ![Sign in](docs/screenshots/signin.png) | ![Welcome](docs/screenshots/welcome.png) |
 
 ---
 
