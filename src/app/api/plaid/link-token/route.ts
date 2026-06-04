@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
       linkTokenParams = {
         user: { client_user_id: user.householdId },
-        client_name: "Household Finance",
+        client_name: "Moolah",
         country_codes: PLAID_COUNTRY_CODES,
         language: "en",
         access_token: item.accessToken,
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       // Fresh link — connect a new bank.
       linkTokenParams = {
         user: { client_user_id: user.householdId },
-        client_name: "Household Finance",
+        client_name: "Moolah",
         products: PLAID_PRODUCTS,
         country_codes: PLAID_COUNTRY_CODES,
         language: "en",

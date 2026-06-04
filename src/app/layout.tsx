@@ -7,8 +7,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Household Finance",
-  description: "Shared net-worth, budget and cash-flow tracker for your household.",
+  title: "Moolah",
+  description: "Moolah — a shared net-worth, budget and cash-flow tracker for your household.",
 };
 
 // Set the theme class before paint to avoid a flash of the wrong theme.
