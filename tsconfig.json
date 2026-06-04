@@ -6,6 +6,11 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Scope ambient @types to 'node' only. Otherwise the build auto-includes
+    // every package under node_modules/@types — including electron-builder's
+    // transitive ones (e.g. cacheable-request) that fail type resolution. App
+    // and test types are module-imported, so they're unaffected.
+    "types": ["node"],
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
