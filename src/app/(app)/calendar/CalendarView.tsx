@@ -223,7 +223,7 @@ function DayCell({
       <div className="space-y-1">
         {ccDues.map((due) => {
           const daysUntil = Math.ceil((new Date(`${due.dueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000);
-          const urgent = daysUntil <= 3;
+          const urgent = due.isOverdue === true || (daysUntil <= 3 && daysUntil >= 0);
           return (
             <button
               key={due.accountId}
@@ -298,6 +298,7 @@ function DayEventsModal({
       <div className="space-y-1">
         {ccDues.map((due) => {
           const daysUntil = Math.ceil((new Date(`${due.dueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000);
+          const pastDue = due.isOverdue === true;
           return (
             <button
               key={due.accountId}
@@ -309,8 +310,8 @@ function DayEventsModal({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium" style={{ color: due.color }}>{due.accountName}</p>
-                <p className={`text-xs ${daysUntil < 0 ? "text-expense" : "text-muted"}`}>
-                  Payment due · {daysUntil < 0 ? "past due" : daysUntil === 0 ? "today" : `${daysUntil}d`}
+                <p className={`text-xs ${pastDue ? "text-expense" : "text-muted"}`}>
+                  Payment due · {pastDue ? "past due" : daysUntil < 0 ? "paid" : daysUntil === 0 ? "today" : `${daysUntil}d`}
                 </p>
               </div>
               {due.statementBalance !== null && (
@@ -436,14 +437,15 @@ function eventToTxn(e: CalendarEvent): TransactionDTO {
 
 function CcDueModal({ due, onClose }: { due: CcDueEvent; onClose: () => void }) {
   const daysUntil = Math.ceil((new Date(`${due.dueDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000);
+  const pastDue = due.isOverdue === true;
   return (
     <Modal open onClose={onClose} title={`${due.accountName} — Payment Due`} widthClass="max-w-sm">
       <div className="space-y-3 text-sm">
         <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
           <p className="text-xs text-muted">Due date</p>
           <p className="font-semibold">{formatDayLabel(due.dueDate)}</p>
-          <p className={`text-xs ${daysUntil < 0 ? "text-expense font-semibold" : daysUntil <= 3 ? "text-expense" : "text-muted"}`}>
-            {daysUntil < 0 ? "Past due" : daysUntil === 0 ? "Due today" : `${daysUntil} day${daysUntil === 1 ? "" : "s"} away`}
+          <p className={`text-xs ${pastDue ? "text-expense font-semibold" : daysUntil <= 3 && daysUntil >= 0 ? "text-expense" : "text-muted"}`}>
+            {pastDue ? "Past due" : daysUntil < 0 ? "Paid" : daysUntil === 0 ? "Due today" : `${daysUntil} day${daysUntil === 1 ? "" : "s"} away`}
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3">

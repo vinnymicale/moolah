@@ -138,6 +138,8 @@ model FinancialAccount {
   // Include this account's balance in net-worth totals. Lets the user track an
   // account (e.g. a student loan) without it dragging down their net worth.
   includeInNetWorth Boolean  @default(true)
+  // Whether this account appears on the Debt Payoff page (liability types only).
+  includeInDebtPlanner Boolean @default(true)
   // Debt-only fields powering the payoff planner. Annual interest rate as a
   // percentage (e.g. 19.99) and the minimum monthly payment. Null for assets.
   interestRate   Decimal?    @db.Decimal(6, 3)

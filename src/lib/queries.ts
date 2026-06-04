@@ -24,6 +24,7 @@ export interface AccountDTO {
   isAsset: boolean;
   includeInCash: boolean;
   includeInNetWorth: boolean;
+  includeInDebtPlanner: boolean;
   color: string;
   archived: boolean;
   interestRate: number | null;
@@ -91,6 +92,7 @@ export async function getAccounts(householdId: string, includeArchived = false):
     isAsset: a.isAsset,
     includeInCash: a.includeInCash,
     includeInNetWorth: a.includeInNetWorth,
+    includeInDebtPlanner: a.includeInDebtPlanner,
     color: a.color,
     archived: a.archived,
     interestRate: a.interestRate !== null ? toNumber(a.interestRate) : null,

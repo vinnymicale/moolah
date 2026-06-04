@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
-import { TrendingDown, Snowflake, Mountain, Check, Loader2, AlertTriangle, Pencil } from "lucide-react";
+import { TrendingDown, Snowflake, Mountain, Check, Loader2, AlertTriangle, Pencil, ArrowRight } from "lucide-react";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import { simulatePayoff, monthsToLabel, type Strategy, type DebtInput } from "@/lib/debt-payoff";
 import { updateDebtTermsAction } from "@/actions/accounts";
@@ -13,12 +13,25 @@ import type { AccountDTO } from "@/lib/queries";
 export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
   const [strategy, setStrategy] = useState<Strategy>("avalanche");
   const [extra, setExtra] = useState("0");
+  const [cascade, setCascade] = useState(true);
+  // Per-account inclusion — all enabled by default.
+  const [included, setIncluded] = useState<Set<string>>(() => new Set(debts.map((d) => d.id)));
+
+  const toggleIncluded = (id: string) =>
+    setIncluded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   // Debts missing the APR / minimum payment can't be simulated yet.
   const ready = debts.filter((d) => d.interestRate !== null && d.minimumPayment !== null);
   const needsTerms = debts.filter((d) => d.interestRate === null || d.minimumPayment === null);
 
-  const inputs: DebtInput[] = ready.map((d) => ({
+  // Only include accounts the user has checked.
+  const activeReady = ready.filter((d) => included.has(d.id));
+
+  const inputs: DebtInput[] = activeReady.map((d) => ({
     id: d.id,
     name: d.name,
     color: d.color,
@@ -29,12 +42,12 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
 
   const extraNum = Math.max(0, Number(extra.replace(/[^0-9.]/g, "")) || 0);
 
-  const plan = useMemo(() => simulatePayoff(inputs, strategy, extraNum), [inputs, strategy, extraNum]);
+  const plan = useMemo(() => simulatePayoff(inputs, strategy, extraNum, cascade), [inputs, strategy, extraNum, cascade]);
   // Baseline = minimums only (no extra), for the savings comparison.
-  const baseline = useMemo(() => simulatePayoff(inputs, strategy, 0), [inputs, strategy]);
+  const baseline = useMemo(() => simulatePayoff(inputs, strategy, 0, cascade), [inputs, strategy, cascade]);
 
-  const totalBalance = ready.reduce((s, d) => s + d.currentBalance, 0);
-  const totalMin = ready.reduce((s, d) => s + (d.minimumPayment ?? 0), 0);
+  const totalBalance = activeReady.reduce((s, d) => s + d.currentBalance, 0);
+  const totalMin = activeReady.reduce((s, d) => s + (d.minimumPayment ?? 0), 0);
 
   const interestSaved = baseline.feasible && plan.feasible ? baseline.totalInterest - plan.totalInterest : 0;
   const monthsSaved = baseline.feasible && plan.feasible ? baseline.totalMonths - plan.totalMonths : 0;
@@ -62,6 +75,32 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
         </p>
       ) : (
         <>
+          {/* Account selector */}
+          <div className="card p-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Include in calculation</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {ready.map((d) => (
+                <label key={d.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={included.has(d.id)}
+                    onChange={() => toggleIncluded(d.id)}
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                    {d.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {activeReady.length === 0 ? (
+            <p className="card px-4 py-8 text-center text-sm text-muted">
+              Select at least one account to see the payoff plan.
+            </p>
+          ) : (
+          <>
           {/* Controls */}
           <div className="card p-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -96,6 +135,19 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-muted">On top of {formatUSD(totalMin)} in minimums</p>
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">Payment rollover</p>
+                <button
+                  onClick={() => setCascade((c) => !c)}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${cascade ? "bg-brand text-white" : "bg-surface2 text-muted hover:text-text"}`}
+                >
+                  <ArrowRight size={14} />
+                  {cascade ? "On" : "Off"}
+                </button>
+                <p className="mt-1 text-[11px] text-muted">
+                  {cascade ? "Freed minimums roll onto next debt" : "Freed minimums leave the pool"}
+                </p>
               </div>
             </div>
           </div>
@@ -150,28 +202,53 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                   <h2 className="text-sm font-semibold">Payoff order ({strategy === "avalanche" ? "highest rate first" : "smallest balance first"})</h2>
                 </div>
                 <ul className="divide-y divide-line">
-                  {[...plan.perDebt]
-                    .sort((a, b) => a.monthsToPayoff - b.monthsToPayoff)
-                    .map((d, i) => {
-                      const acct = ready.find((r) => r.id === d.id);
+                  {(() => {
+                    const sorted = [...plan.perDebt].sort((a, b) => a.monthsToPayoff - b.monthsToPayoff);
+                    // Running total of freed minimums available to cascade onto each subsequent debt.
+                    let freedSoFar = 0;
+                    return sorted.map((d, i) => {
+                      const acct = activeReady.find((r) => r.id === d.id);
+                      const minPayment = acct?.minimumPayment ?? 0;
+                      const rolledIn = cascade && i > 0 ? freedSoFar : 0;
+                      const isLast = i === sorted.length - 1;
+                      freedSoFar += minPayment;
                       return (
-                        <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums" style={{ backgroundColor: `${d.color}22`, color: d.color }}>
-                            {i + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{d.name}</p>
-                            <p className="text-xs text-muted">
-                              {formatUSD(acct?.currentBalance ?? 0)} · {acct?.interestRate}% APR · {formatUSD(d.totalInterest)} interest
-                            </p>
+                        <li key={d.id}>
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums" style={{ backgroundColor: `${d.color}22`, color: d.color }}>
+                              {i + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{d.name}</p>
+                              <p className="text-xs text-muted">
+                                {formatUSD(acct?.currentBalance ?? 0)} · {acct?.interestRate}% APR · {formatUSD(d.totalInterest)} interest
+                              </p>
+                              {cascade && rolledIn > 0 && (
+                                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-brand">
+                                  <ArrowRight size={10} />
+                                  {formatUSD(rolledIn)}/mo rolled in from previous payoffs
+                                </p>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-sm font-semibold text-brand">{monthsToLabel(d.monthsToPayoff)}</span>
                           </div>
-                          <span className="shrink-0 text-sm font-semibold text-brand">{monthsToLabel(d.monthsToPayoff)}</span>
+                          {cascade && !isLast && (
+                            <div className="flex items-center gap-1.5 border-t border-dashed border-line/60 px-4 py-1.5 text-[11px] text-muted">
+                              <ArrowRight size={10} className="text-brand" />
+                              <span>
+                                <span className="font-medium text-brand">{formatUSD(minPayment + (rolledIn > 0 ? rolledIn : 0))}/mo</span> freed — rolls onto next debt
+                              </span>
+                            </div>
+                          )}
                         </li>
                       );
-                    })}
+                    });
+                  })()}
                 </ul>
               </div>
             </>
+          )}
+          </>
           )}
         </>
       )}
@@ -222,7 +299,7 @@ function TermsRow({ debt }: { debt: AccountDTO }) {
       <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm">
         <span className="flex-1 font-medium">{debt.name}</span>
         <span className="text-muted">{apr}% · {formatUSD(Number(min))}/mo</span>
-        <button onClick={() => setEditing(true)} className="btn-ghost h-7 w-7 !p-0" title="Edit"><Pencil size={13} /></button>
+        <button onClick={() => setEditing(true)} className="btn-ghost h-7 w-7 p-0!" title="Edit"><Pencil size={13} /></button>
       </div>
     );
   }

@@ -91,6 +91,7 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
     },
   });
 
+
   // Build a map from plaidAccountId → our linked account row.
   const linkedByPlaidId = new Map(item.linkedAccounts.map((a) => [a.plaidAccountId, a]));
 

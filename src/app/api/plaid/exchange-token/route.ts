@@ -62,47 +62,82 @@ export async function POST(req: NextRequest) {
     // Fetch the accounts attached to this item.
     const accountsRes = await plaidClient.accountsGet({ access_token });
 
-    // Create the PlaidItem row.
-    const plaidItem = await prisma.plaidItem.create({
-      data: {
+    // Upsert the PlaidItem — update mode re-links return the same item_id.
+    const plaidItem = await prisma.plaidItem.upsert({
+      where: { itemId: item_id },
+      create: {
         householdId: user.householdId,
         accessToken: access_token,
         itemId: item_id,
         institutionId,
         institutionName,
       },
+      update: {
+        accessToken: access_token,
+        institutionId,
+        institutionName,
+        error: null,
+      },
     });
 
-    // For each Plaid account: create a FinancialAccount + link it.
+    // For each Plaid account: upsert the link row and reuse any existing
+    // FinancialAccount so we don't create duplicates on re-link.
     for (const acct of accountsRes.data.accounts) {
       const accountType = toAccountType(acct.type, acct.subtype);
       const asset = isAsset(acct.type, acct.subtype);
       const balance = acct.balances.current ?? 0;
       const isChecking = acct.type === "depository";
 
-      const finAcct = await prisma.financialAccount.create({
-        data: {
-          householdId: user.householdId,
-          name: acct.name,
-          type: accountType as never,
-          institution: institutionName,
-          currentBalance: balance,
-          isAsset: asset,
-          includeInCash: isChecking,
-          color: asset ? "#2563eb" : "#dc2626",
-        },
+      // Check whether this Plaid account was previously linked.
+      const existing = await prisma.plaidLinkedAccount.findUnique({
+        where: { plaidAccountId: acct.account_id },
+        select: { financialAccountId: true },
       });
 
-      await prisma.plaidLinkedAccount.create({
-        data: {
+      let financialAccountId: string;
+
+      if (existing?.financialAccountId) {
+        // Reuse the existing FinancialAccount so historical data is preserved.
+        financialAccountId = existing.financialAccountId;
+        await prisma.financialAccount.update({
+          where: { id: financialAccountId },
+          data: { currentBalance: balance, institution: institutionName },
+        });
+      } else {
+        const finAcct = await prisma.financialAccount.create({
+          data: {
+            householdId: user.householdId,
+            name: acct.name,
+            type: accountType as never,
+            institution: institutionName,
+            currentBalance: balance,
+            isAsset: asset,
+            includeInCash: isChecking,
+            color: asset ? "#2563eb" : "#dc2626",
+          },
+        });
+        financialAccountId = finAcct.id;
+      }
+
+      await prisma.plaidLinkedAccount.upsert({
+        where: { plaidAccountId: acct.account_id },
+        create: {
           plaidItemId: plaidItem.id,
           plaidAccountId: acct.account_id,
-          financialAccountId: finAcct.id,
+          financialAccountId,
           name: acct.name,
           officialName: acct.official_name,
           mask: acct.mask,
           plaidType: acct.type,
           plaidSubtype: acct.subtype,
+          currentBalance: acct.balances.current,
+          availableBalance: acct.balances.available,
+        },
+        update: {
+          plaidItemId: plaidItem.id,
+          name: acct.name,
+          officialName: acct.official_name,
+          mask: acct.mask,
           currentBalance: acct.balances.current,
           availableBalance: acct.balances.available,
         },

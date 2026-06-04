@@ -54,7 +54,12 @@ const MAX_MONTHS = 1200; // 100-year safety bound
  * of the combined minimums each month. The extra (plus freed-up minimums from
  * cleared debts) always targets the current focus debt per the strategy.
  */
-export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: number): PayoffPlan {
+/**
+ * @param cascade When true (default), the minimum payment freed when a debt is
+ * paid off is rolled onto the next focus debt. When false each debt is paid
+ * with its own minimum only; freed payments are not redistributed.
+ */
+export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: number, cascade = true): PayoffPlan {
   const active = debts
     .filter((d) => d.balance > 0)
     .map((d) => ({ ...d, remaining: d.balance, interestPaid: 0, paidOffMonth: -1 }));
@@ -65,8 +70,7 @@ export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: nu
     return { feasible: true, months: [], perDebt: [], totalMonths: 0, totalInterest: 0, startingBalance: 0 };
   }
 
-  // Feasibility check: each debt's minimum must exceed its first month's interest,
-  // otherwise the balance never shrinks (unless extra eventually covers it).
+  // Feasibility check: each debt's minimum must exceed its first month's interest.
   const totalMin = active.reduce((s, d) => s + d.minPayment, 0);
   const firstMonthInterest = active.reduce((s, d) => s + (d.remaining * d.apr) / 100 / 12, 0);
   if (totalMin + extra <= firstMonthInterest) {
@@ -101,9 +105,11 @@ export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: nu
       monthInterest += interest;
     }
 
-    // 2. Budget = extra + every debt's minimum. Minimums from already-cleared
-    //    debts are never subtracted below, so they cascade onto the focus debt.
-    let budget = extra + active.reduce((s, d) => s + d.minPayment, 0);
+    // 2. Budget this month. With cascade=true, freed minimums from paid-off
+    //    debts roll onto the focus debt automatically. With cascade=false, only
+    //    still-active minimums are counted so freed money leaves the pool.
+    const activeMins = active.reduce((s, d) => d.remaining > 0.005 ? s + d.minPayment : s, 0);
+    let budget = extra + (cascade ? active.reduce((s, d) => s + d.minPayment, 0) : activeMins);
 
     // 3. Pay minimums first (capped at remaining).
     for (const d of active) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2, Tag } from "lucide-react";
+import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2 } from "lucide-react";
 import { formatUSD } from "@/lib/money";
 import { Modal } from "@/components/Modal";
 import type { PlaidItemDTO } from "@/lib/queries";
@@ -74,13 +74,81 @@ export function PlaidConnectButton() {
   );
 }
 
+// ── Reconnect button (update mode for an existing item) ──────────────────────
+
+function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boolean }) {
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  const fetchLinkToken = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/plaid/link-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      });
+      const json = await res.json() as { link_token?: string; error?: string };
+      if (!res.ok || !json.link_token) throw new Error(json.error ?? "Failed to create link token");
+      setLinkToken(json.link_token);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to initialise Plaid");
+    } finally {
+      setLoading(false);
+    }
+  }, [itemId]);
+
+  const onSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/plaid/exchange-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ public_token: publicToken }),
+      });
+      const json = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Reconnect failed");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reconnect failed");
+    } finally {
+      setLoading(false);
+      setLinkToken(null);
+    }
+  }, [router]);
+
+  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess });
+
+  useEffect(() => {
+    if (linkToken && ready) open();
+  }, [linkToken, ready, open]);
+
+  return (
+    <div>
+      <button
+        onClick={fetchLinkToken}
+        disabled={disabled || loading}
+        className="btn-ghost h-8 text-xs"
+        title="Re-authenticate this bank connection"
+      >
+        {loading ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
+        Reconnect
+      </button>
+      {error && <p className="mt-1 text-xs text-expense">{error}</p>}
+    </div>
+  );
+}
+
 // ── Connected banks list ─────────────────────────────────────────────────────
 
 export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
   const router = useRouter();
   const [syncing, setSyncing] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
-  const [recategorizing, setRecategorizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<PlaidItemDTO | null>(null);
   const [, start] = useTransition();
@@ -116,39 +184,13 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
     }
   };
 
-  const recategorize = async () => {
-    setRecategorizing(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/plaid/recategorize", { method: "POST" });
-      const json = await res.json() as { ok?: boolean; error?: string; errors?: string[] };
-      if (!res.ok || !json.ok) throw new Error(json.errors?.join(", ") ?? json.error ?? "Recategorize failed");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Recategorize failed");
-    } finally {
-      setRecategorizing(false);
-    }
-  };
-
   if (items.length === 0) return null;
 
   return (
     <div className="card mt-6 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Building2 size={18} className="text-brand" />
-          <h2 className="font-semibold">Connected banks</h2>
-        </div>
-        <button
-          onClick={() => void recategorize()}
-          disabled={recategorizing || syncing !== null}
-          className="btn-ghost h-8 text-xs"
-          title="Re-check Plaid categories for all uncategorized transactions"
-        >
-          {recategorizing ? <Loader2 size={14} className="animate-spin" /> : <Tag size={14} />}
-          Fix categories
-        </button>
+      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+        <Building2 size={18} className="text-brand" />
+        <h2 className="font-semibold">Connected banks</h2>
       </div>
 
       {error && (
@@ -175,6 +217,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <ReconnectButton itemId={item.id} disabled={syncing === item.id || disconnecting === item.id} />
                 <button
                   onClick={() => void sync(item.id)}
                   disabled={syncing === item.id}

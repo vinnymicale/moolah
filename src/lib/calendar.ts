@@ -41,6 +41,7 @@ export interface CcDueEvent {
   statementBalance: number | null;
   minimumPayment: number | null;
   dueDate: string; // ISO day
+  isOverdue: boolean | null;
 }
 
 export interface DayProjectionDTO {
@@ -272,6 +273,7 @@ export async function getCalendarMonth(
       statementBalance: acct.lastStatementBalance,
       minimumPayment: acct.minimumPayment,
       dueDate: acct.nextPaymentDueDate,
+      isOverdue: acct.isOverdue,
     });
   }
 

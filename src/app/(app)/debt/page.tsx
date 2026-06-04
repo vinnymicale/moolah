@@ -7,7 +7,7 @@ import { DebtPlanner } from "./DebtPlanner";
 export default async function DebtPage() {
   const { householdId } = await requireHousehold();
   const accounts = await getAccounts(householdId);
-  const debts = accounts.filter((a) => LIABILITY_TYPES.includes(a.type) && a.currentBalance > 0);
+  const debts = accounts.filter((a) => LIABILITY_TYPES.includes(a.type) && a.currentBalance > 0 && a.includeInDebtPlanner);
 
   return (
     <div className="mx-auto max-w-4xl">

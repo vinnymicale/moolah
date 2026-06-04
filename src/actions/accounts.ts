@@ -17,6 +17,7 @@ const accountSchema = z.object({
   currentBalance: z.coerce.number().finite(),
   includeInCash: z.boolean().optional().default(false),
   includeInNetWorth: z.boolean().optional().default(true),
+  includeInDebtPlanner: z.boolean().optional().default(true),
   color: z.string().max(20).optional(),
   // Debt-only — sent for liability accounts to power the payoff planner.
   interestRate: z.coerce.number().min(0).max(100).optional().nullable(),
@@ -29,12 +30,13 @@ function isAssetType(type: AccountType): boolean {
   return !LIABILITY_TYPES.includes(type);
 }
 
-/** Debt fields apply only to liabilities; nulled out for assets. */
+/** Debt fields apply only to liabilities; nulled/defaulted for assets. */
 function debtFields(type: AccountType, data: z.infer<typeof accountSchema>) {
-  if (isAssetType(type)) return { interestRate: null, minimumPayment: null };
+  if (isAssetType(type)) return { interestRate: null, minimumPayment: null, includeInDebtPlanner: true };
   return {
     interestRate: data.interestRate ?? null,
     minimumPayment: data.minimumPayment ?? null,
+    includeInDebtPlanner: data.includeInDebtPlanner ?? true,
   };
 }
 
