@@ -1,4 +1,4 @@
-# Household Finance
+# Moolah
 
 A shared personal-finance, budgeting & net-worth tracker for two people (you and your partner).
 Log income and expenses on a **monthly calendar** with a running **projected cash balance**
@@ -8,7 +8,7 @@ category, set **savings goals**, plan your **debt payoff**, and watch your **net
 
 Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · Auth.js v5 · Plaid · Tailwind v4 · Recharts**.
 
-![Household Finance dashboard](docs/screenshots/dashboard.png)
+![Moolah dashboard](docs/screenshots/dashboard.png)
 
 > The dashboard, showing net-worth milestones, the safe-to-transfer suggestion, spending alerts,
 > top payees, budgets, and recent activity. _(Sample data for illustration.)_

@@ -213,7 +213,7 @@ export function AppChrome({
         {!compact && (
           <div className="flex items-center gap-2 text-brand">
             <Wallet size={22} />
-            <span className="font-semibold text-text">Household Finance</span>
+            <span className="font-semibold text-text">Moolah</span>
           </div>
         )}
         {allowCollapse && (
