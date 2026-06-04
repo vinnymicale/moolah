@@ -299,6 +299,15 @@ export function AppChrome({
         )}
       </nav>
       <div className={`border-t border-line ${compact ? "p-2" : "p-3"}`}>
+        <div className={`mb-2 flex items-center ${compact ? "justify-center" : "gap-2 px-1"}`}>
+          <Avatar user={user} />
+          {!compact && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
+              <p className="truncate text-xs text-muted">{householdName}</p>
+            </div>
+          )}
+        </div>
         {compact ? (
           <div className="mb-1 flex justify-center">
             <ThemeToggle />
@@ -311,15 +320,6 @@ export function AppChrome({
             <ThemeToggle />
           </div>
         )}
-        <div className={`mb-2 flex items-center ${compact ? "justify-center" : "gap-2 px-1"}`}>
-          <Avatar user={user} />
-          {!compact && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
-              <p className="truncate text-xs text-muted">{householdName}</p>
-            </div>
-          )}
-        </div>
         <button
           onClick={() => signOut({ callbackUrl: "/signin" })}
           className={`btn-ghost w-full text-sm ${compact ? "justify-center !px-0" : "justify-start"}`}
