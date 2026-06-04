@@ -101,6 +101,11 @@ A tour of every page. _(Sample data — generated from the isolated `demo@exampl
 **Trends** — net worth over time, income vs. expenses, spending by category, budget vs. actual, and month-over-month comparison.
 ![Trends](docs/screenshots/trends.png)
 
+### Dark mode
+
+A built-in **dark theme** (toggle in the sidebar) carries across every page.
+![Dashboard in dark mode](docs/screenshots/dashboard-dark.png)
+
 ### Setup & organization
 
 **Categories** — organize how you classify income and spending, each with its own icon and color.
