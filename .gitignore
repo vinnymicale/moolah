@@ -37,14 +37,6 @@ yarn-error.log*
 # local embedded-postgres data dir
 /.pgdata
 
-# desktop (Electron) build output
-/dist-desktop
-
-# data migration exports — these contain Plaid access tokens, never commit them
-household-finance-export.json
-/import.json
-/import.done.json
-
 # vercel
 .vercel
 
