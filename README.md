@@ -239,8 +239,15 @@ costs a new Plaid item — only clicking "Connect a bank" does.**
 2. Copy these two things somewhere safe — an external drive or a cloud folder:
    - the **`.pgdata/`** directory — your entire database, including the Plaid tokens
    - your **`.env`** file — the tokens are useless without the matching Plaid + `AUTH_SECRET` keys
-3. **To restore** (new machine, fresh clone, or recovery): drop both back into place and start the
-   app. Your banks reconnect with **no new Plaid items** and no re-linking.
+3. **To restore** (new machine, fresh clone, or recovery): drop both back into place. **If your
+   backup was copied through Windows** (e.g. a OneDrive/Desktop folder, common with WSL), the
+   `.pgdata/` files come back world-readable and Postgres will refuse to start with a
+   *"data directory has invalid permissions"* error. Fix it once after copying:
+   ```bash
+   chmod 700 .pgdata          # Postgres requires the data dir to be 0700 (or 0750)
+   rm -f .pgdata/postmaster.pid   # clear any stale lockfile copied from a running server
+   ```
+   Then start the app — your banks reconnect with **no new Plaid items** and no re-linking.
 
 > ⚠️ Treat these backups as secrets — the access tokens are stored **unencrypted** and grant access
 > to your bank data through Plaid. Keep them somewhere private.
