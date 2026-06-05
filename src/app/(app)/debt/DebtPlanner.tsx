@@ -140,7 +140,7 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                 <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">Payment rollover</p>
                 <button
                   onClick={() => setCascade((c) => !c)}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${cascade ? "bg-brand text-white" : "bg-surface2 text-muted hover:text-text"}`}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${cascade ? "bg-brand text-brand-fg" : "bg-surface2 text-muted hover:text-text"}`}
                 >
                   <ArrowRight size={14} />
                   {cascade ? "On" : "Off"}
