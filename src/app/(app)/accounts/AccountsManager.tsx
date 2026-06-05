@@ -151,7 +151,6 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
   const [balance, setBalance] = useState(account ? String(account.currentBalance) : "");
   const [includeInCash, setIncludeInCash] = useState(account?.includeInCash ?? defaultIncludeInCash("CHECKING"));
   const [includeInNetWorth, setIncludeInNetWorth] = useState(account?.includeInNetWorth ?? true);
-  const [includeInDebtPlanner, setIncludeInDebtPlanner] = useState(account?.includeInDebtPlanner ?? true);
   const [color, setColor] = useState(account?.color ?? COLORS[0]);
   const [touchedCash, setTouchedCash] = useState(false);
   const [interestRate, setInterestRate] = useState(account?.interestRate !== null && account?.interestRate !== undefined ? String(account.interestRate) : "");
@@ -173,7 +172,7 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
         name, type, institution, currentBalance: balance, includeInCash, includeInNetWorth, color,
         interestRate: isLiability && interestRate !== "" ? interestRate : null,
         minimumPayment: isLiability && minimumPayment !== "" ? minimumPayment : null,
-        includeInDebtPlanner: isLiability ? includeInDebtPlanner : true,
+        includeInDebtPlanner: true,
       };
       const res = editing ? await updateAccountAction(account!.id, input) : await createAccountAction(input);
       if (!res.ok) {
@@ -270,17 +269,6 @@ function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose
           />
           <span>Count toward net worth</span>
         </label>
-        {isLiability && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={includeInDebtPlanner}
-              onChange={(e) => setIncludeInDebtPlanner(e.target.checked)}
-            />
-            <span>Show in debt payoff planner</span>
-          </label>
-        )}
-
         {error && <p className="text-sm text-expense">{error}</p>}
 
         <div className="flex items-center justify-between pt-1">

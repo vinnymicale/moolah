@@ -8,6 +8,24 @@ import { formatUSD } from "@/lib/money";
 import { Modal } from "@/components/Modal";
 import type { PlaidItemDTO } from "@/lib/queries";
 
+// Owns the single usePlaidLink instance for the page. Only mounted when we
+// have an active token, so the Plaid script is never embedded more than once.
+function ActivePlaidLink({
+  token,
+  onSuccess,
+  onExit,
+}: {
+  token: string;
+  onSuccess: PlaidLinkOnSuccess;
+  onExit: () => void;
+}) {
+  const { open, ready } = usePlaidLink({ token, onSuccess, onExit });
+  useEffect(() => {
+    if (ready) open();
+  }, [ready, open]);
+  return null;
+}
+
 // ── Connect button + flow ────────────────────────────────────────────────────
 
 export function PlaidConnectButton() {
@@ -51,14 +69,11 @@ export function PlaidConnectButton() {
     }
   }, [router]);
 
-  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess });
-
-  useEffect(() => {
-    if (linkToken && ready) open();
-  }, [linkToken, ready, open]);
+  const onExit = useCallback(() => setLinkToken(null), []);
 
   return (
     <div>
+      {linkToken && <ActivePlaidLink token={linkToken} onSuccess={onSuccess} onExit={onExit} />}
       <button
         onClick={fetchLinkToken}
         disabled={loading}
@@ -121,14 +136,11 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
     }
   }, [router]);
 
-  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess });
-
-  useEffect(() => {
-    if (linkToken && ready) open();
-  }, [linkToken, ready, open]);
+  const onExit = useCallback(() => setLinkToken(null), []);
 
   return (
     <div>
+      {linkToken && <ActivePlaidLink token={linkToken} onSuccess={onSuccess} onExit={onExit} />}
       <button
         onClick={fetchLinkToken}
         disabled={disabled || loading}
