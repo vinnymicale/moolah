@@ -49,6 +49,14 @@ export default async function SettingsPage() {
           private: it contains your bank access tokens.
         </p>
         <BackupData />
+        <p className="mt-3 text-xs text-muted">
+          To restore: in a fresh copy of the app, run{" "}
+          <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:local</code> and{" "}
+          <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:push</code>, then{" "}
+          <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:restore -- &lt;file&gt;</code>{" "}
+          pointing at this JSON. Your accounts and linked banks come back with no re-linking (it only
+          restores into an empty database).
+        </p>
       </section>
 
       <section className="card p-5">
