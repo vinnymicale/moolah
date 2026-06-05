@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
-  Settings, Plus, Menu, Wallet, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
+  Settings, Plus, Menu, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
   GripVertical, RotateCcw, ChevronsLeft, Keyboard, Search, TrendingDown,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
@@ -212,7 +212,8 @@ export function AppChrome({
       <div className={`flex items-center py-4 ${compact ? "justify-center px-2" : "justify-between px-4"}`}>
         {!compact && (
           <div className="flex items-center gap-2 text-brand">
-            <Wallet size={22} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="" width={28} height={28} className="h-7 w-7" />
             <span className="font-semibold text-text">Moolah</span>
           </div>
         )}
@@ -223,7 +224,8 @@ export function AppChrome({
             title={compact ? "Expand menu" : "Collapse menu"}
             aria-label={compact ? "Expand menu" : "Collapse menu"}
           >
-            {compact ? <Wallet size={20} className="text-brand" /> : <ChevronsLeft size={18} />}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {compact ? <img src="/logo.png" alt="Expand menu" width={22} height={22} className="h-5.5 w-5.5" /> : <ChevronsLeft size={18} />}
           </button>
         )}
       </div>
@@ -353,7 +355,8 @@ export function AppChrome({
             <Menu size={18} />
           </button>
           <div className="flex items-center gap-2 font-semibold">
-            <Wallet size={18} className="text-brand" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Moolah" width={22} height={22} className="h-5.5 w-5.5" />
           </div>
           <div className="flex-1" />
           <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Search">
