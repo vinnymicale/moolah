@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       householdName={household?.name ?? "Household"}
       accounts={accounts}
       categories={categories}
+      authBypass={process.env.AUTH_BYPASS === "true"}
     >
       <AutoPlaidSync />
       {children}

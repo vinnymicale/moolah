@@ -48,12 +48,14 @@ export function AppChrome({
   householdName,
   accounts,
   categories,
+  authBypass = false,
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
   householdName: string;
   accounts: AccountDTO[];
   categories: CategoryDTO[];
+  authBypass?: boolean;
 }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
@@ -306,7 +308,14 @@ export function AppChrome({
           {!compact && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
-              <p className="truncate text-xs text-muted">{householdName}</p>
+              <p className="flex items-center gap-1.5 truncate text-xs text-muted">
+                {householdName}
+                {authBypass && (
+                  <span className="shrink-0 rounded bg-surface2 px-1 py-px text-[10px] font-medium text-muted">
+                    local
+                  </span>
+                )}
+              </p>
             </div>
           )}
         </div>
@@ -322,13 +331,15 @@ export function AppChrome({
             <ThemeToggle />
           </div>
         )}
-        <button
-          onClick={() => signOut({ callbackUrl: "/signin" })}
-          className={`btn-ghost w-full text-sm ${compact ? "justify-center !px-0" : "justify-start"}`}
-          title="Sign out"
-        >
-          <LogOut size={15} /> {!compact && "Sign out"}
-        </button>
+        {!authBypass && (
+          <button
+            onClick={() => signOut({ callbackUrl: "/signin" })}
+            className={`btn-ghost w-full text-sm ${compact ? "justify-center px-0!" : "justify-start"}`}
+            title="Sign out"
+          >
+            <LogOut size={15} /> {!compact && "Sign out"}
+          </button>
+        )}
       </div>
     </div>
   );

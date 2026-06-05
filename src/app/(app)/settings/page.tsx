@@ -1,11 +1,20 @@
+import { headers } from "next/headers";
 import { requireHousehold } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
+import { getSetupStatus, isLocalHost } from "@/lib/setup-config";
 import { PageHeader } from "@/components/ui-bits";
+import { SetupPanel } from "@/app/(auth)/signin/SetupPanel";
 import { HouseholdNameForm, InviteCode, ExportData, BackupData } from "./SettingsForm";
 
 export default async function SettingsPage() {
   const { householdId } = await requireHousehold();
+  const host = (await headers()).get("host");
+  const status = getSetupStatus();
+  const showPlaidSetup = isLocalHost(host);
+  const proto = host?.startsWith("localhost") || host?.startsWith("127.") ? "http" : "https";
+  const redirectUri = `${proto}://${host}/api/auth/callback/google`;
+
   const [household, accounts, categories] = await Promise.all([
     prisma.household.findUnique({
       where: { id: householdId },
@@ -19,6 +28,10 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <PageHeader title="Settings" subtitle="Manage your household and members." />
+
+      {showPlaidSetup && (
+        <SetupPanel status={status} redirectUri={redirectUri} plaidOnly={process.env.AUTH_BYPASS === "true"} />
+      )}
 
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Household</h2>

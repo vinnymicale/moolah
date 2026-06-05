@@ -6,6 +6,9 @@ import { SignInForm } from "./SignInForm";
 import { SetupPanel } from "./SetupPanel";
 
 export default async function SignInPage() {
+  // When bypass is on there's no manual sign-in — hand off to auto-signin.
+  if (process.env.AUTH_BYPASS === "true") redirect("/api/auth/auto-signin");
+
   const session = await auth();
   if (session?.user) redirect("/");
 
