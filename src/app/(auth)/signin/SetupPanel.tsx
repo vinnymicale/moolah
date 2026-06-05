@@ -4,9 +4,18 @@ import { useState } from "react";
 import { Settings, ChevronDown, Check, X, Loader2, ExternalLink, Copy } from "lucide-react";
 import type { SetupStatus } from "@/lib/setup-config";
 
-export function SetupPanel({ status, redirectUri }: { status: SetupStatus; redirectUri: string }) {
-  // Open by default when there's no working way to sign in yet.
-  const noSignIn = !status.googleConfigured && !status.devLoginEnabled;
+export function SetupPanel({
+  status,
+  redirectUri,
+  plaidOnly = false,
+}: {
+  status: SetupStatus;
+  redirectUri: string;
+  plaidOnly?: boolean;
+}) {
+  // Open by default when there's no working way to sign in yet (or when
+  // plaidOnly mode is used and Plaid isn't configured yet).
+  const noSignIn = plaidOnly ? !status.plaidConfigured : !status.googleConfigured && !status.devLoginEnabled;
   const [open, setOpen] = useState(noSignIn);
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
@@ -55,8 +64,8 @@ export function SetupPanel({ status, redirectUri }: { status: SetupStatus; redir
         className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-surface2"
       >
         <Settings size={16} className="shrink-0 text-muted" />
-        <span className="flex-1">First-time setup — Google sign-in &amp; Plaid</span>
-        <StatusPill ok={status.googleConfigured} label="Google" />
+        <span className="flex-1">{plaidOnly ? "Plaid bank sync setup" : "First-time setup — Google sign-in & Plaid"}</span>
+        {!plaidOnly && <StatusPill ok={status.googleConfigured} label="Google" />}
         <StatusPill ok={status.plaidConfigured} label="Plaid" />
         <ChevronDown size={18} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -81,27 +90,29 @@ export function SetupPanel({ status, redirectUri }: { status: SetupStatus; redir
                 <code className="rounded bg-surface2 px-1 text-text">.env</code>; nothing leaves your machine.
               </p>
 
-              {/* Google */}
-              <section className="space-y-2">
-                <h3 className="font-semibold">
-                  Google sign-in
-                  {status.googleConfigured && <span className="ml-1 text-xs font-normal text-income">· configured</span>}
-                </h3>
-                <p className="text-xs text-muted">
-                  Create a <strong className="text-text">Web application</strong> OAuth client at the{" "}
-                  <a className="text-brand hover:underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
-                    Google Cloud Console <ExternalLink size={11} className="inline" />
-                  </a>{" "}
-                  and add this authorized redirect URI:
-                </p>
-                <CopyRow text={redirectUri} />
-                <input className="input" placeholder="Client ID (…apps.googleusercontent.com)" value={gId} onChange={(e) => setGId(e.target.value)} />
-                <input className="input" type="password" placeholder="Client secret" value={gSecret} onChange={(e) => setGSecret(e.target.value)} />
-                <label className="flex items-center gap-2 text-xs text-muted">
-                  <input type="checkbox" checked={disableDev} onChange={(e) => setDisableDev(e.target.checked)} />
-                  Turn off the password-less dev login once Google works
-                </label>
-              </section>
+              {/* Google — hidden in plaidOnly mode */}
+              {!plaidOnly && (
+                <section className="space-y-2">
+                  <h3 className="font-semibold">
+                    Google sign-in
+                    {status.googleConfigured && <span className="ml-1 text-xs font-normal text-income">· configured</span>}
+                  </h3>
+                  <p className="text-xs text-muted">
+                    Create a <strong className="text-text">Web application</strong> OAuth client at the{" "}
+                    <a className="text-brand hover:underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
+                      Google Cloud Console <ExternalLink size={11} className="inline" />
+                    </a>{" "}
+                    and add this authorized redirect URI:
+                  </p>
+                  <CopyRow text={redirectUri} />
+                  <input className="input" placeholder="Client ID (…apps.googleusercontent.com)" value={gId} onChange={(e) => setGId(e.target.value)} />
+                  <input className="input" type="password" placeholder="Client secret" value={gSecret} onChange={(e) => setGSecret(e.target.value)} />
+                  <label className="flex items-center gap-2 text-xs text-muted">
+                    <input type="checkbox" checked={disableDev} onChange={(e) => setDisableDev(e.target.checked)} />
+                    Turn off the password-less dev login once Google works
+                  </label>
+                </section>
+              )}
 
               {/* Plaid */}
               <section className="space-y-2">
@@ -126,18 +137,20 @@ export function SetupPanel({ status, redirectUri }: { status: SetupStatus; redir
                 <input className="input" type="password" placeholder="Secret (matching the environment)" value={pSecret} onChange={(e) => setPSecret(e.target.value)} />
               </section>
 
-              {/* Allow-list */}
-              <section className="space-y-1">
-                <h3 className="font-semibold">
-                  Who can sign in <span className="text-xs font-normal text-muted">(optional)</span>
-                </h3>
-                <input
-                  className="input"
-                  placeholder="you@gmail.com, friend@gmail.com — leave blank to allow anyone"
-                  value={emails}
-                  onChange={(e) => setEmails(e.target.value)}
-                />
-              </section>
+              {/* Allow-list — hidden in plaidOnly mode */}
+              {!plaidOnly && (
+                <section className="space-y-1">
+                  <h3 className="font-semibold">
+                    Who can sign in <span className="text-xs font-normal text-muted">(optional)</span>
+                  </h3>
+                  <input
+                    className="input"
+                    placeholder="you@gmail.com, friend@gmail.com — leave blank to allow anyone"
+                    value={emails}
+                    onChange={(e) => setEmails(e.target.value)}
+                  />
+                </section>
+              )}
 
               {error && <p className="text-sm text-expense">{error}</p>}
 

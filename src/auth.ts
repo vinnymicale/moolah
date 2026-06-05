@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Dev login lets you sign in locally without Google OAuth credentials. It is
- * enabled only when AUTH_DEV_LOGIN=true and must never be set in production.
+ * enabled when AUTH_DEV_LOGIN=true or AUTH_BYPASS=true (bypass always needs it).
  */
-const allowDevLogin = process.env.AUTH_DEV_LOGIN === "true";
+const allowDevLogin = process.env.AUTH_DEV_LOGIN === "true" || process.env.AUTH_BYPASS === "true";
 
 /** Optional allow-list so only you and your wife can sign in. */
 function isAllowedEmail(email: string | null | undefined): boolean {
@@ -44,7 +44,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             credentials: { email: { label: "Email", type: "email" } },
             async authorize(credentials) {
               const email = String(credentials?.email || "demo@example.com").toLowerCase();
-              if (!isAllowedEmail(email)) return null;
+              // When bypass is on the auto-signin route always uses the local
+              // user email — let it through regardless of the allow-list.
+              const isBypassUser =
+                process.env.AUTH_BYPASS === "true" &&
+                email === (process.env.LOCAL_USER_EMAIL?.trim() || "local@moolah.local").toLowerCase();
+              if (!isBypassUser && !isAllowedEmail(email)) return null;
               let user = await prisma.user.findUnique({ where: { email } });
               if (!user) {
                 user = await prisma.user.create({
@@ -59,7 +64,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user }) {
-      return isAllowedEmail(user.email);
+      const isBypassUser =
+        process.env.AUTH_BYPASS === "true" &&
+        user.email?.toLowerCase() === (process.env.LOCAL_USER_EMAIL?.trim() || "local@moolah.local").toLowerCase();
+      return isBypassUser || isAllowedEmail(user.email);
     },
     async jwt({ token, user }) {
       if (user?.id) token.uid = user.id;
