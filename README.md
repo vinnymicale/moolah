@@ -169,6 +169,26 @@ never modifies a real user's data.
 
 ---
 
+## Sharing it with others (testers / collaborators)
+
+Each person runs their **own local copy** — there's no shared server, so everyone's data stays
+separate. To let someone test it:
+
+1. Add them as a **collaborator** on the repo (GitHub → **Settings → Collaborators**).
+2. They clone it and follow the **Quick start** above. With the shipped `.env.example`, the
+   password-less **Dev Login** works immediately against the demo data — no credentials needed to
+   look around.
+3. To use it for real (their own Google sign-in and/or bank sync), they don't need to hand-edit
+   `.env`: the **sign-in screen has a built-in "First-time setup" panel** (shown only when running
+   locally) where they can paste their own Google OAuth and Plaid keys. It writes their local `.env`
+   and auto-generates an `AUTH_SECRET`; they just relaunch to apply. See the next two sections for
+   where to get those keys.
+
+> The setup panel is **localhost-only** by design — both the panel and its write endpoint refuse any
+> non-local request, so it can never expose a config-writing endpoint on a deployment.
+
+---
+
 ## Desktop launcher (Windows + WSL, optional)
 
 `scripts/launch.sh` runs Moolah like a desktop app. One launch: it starts the database + production
@@ -186,6 +206,10 @@ scripts/shortcut are machine-specific — adapt them for your own setup.
 ## Setting up Google sign-in
 
 Local dev works without this, but you'll want real Google login for day-to-day use.
+
+> **Tip:** instead of editing `.env` by hand, you can paste the Client ID/secret below into the
+> **"First-time setup" panel on the sign-in screen** (it even shows the exact redirect URI to copy),
+> then relaunch.
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/) → create (or pick) a project.
 2. **APIs & Services → OAuth consent screen** → choose **External**, fill in the app name and your
@@ -213,7 +237,8 @@ on the **Settings** page.
 ## Connecting banks with Plaid (optional)
 
 Create a free account at the [Plaid Dashboard](https://dashboard.plaid.com/), grab your keys from
-**Developers → Keys**, and add them to `.env`:
+**Developers → Keys**, and add them to `.env` — or paste them into the **"First-time setup" panel on
+the sign-in screen** (then relaunch). Manually, they go in `.env` as:
 
 ```env
 PLAID_CLIENT_ID="..."
