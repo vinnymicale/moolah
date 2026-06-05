@@ -19,9 +19,12 @@ PROFILE_WIN='$env:LOCALAPPDATA\Moolah\browser'
 
 open_log() { powershell.exe -NoProfile -Command "Start-Process notepad '$(wslpath -w "$LOG")'" >/dev/null 2>&1 || true; }
 
-find_edge() {
+# Prefer Chrome, fall back to Edge. Both support --app / --user-data-dir.
+find_browser() {
   local p
-  for p in "/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe" \
+  for p in "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe" \
+           "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+           "/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe" \
            "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"; do
     [ -f "$p" ] && { wslpath -w "$p"; return 0; }
   done
@@ -51,13 +54,13 @@ if ! curl -sf -o /dev/null "$URL"; then
 fi
 
 # Open Moolah in a dedicated app window and wait until it's closed.
-EDGE="$(find_edge || true)"
-if [ -n "$EDGE" ]; then
+BROWSER="$(find_browser || true)"
+if [ -n "$BROWSER" ]; then
   powershell.exe -NoProfile -Command \
-    "Start-Process -Wait -FilePath \"$EDGE\" -ArgumentList '--app=$URL', \"--user-data-dir=$PROFILE_WIN\", '--no-first-run', '--no-default-browser-check'" \
+    "Start-Process -Wait -FilePath \"$BROWSER\" -ArgumentList '--app=$URL', \"--user-data-dir=$PROFILE_WIN\", '--no-first-run', '--no-default-browser-check'" \
     >/dev/null 2>&1
 else
-  # No Edge found — fall back to the default browser (no close-to-quit).
+  # No Chrome/Edge found — fall back to the default browser (no close-to-quit).
   powershell.exe -NoProfile -Command "Start-Process '$URL'" >/dev/null 2>&1 || true
 fi
 
