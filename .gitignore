@@ -37,6 +37,10 @@ yarn-error.log*
 # local embedded-postgres data dir
 /.pgdata
 
+# one-click launcher runtime files
+/.launch.pid
+/.launch.log
+
 # vercel
 .vercel
 

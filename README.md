@@ -169,6 +169,20 @@ never modifies a real user's data.
 
 ---
 
+## Desktop launcher (Windows + WSL, optional)
+
+`scripts/launch.sh` runs Moolah like a desktop app. One launch: it starts the database + production
+server, **applies pending migrations**, writes a **throttled automatic backup** (skips if one was
+made in the last 12h; keeps the 10 most recent), **rebuilds only if the source changed**, opens
+Moolah in a dedicated browser **app window**, and — when you close that window — shuts the whole
+stack down cleanly (`scripts/stop.sh` also does this, with a port-based safety net).
+
+On the maintainer's machine it's wired to a single **Moolah** desktop shortcut: a hidden `.vbs` that
+runs `wsl.exe … bash scripts/launch.sh`, opening an Edge `--app` window. The paths inside the
+scripts/shortcut are machine-specific — adapt them for your own setup.
+
+---
+
 ## Setting up Google sign-in
 
 Local dev works without this, but you'll want real Google login for day-to-day use.
