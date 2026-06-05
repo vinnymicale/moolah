@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Sparkles, X, ChevronDown, CheckCircle2, Loader2, Info, ArrowRight } from "lucide-react";
+import { Sparkles, ChevronDown, CheckCircle2, Loader2, Info, ArrowRight } from "lucide-react";
 import { contributeGoalAction } from "@/actions/goals";
 import { formatUSD } from "@/lib/money";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import type { SafeTransferDTO, SavingsGoalDTO } from "@/lib/queries";
 
-// localStorage key scoped to current month so the card reappears next month.
-function dismissKey(): string {
-  const d = new Date();
-  return `safe-transfer-dismissed-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+// localStorage key remembering whether the user collapsed the card.
+const COLLAPSE_KEY = "safe-transfer-collapsed";
 
 export function SafeTransferCard({
   data,
@@ -20,7 +17,7 @@ export function SafeTransferCard({
   data: SafeTransferDTO;
   goals: SavingsGoalDTO[];
 }) {
-  const [visible, setVisible] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [amount, setAmount] = useState(String(data.safeAmount));
   const [goalId, setGoalId] = useState(goals[0]?.id ?? "");
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -28,18 +25,19 @@ export function SafeTransferCard({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Hydrate dismiss state from localStorage after mount (avoids SSR mismatch).
+  // Hydrate the collapsed preference from localStorage after mount (avoids SSR mismatch).
   useEffect(() => {
     try {
-      if (!localStorage.getItem(dismissKey())) setVisible(true);
-    } catch {
-      setVisible(true);
-    }
+      if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
+    } catch { /* ignore */ }
   }, []);
 
-  const dismiss = () => {
-    try { localStorage.setItem(dismissKey(), "1"); } catch { /* ignore */ }
-    setVisible(false);
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
   };
 
   const allocate = () => {
@@ -57,16 +55,20 @@ export function SafeTransferCard({
     });
   };
 
-  if (!visible) return null;
-
   const parsedAmount = parseFloat(amount);
   const amountValid = !isNaN(parsedAmount) && parsedAmount > 0;
   const selectedGoal = goals.find((g) => g.id === goalId);
 
   return (
     <div className="mb-5 overflow-hidden rounded-xl border border-brand/30 bg-gradient-to-br from-brand/5 to-brand/10">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 px-4 py-3">
+      {/* Header — click to collapse/expand (always visible) */}
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-brand/5"
+        title={collapsed ? "Expand" : "Collapse"}
+      >
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/15 text-brand">
             <Sparkles size={18} />
@@ -82,10 +84,15 @@ export function SafeTransferCard({
             </p>
           </div>
         </div>
-        <button onClick={dismiss} className="btn-ghost h-7 w-7 shrink-0 !p-0 text-muted" title="Dismiss">
-          <X size={15} />
-        </button>
-      </div>
+        <ChevronDown
+          size={18}
+          aria-hidden
+          className={`mt-1 shrink-0 text-muted transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`}
+        />
+      </button>
+      {!collapsed && (
+        <>
+      {/* end header */}
 
       {/* Breakdown toggle */}
       <div className="border-t border-brand/15">
@@ -279,6 +286,8 @@ export function SafeTransferCard({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
