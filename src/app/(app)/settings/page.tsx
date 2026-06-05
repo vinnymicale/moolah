@@ -12,8 +12,6 @@ export default async function SettingsPage() {
   const host = (await headers()).get("host");
   const status = getSetupStatus();
   const showPlaidSetup = isLocalHost(host);
-  const proto = host?.startsWith("localhost") || host?.startsWith("127.") ? "http" : "https";
-  const redirectUri = `${proto}://${host}/api/auth/callback/google`;
 
   const [household, accounts, categories] = await Promise.all([
     prisma.household.findUnique({
@@ -30,7 +28,7 @@ export default async function SettingsPage() {
       <PageHeader title="Settings" subtitle="Manage your household and members." />
 
       {showPlaidSetup && (
-        <SetupPanel status={status} redirectUri={redirectUri} plaidOnly={process.env.AUTH_BYPASS === "true"} />
+        <SetupPanel status={status} plaidOnly={process.env.AUTH_BYPASS === "true"} />
       )}
 
       <section className="card p-5">
