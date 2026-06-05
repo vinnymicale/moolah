@@ -209,8 +209,12 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                     return sorted.map((d, i) => {
                       const acct = activeReady.find((r) => r.id === d.id);
                       const minPayment = acct?.minimumPayment ?? 0;
-                      const rolledIn = cascade && i > 0 ? freedSoFar : 0;
+                      const rolledIn = cascade ? freedSoFar : 0;
                       const isLast = i === sorted.length - 1;
+                      // Total recommended monthly payment for this debt during its focus phase:
+                      // minimum + extra (which includes any cascade from paid-off debts).
+                      const focusPayment = minPayment + extraNum + rolledIn;
+                      const extraAllocated = extraNum + rolledIn;
                       freedSoFar += minPayment;
                       return (
                         <li key={d.id}>
@@ -223,20 +227,31 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                               <p className="text-xs text-muted">
                                 {formatUSD(acct?.currentBalance ?? 0)} · {acct?.interestRate}% APR · {formatUSD(d.totalInterest)} interest
                               </p>
-                              {cascade && rolledIn > 0 && (
-                                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-brand">
-                                  <ArrowRight size={10} />
-                                  {formatUSD(rolledIn)}/mo rolled in from previous payoffs
-                                </p>
-                              )}
+                              {/* Recommended payment breakdown for this debt's focus phase */}
+                              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]">
+                                <span className="font-medium text-text">
+                                  {i === 0 ? "Pay now:" : `Pay when focus:`}
+                                </span>
+                                <span className="font-semibold text-brand">{formatUSD(focusPayment)}/mo</span>
+                                <span className="text-muted">
+                                  ({formatUSD(minPayment)} min
+                                  {extraAllocated > 0 && (
+                                    <> + <span className="text-income">{formatUSD(extraAllocated)} extra{rolledIn > 0 ? ` (incl. ${formatUSD(rolledIn)} freed)` : ""}</span></>
+                                  )}
+                                  )
+                                </span>
+                              </p>
                             </div>
                             <span className="shrink-0 text-sm font-semibold text-brand">{monthsToLabel(d.monthsToPayoff)}</span>
                           </div>
-                          {cascade && !isLast && (
+                          {!isLast && (
                             <div className="flex items-center gap-1.5 border-t border-dashed border-line/60 px-4 py-1.5 text-[11px] text-muted">
                               <ArrowRight size={10} className="text-brand" />
                               <span>
-                                <span className="font-medium text-brand">{formatUSD(minPayment + (rolledIn > 0 ? rolledIn : 0))}/mo</span> freed — rolls onto next debt
+                                {cascade
+                                  ? <><span className="font-medium text-brand">{formatUSD(minPayment)}/mo</span> freed — rolls onto next debt</>
+                                  : <><span className="font-medium text-muted">{formatUSD(minPayment)}/mo</span> freed — rollover is off, leaves the pool</>
+                                }
                               </span>
                             </div>
                           )}
