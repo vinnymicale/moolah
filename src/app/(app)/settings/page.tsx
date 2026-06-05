@@ -2,7 +2,7 @@ import { requireHousehold } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
-import { HouseholdNameForm, InviteCode, ExportData } from "./SettingsForm";
+import { HouseholdNameForm, InviteCode, ExportData, BackupData } from "./SettingsForm";
 
 export default async function SettingsPage() {
   const { householdId } = await requireHousehold();
@@ -39,6 +39,16 @@ export default async function SettingsPage() {
           Download your transactions as a CSV for taxes, backups, or spreadsheets.
         </p>
         <ExportData accounts={accounts} categories={categories} />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Back up everything</h2>
+        <p className="mb-3 text-sm text-muted">
+          Download a full backup — all your data <em>and</em> your linked bank connections — as one
+          JSON file. Restore it on a new machine to keep your banks without re-linking. Keep the file
+          private: it contains your bank access tokens.
+        </p>
+        <BackupData />
       </section>
 
       <section className="card p-5">

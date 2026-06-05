@@ -233,27 +233,48 @@ connection. So if you connect real banks, back this up.
 (or a future packaged build) and keep using the same connections. **Restoring a saved token never
 costs a new Plaid item — only clicking "Connect a bank" does.**
 
-### How to back up
+### Option A — one-command backup (recommended)
+
+Export everything to a single JSON file (all tables, including the Plaid tokens):
+
+```bash
+npm run db:backup          # writes backups/moolah-backup-<timestamp>.json
+```
+
+Or, in the running app, go to **Settings → Back up everything → Download backup** to get the same
+file in your browser. Copy it somewhere safe (external drive / cloud folder).
+
+**To restore** into a fresh clone:
+
+```bash
+npm install
+npm run db:local           # start the bundled Postgres
+npm run db:push            # create the (empty) schema
+npm run db:restore -- ./path/to/moolah-backup-<timestamp>.json
+```
+
+Your banks reconnect with **no new Plaid items** and no re-linking. (`db:restore` only writes into an
+empty database; pass `--force` to overwrite an existing one.) The `backups/` folder is gitignored.
+
+### Option B — raw data-directory copy
+
+For a full cold copy you can also just back up the database folder itself:
 
 1. **Stop the app** (so Postgres isn't writing mid-copy).
-2. Copy these two things somewhere safe — an external drive or a cloud folder:
-   - the **`.pgdata/`** directory — your entire database, including the Plaid tokens
-   - your **`.env`** file — the tokens are useless without the matching Plaid + `AUTH_SECRET` keys
-3. **To restore** (new machine, fresh clone, or recovery): drop both back into place. **If your
-   backup was copied through Windows** (e.g. a OneDrive/Desktop folder, common with WSL), the
-   `.pgdata/` files come back world-readable and Postgres will refuse to start with a
-   *"data directory has invalid permissions"* error. Fix it once after copying:
+2. Copy the **`.pgdata/`** directory and your **`.env`** file somewhere safe.
+3. **To restore**, drop both back into place. **If the backup was copied through Windows** (e.g. a
+   OneDrive/Desktop folder, common with WSL), `.pgdata/` comes back world-readable and Postgres
+   refuses to start with a *"data directory has invalid permissions"* error. Fix it once:
    ```bash
-   chmod 700 .pgdata          # Postgres requires the data dir to be 0700 (or 0750)
-   rm -f .pgdata/postmaster.pid   # clear any stale lockfile copied from a running server
+   chmod 700 .pgdata             # Postgres requires the data dir to be 0700 (or 0750)
+   rm -f .pgdata/postmaster.pid  # clear any stale lockfile copied from a running server
    ```
-   Then start the app — your banks reconnect with **no new Plaid items** and no re-linking.
+   Then start the app. (Option A avoids this entirely, since it restores into a fresh `.pgdata`.)
 
-> ⚠️ Treat these backups as secrets — the access tokens are stored **unencrypted** and grant access
-> to your bank data through Plaid. Keep them somewhere private.
+> ⚠️ Treat any backup as a secret — the Plaid access tokens are stored **unencrypted** and grant
+> access to your bank data. Keep them somewhere private.
 
 > Never run `npm run db:reset` or delete `.pgdata/` without a current backup — both wipe your tokens.
-> _(A one-command `npm run db:backup` is on the roadmap; for now the copy above is the backup.)_
 
 ---
 

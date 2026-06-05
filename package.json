@@ -17,7 +17,9 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:backup": "tsx scripts/export-data.ts",
+    "db:restore": "tsx scripts/import-data.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
