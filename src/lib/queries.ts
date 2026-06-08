@@ -251,7 +251,18 @@ export async function getRecurringSuggestions(householdId: string, todayISO: str
     prisma.recurringRule.findMany({ where: { householdId }, select: { description: true } }),
   ]);
 
-  const existingDescriptions = rules.map((r) => r.description);
+  // Include both the user-named rule descriptions AND the raw bank descriptions
+  // of transactions already linked to a rule. This catches cases where a rule
+  // was manually named differently from the bank string (e.g. rule "Gym
+  // Membership" with linked transactions "LA FITNESS").
+  const linkedDescriptions = [...new Set(
+    txns.filter((t) => t.recurringRuleId).map((t) => t.description)
+  )];
+  const existingDescriptions = [
+    ...rules.map((r) => r.description),
+    ...linkedDescriptions,
+  ];
+
   const mapped: TxnForDetect[] = txns.map((t) => ({
     date: isoDay(t.date),
     description: t.description,

@@ -124,7 +124,9 @@ export function SafeTransferCard({
                 bold
               />
               <p className="mt-0.5 text-[11px] leading-snug">
-                Total across your checking account{data.checkingCount === 1 ? "" : "s"} right now.
+                {data.checkingCount > 1
+                  ? `All ${data.checkingCount} checking accounts are summed together. Savings and cash accounts are not included in this starting balance.`
+                  : "Savings and cash accounts are not included — only your checking balance is used as the starting point."}
               </p>
             </div>
 
