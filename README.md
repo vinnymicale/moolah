@@ -1,8 +1,7 @@
 # Moolah
 
 A shared personal-finance, budgeting & net-worth tracker for two people (you and your partner).
-Log income and expenses on a **monthly calendar** with a running **projected cash balance**
-(à la Dollarbird), link your banks with **Plaid** for automatic transaction sync, budget by
+Log income and expenses on a **monthly calendar** with a running **projected cash balance**, link your banks with **Plaid** for automatic transaction sync, budget by
 category, set **savings goals**, plan your **debt payoff**, and watch your **net worth** and
 **trends** evolve over time. Both of you sign in with Google and share one unified dataset.
 
