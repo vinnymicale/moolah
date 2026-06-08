@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus, CalendarCheck, Clock, CreditCard, Repeat } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CalendarCheck, Clock, CreditCard, Repeat, TrendingUp, TrendingDown } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { TransactionModal } from "@/components/TransactionModal";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
@@ -39,10 +39,61 @@ export function CalendarView({
   thisMonthISO: string;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
+  const [enabledAccountIds, setEnabledAccountIds] = useState<Set<string>>(
+    () => new Set(accounts.map((a) => a.id)),
+  );
+  const [showIncome, setShowIncome] = useState(true);
+  const [showExpense, setShowExpense] = useState(true);
+
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const monthNum = monthISO.slice(0, 7);
 
-  const net = data.monthIncome - data.monthExpense;
+  const allEnabled = enabledAccountIds.size === accounts.length;
+
+  const toggleAccount = (id: string) => {
+    setEnabledAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllAccounts = () => {
+    if (allEnabled) {
+      setEnabledAccountIds(new Set());
+    } else {
+      setEnabledAccountIds(new Set(accounts.map((a) => a.id)));
+    }
+  };
+
+  // Client-side filtered events and recomputed monthly totals.
+  const { filteredEventsByDay, filteredMonthIncome, filteredMonthExpense } = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    const byDay: Record<string, CalendarEvent[]> = {};
+
+    for (const [day, events] of Object.entries(data.eventsByDay)) {
+      const filtered = events.filter((e) => {
+        if (e.accountId && !enabledAccountIds.has(e.accountId)) return false;
+        if (e.type === "INCOME" && !showIncome) return false;
+        if (e.type === "EXPENSE" && !showExpense) return false;
+        return true;
+      });
+      byDay[day] = filtered;
+
+      if (day.startsWith(monthNum)) {
+        for (const e of filtered) {
+          if (e.type === "INCOME" && !e.isTransfer) income += e.amount;
+          else if (e.type === "EXPENSE") expense += e.amount;
+        }
+      }
+    }
+
+    return { filteredEventsByDay: byDay, filteredMonthIncome: income, filteredMonthExpense: expense };
+  }, [data.eventsByDay, enabledAccountIds, showIncome, showExpense, monthNum]);
+
+  const net = filteredMonthIncome - filteredMonthExpense;
   const endOfMonthBalance = data.projection.length ? data.projection[data.projection.length - 1].balance : data.anchorBalance;
   const lowest = data.projection.reduce(
     (min, p) => (p.balance < min.balance ? p : min),
@@ -51,7 +102,9 @@ export function CalendarView({
   const hasCash = accounts.some((a) => a.includeInCash);
 
   const colorFor = (e: CalendarEvent) =>
-    e.categoryId ? catById.get(e.categoryId)?.color ?? "#64748b" : e.type === "INCOME" ? "#16a34a" : "#64748b";
+    e.isTransfer ? "#94a3b8"
+    : e.categoryId ? catById.get(e.categoryId)?.color ?? "#64748b"
+    : e.type === "INCOME" ? "#16a34a" : "#64748b";
 
   return (
     <div>
@@ -76,11 +129,72 @@ export function CalendarView({
 
       {/* Summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Summary label="Income" value={formatUSD(data.monthIncome)} tone="income" />
-        <Summary label="Expenses" value={formatUSD(data.monthExpense)} tone="expense" />
+        <Summary label="Income" value={formatUSD(filteredMonthIncome)} tone="income" />
+        <Summary label="Expenses" value={formatUSD(filteredMonthExpense)} tone="expense" />
         <Summary label="Net" value={formatUSD(net)} tone={net >= 0 ? "income" : "expense"} />
         {hasCash && <Summary label="Projected end-of-month" value={formatUSD(endOfMonthBalance)} tone={endOfMonthBalance >= 0 ? "default" : "expense"} />}
       </div>
+
+      {/* Account + type filters */}
+      {accounts.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface2/50 px-3 py-2">
+          <span className="mr-1 text-xs font-medium text-muted">Show:</span>
+
+          {/* Income / Expense toggles */}
+          <button
+            onClick={() => setShowIncome((v) => !v)}
+            className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+              showIncome
+                ? "border-income/40 bg-income/10 text-income"
+                : "border-line bg-surface2 text-muted opacity-50"
+            }`}
+          >
+            <TrendingUp size={11} /> Income
+          </button>
+          <button
+            onClick={() => setShowExpense((v) => !v)}
+            className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+              showExpense
+                ? "border-expense/40 bg-expense/10 text-expense"
+                : "border-line bg-surface2 text-muted opacity-50"
+            }`}
+          >
+            <TrendingDown size={11} /> Expenses
+          </button>
+
+          <span className="mx-1 h-4 w-px bg-line" />
+
+          {/* All accounts toggle */}
+          <button
+            onClick={toggleAllAccounts}
+            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+              allEnabled
+                ? "border-brand/40 bg-brand/10 text-brand"
+                : "border-line bg-surface2 text-muted"
+            }`}
+          >
+            All accounts
+          </button>
+
+          {/* Per-account chips */}
+          {accounts.map((acct) => {
+            const on = enabledAccountIds.has(acct.id);
+            return (
+              <button
+                key={acct.id}
+                onClick={() => toggleAccount(acct.id)}
+                className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                  on ? "border-line" : "border-line bg-surface2 text-muted opacity-40"
+                }`}
+                style={on ? { borderColor: `${acct.color}66`, backgroundColor: `${acct.color}18`, color: acct.color } : undefined}
+                title={acct.name}
+              >
+                {acct.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {hasCash && lowest.balance < 0 && (
         <div className="mb-4 rounded-lg border border-expense/40 bg-expense/10 px-4 py-2 text-sm text-expense">
@@ -100,7 +214,7 @@ export function CalendarView({
         </div>
         <div className="grid grid-cols-7">
           {data.days.map((iso, i) => {
-            const events = data.eventsByDay[iso] ?? [];
+            const events = filteredEventsByDay[iso] ?? [];
             const ccDues = data.ccDueByDay[iso] ?? [];
             const proj = data.projectionByIso[iso];
             const inMonth = iso.slice(0, 7) === monthNum;
@@ -253,8 +367,10 @@ function DayCell({
           >
             <span className={`h-2 w-2 shrink-0 rounded-full ${!e.cleared && !e.isVirtual ? "opacity-50" : ""}`} style={{ backgroundColor: colorFor(e) }} />
             <span className="hidden flex-1 truncate sm:inline">{e.description}</span>
-            <span className={`ml-auto shrink-0 tabular-nums ${e.type === "INCOME" ? "text-income" : "text-expense"}`}>
-              {e.type === "INCOME" ? "+" : "−"}
+            <span className={`ml-auto shrink-0 tabular-nums ${
+              e.isTransfer ? "text-muted" : e.type === "INCOME" ? "text-income" : "text-expense"
+            }`}>
+              {e.isTransfer ? "" : e.type === "INCOME" ? "+" : "−"}
               {compact(e.amount)}
             </span>
           </button>
@@ -290,7 +406,7 @@ function DayEventsModal({
   onClose: () => void;
 }) {
   const catById = new Map(categories.map((c) => [c.id, c]));
-  const income = events.filter((e) => e.type === "INCOME").reduce((s, e) => s + e.amount, 0);
+  const income = events.filter((e) => e.type === "INCOME" && !e.isTransfer).reduce((s, e) => s + e.amount, 0);
   const expense = events.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + e.amount, 0);
 
   return (
@@ -349,8 +465,10 @@ function DayEventsModal({
                   {cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
                 </p>
               </div>
-              <span className={`shrink-0 tabular-nums text-sm font-semibold ${e.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                {e.type === "INCOME" ? "+" : "−"}{formatUSD(e.amount)}
+              <span className={`shrink-0 tabular-nums text-sm font-semibold ${
+                e.isTransfer ? "text-muted" : e.type === "INCOME" ? "text-income" : "text-expense"
+              }`}>
+                {e.isTransfer ? "" : e.type === "INCOME" ? "+" : "−"}{formatUSD(e.amount)}
               </span>
             </button>
           );
