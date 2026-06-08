@@ -9,7 +9,7 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=flat&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/vinnymicale)
 
-> **AI disclaimer:** Moolah was built with substantial help from AI (Anthropic's Claude). Treat it
+> **AI disclaimer:** Moolah was built with help from AI (Anthropic's Claude). Treat it
 > accordingly — review the code yourself before trusting it with sensitive financial data, and note
 > that it comes with no warranty (see [Disclaimer](#disclaimer)).
 
@@ -400,7 +400,7 @@ appreciated.
 
 ## Disclaimer
 
-Moolah was developed with substantial assistance from AI (Anthropic's Claude). It is a personal
+Moolah was developed with assistance from AI (Anthropic's Claude). It is a personal
 project provided **as-is, without warranty of any kind**, express or implied. You run it at your own
 risk: review the code before trusting it with real financial data, keep your own backups, and
 remember that anything it shows you (projections, "safe to transfer", debt payoff, net worth) is for
