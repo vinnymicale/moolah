@@ -29,6 +29,12 @@ export interface CalendarEvent {
   cleared: boolean;
   /** True when projected from a recurring rule and not yet materialised. */
   isVirtual: boolean;
+  /**
+   * True for credit-card payment credits — these reduce the CC balance but are
+   * not real income (the actual expenses were already recorded as CC purchases).
+   * Excluded from monthIncome / filtered totals.
+   */
+  isTransfer: boolean;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
   createdBy: { id: string; name: string | null; image: string | null } | null;
@@ -160,26 +166,45 @@ export async function getCalendarMonth(
     orderBy: { date: "asc" },
   });
 
-  const events: CalendarEvent[] = txnRows.map((t) => ({
-    id: t.id,
-    date: isoDay(t.date),
-    type: t.type,
-    amount: toNumber(t.amount),
-    description: t.description,
-    note: t.note,
-    categoryId: t.categoryId,
-    accountId: t.accountId,
-    cleared: t.cleared,
-    isVirtual: false,
-    recurringRuleId: t.recurringRuleId,
-    plaidTransactionId: t.plaidTransactionId,
-    createdBy: t.createdBy,
-  }));
+  const events: CalendarEvent[] = txnRows.map((t) => {
+    const acct = t.accountId ? accountById.get(t.accountId) : null;
+    return {
+      id: t.id,
+      date: isoDay(t.date),
+      type: t.type,
+      amount: toNumber(t.amount),
+      description: t.description,
+      note: t.note,
+      categoryId: t.categoryId,
+      accountId: t.accountId,
+      cleared: t.cleared,
+      isVirtual: false,
+      // Credit-card payment credits are not real income — they reduce the CC
+      // balance. The corresponding checking debit is the true cash outflow.
+      isTransfer: acct?.type === "CREDIT_CARD" && t.type === "INCOME",
+      recurringRuleId: t.recurringRuleId,
+      plaidTransactionId: t.plaidTransactionId,
+      createdBy: t.createdBy,
+    };
+  });
 
-  // Dates already materialised per rule, so we don't double-count.
-  const materialised = new Set<string>();
+  // Track materialised dates per rule with a 4-day proximity window so that
+  // a virtual occurrence on (e.g.) the 7th is suppressed when the real payment
+  // landed on the 8th — common with bank processing delays.
+  const materialisedByRule = new Map<string, number[]>();
   for (const t of txnRows) {
-    if (t.recurringRuleId) materialised.add(`${t.recurringRuleId}|${isoDay(t.date)}`);
+    if (t.recurringRuleId) {
+      const arr = materialisedByRule.get(t.recurringRuleId) ?? [];
+      arr.push(t.date.getTime());
+      materialisedByRule.set(t.recurringRuleId, arr);
+    }
+  }
+  const MATCH_WINDOW_MS = 4 * 86_400_000;
+  function occurrenceIsMatched(ruleId: string, occ: Date): boolean {
+    const dates = materialisedByRule.get(ruleId);
+    if (!dates) return false;
+    const ts = occ.getTime();
+    return dates.some((d) => Math.abs(d - ts) <= MATCH_WINDOW_MS);
   }
 
   // Project recurring rules across the range.
@@ -199,9 +224,10 @@ export async function getCalendarMonth(
       rangeStart,
       rangeEnd,
     );
+    const ruleAcct = rule.accountId ? accountById.get(rule.accountId) : null;
     for (const occ of occurrences) {
+      if (occurrenceIsMatched(rule.id, occ)) continue;
       const iso = isoDay(occ);
-      if (materialised.has(`${rule.id}|${iso}`)) continue;
       events.push({
         id: `rule:${rule.id}:${iso}`,
         date: iso,
@@ -213,6 +239,7 @@ export async function getCalendarMonth(
         accountId: rule.accountId,
         cleared: false,
         isVirtual: true,
+        isTransfer: ruleAcct?.type === "CREDIT_CARD" && rule.type === "INCOME",
         recurringRuleId: rule.id,
         plaidTransactionId: null,
         createdBy: null,
@@ -252,8 +279,9 @@ export async function getCalendarMonth(
     if (!gridIso.has(e.date)) continue;
     (eventsByDay[e.date] ??= []).push(e);
     if (toUTCDay(e.date).getUTCMonth() === visibleMonth) {
-      if (e.type === "INCOME") monthIncome += e.amount;
-      else monthExpense += e.amount;
+      // Credit-card payment credits (isTransfer) are not real income — skip them.
+      if (e.type === "INCOME" && !e.isTransfer) monthIncome += e.amount;
+      else if (e.type === "EXPENSE") monthExpense += e.amount;
     }
   }
   // Stable ordering within a day: income first, then by amount desc.
@@ -266,6 +294,12 @@ export async function getCalendarMonth(
   const ccDueByDay: Record<string, CcDueEvent[]> = {};
   for (const acct of accounts) {
     if (!acct.nextPaymentDueDate || !gridIso.has(acct.nextPaymentDueDate)) continue;
+    // Suppress the due chip for dates that have already passed unless the
+    // account is explicitly flagged overdue. If the due date is past and
+    // isOverdue !== true, the payment was likely made and Plaid just hasn't
+    // rolled nextPaymentDueDate forward yet.
+    const dueTs = parseISODay(acct.nextPaymentDueDate).getTime();
+    if (dueTs < today.getTime() && acct.isOverdue !== true) continue;
     (ccDueByDay[acct.nextPaymentDueDate] ??= []).push({
       accountId: acct.id,
       accountName: acct.name,
