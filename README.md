@@ -8,6 +8,12 @@ category, set **savings goals**, plan your **debt payoff**, and watch your **net
 
 Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · Auth.js v5 · Plaid · Tailwind v4 · Recharts**.
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=flat&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/vinnymicale)
+
+> **AI disclaimer:** Moolah was built with substantial help from AI (Anthropic's Claude). Treat it
+> accordingly — review the code yourself before trusting it with sensitive financial data, and note
+> that it comes with no warranty (see [Disclaimer](#disclaimer)).
+
 ![Moolah dashboard](docs/screenshots/dashboard.png)
 
 > The dashboard, showing net-worth milestones, the safe-to-transfer suggestion, spending alerts,
@@ -130,31 +136,39 @@ Postgres is downloaded and run for you by
 
 ```bash
 npm install
-cp .env.example .env          # the defaults already work for local dev
-
-# Create the schema + demo data (one-time; starts the bundled DB as needed)
-npm run db:local &            # bundled local Postgres on port 5433 (or use start:all below)
-npm run db:push               # sync the schema to the database
-npm run db:seed               # load a demo household you can log into
-
-# Run the database and web app together
-npm run start:all
+cp .env.example .env       # the defaults already work for local dev
+npm run setup              # download the bundled DB (first run) & create the schema
+npm run start:all          # run the database and web app together
 ```
 
 `npm run start:all` runs the bundled Postgres **and** the Next.js dev server side by side (via
 `concurrently`), so you only need one terminal. Open <http://localhost:3000>.
 
-Because `.env.example` ships with `AUTH_DEV_LOGIN="true"`, the sign-in screen shows a **Dev Login** —
-enter `demo@example.com` to open the seeded household. (Google is not required for local
-development; set up Google below when you want real sign-in, then turn the dev bypass off.)
+With the shipped defaults (`AUTH_BYPASS="true"`) you're **signed in automatically** into your own
+local household — no Google account, password, or sign-in screen — so you can start adding
+transactions right away. Set up Google sign-in below when you want real, multi-user login.
 
 > **Heads up:** the web app needs the database running. Use `npm run start:all` (DB + web) rather
 > than `npm run dev` alone, or the app will fail to reach Postgres.
+
+### Want to explore with sample data first?
+
+Load an isolated demo household full of example accounts, transactions, budgets and goals:
+
+```bash
+npm run setup -- --seed    # create the schema *and* a demo household
+```
+
+Then, to sign in as that demo household, set `AUTH_BYPASS="false"` and `AUTH_DEV_LOGIN="true"` in
+`.env`, relaunch, and use the **Dev Login** on the sign-in screen with `demo@example.com`. The demo
+seed is fully isolated: it only ever touches the throwaway `demo@example.com` household and never
+modifies your own data.
 
 Useful scripts:
 
 | Script | What it does |
 | --- | --- |
+| `npm run setup` | First-run: create the schema (add `-- --seed` for demo data) |
 | `npm run start:all` | Run the bundled Postgres **and** the app together |
 | `npm run dev` | Start just the app (assumes the DB is already running) |
 | `npm run db:local` | Run the bundled local Postgres on port 5433 |
@@ -164,9 +178,6 @@ Useful scripts:
 | `npm run test` | Run the unit tests (recurrence, projection & debt-payoff math) |
 | `npm run build` | Production build |
 
-The demo seed is fully isolated: it only ever touches a throwaway `demo@example.com` household and
-never modifies a real user's data.
-
 ---
 
 ## Sharing it with others (testers / collaborators)
@@ -175,13 +186,14 @@ Each person runs their **own local copy** — there's no shared server, so every
 separate. To let someone test it:
 
 1. Add them as a **collaborator** on the repo (GitHub → **Settings → Collaborators**).
-2. They clone it and follow the **Quick start** above. With the shipped `.env.example`, the
-   password-less **Dev Login** works immediately against the demo data — no credentials needed to
-   look around.
+2. They clone it and follow the **Quick start** above. With the shipped `.env.example`
+   (`AUTH_BYPASS="true"`), they're signed straight into their own empty household — no credentials
+   needed to look around.
 3. To use it for real (their own Google sign-in and/or bank sync), they don't need to hand-edit
-   `.env`: the **sign-in screen has a built-in "First-time setup" panel** (shown only when running
-   locally) where they can paste their own Google OAuth and Plaid keys. It writes their local `.env`
-   and auto-generates an `AUTH_SECRET`; they just relaunch to apply. See the next two sections for
+   `.env`: set `AUTH_BYPASS="false"` and the **sign-in screen shows a built-in "First-time setup"
+   panel** (only when running locally) where they can paste their own Google OAuth and Plaid keys.
+   It writes their local `.env` and auto-generates an `AUTH_SECRET`; they just relaunch to apply.
+   See the next two sections for
    where to get those keys.
 
 > The setup panel is **localhost-only** by design — both the panel and its write endpoint refuse any
@@ -364,7 +376,7 @@ and is covered by unit tests.
 
 ```
 prisma/            schema.prisma, migrations, seed.ts
-scripts/           local-db.ts (embedded Postgres runner)
+scripts/           setup.ts (first-run schema), local-db.ts (embedded Postgres runner)
 src/
   app/(auth)/      sign-in & household onboarding
   app/(app)/       dashboard, calendar, transactions, accounts, recurring,
@@ -376,3 +388,24 @@ src/
   components/      AppChrome, CommandPalette, MultiSelect, TransactionModal,
                    Modal, charts, icons
 ```
+
+---
+
+## Support
+
+Moolah is free and self-hosted. If you find it useful and want to support its development, you can
+[**buy me a coffee** ☕](https://buymeacoffee.com/vinnymicale) — entirely optional, and always
+appreciated.
+
+---
+
+## Disclaimer
+
+Moolah was developed with substantial assistance from AI (Anthropic's Claude). It is a personal
+project provided **as-is, without warranty of any kind**, express or implied. You run it at your own
+risk: review the code before trusting it with real financial data, keep your own backups, and
+remember that anything it shows you (projections, "safe to transfer", debt payoff, net worth) is for
+informational purposes only and is **not financial advice**. You are responsible for the security of
+your own deployment, credentials, and Plaid access tokens.
+
+Moolah is released under the [MIT License](LICENSE) — you're free to use, modify, and self-host it.

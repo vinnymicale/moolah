@@ -7,8 +7,10 @@ import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
   Settings, Plus, Menu, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
-  GripVertical, RotateCcw, ChevronsLeft, Keyboard, Search, TrendingDown,
+  GripVertical, RotateCcw, ChevronsLeft, Keyboard, Search, TrendingDown, Coffee,
 } from "lucide-react";
+
+const COFFEE_URL = "https://buymeacoffee.com/vinnymicale";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
@@ -334,12 +336,21 @@ export function AppChrome({
         {!authBypass && (
           <button
             onClick={() => signOut({ callbackUrl: "/signin" })}
-            className={`btn-ghost w-full text-sm ${compact ? "justify-center px-0!" : "justify-start"}`}
+            className={`mb-1 btn-ghost w-full text-sm ${compact ? "justify-center px-0!" : "justify-start"}`}
             title="Sign out"
           >
             <LogOut size={15} /> {!compact && "Sign out"}
           </button>
         )}
+        <a
+          href={COFFEE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`btn-ghost w-full text-sm text-muted ${compact ? "justify-center px-0!" : "justify-start"}`}
+          title="Enjoying Moolah? Buy me a coffee"
+        >
+          <Coffee size={15} /> {!compact && "Buy me a coffee"}
+        </a>
       </div>
     </div>
   );
@@ -447,9 +458,21 @@ function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void 
 }
 
 function Avatar({ user }: { user: { name?: string | null; email?: string | null; image?: string | null } }) {
-  if (user.image) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={user.image} alt="" className="h-8 w-8 rounded-full" />;
+  const [failed, setFailed] = useState(false);
+  if (user.image && !failed) {
+    return (
+      // referrerPolicy="no-referrer" is required for Google profile images
+      // (lh3.googleusercontent.com), which otherwise often fail to load. Fall
+      // back to the initial avatar if the image still can't be fetched.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={user.image}
+        alt=""
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="h-8 w-8 rounded-full object-cover"
+      />
+    );
   }
   const initial = (user.name ?? user.email ?? "?").charAt(0).toUpperCase();
   return (
