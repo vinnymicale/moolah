@@ -21,6 +21,10 @@ model Household {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // AI assistant configuration — stored per household so each family uses their own key.
+  aiProvider   String?  // "anthropic" | "openai" | "gemini"
+  aiApiKey     String?  // user-supplied key, never sent to the browser
+
   users        User[]
   accounts     FinancialAccount[]
   categories   Category[]

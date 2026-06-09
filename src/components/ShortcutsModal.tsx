@@ -3,6 +3,7 @@ import { Modal } from "./Modal";
 const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["⌘", "K"], label: "Search all transactions" },
   { keys: ["n"], label: "Add a transaction" },
+  { keys: ["c"], label: "Open finance assistant" },
   { keys: ["i"], label: "Import a CSV" },
   { keys: ["/"], label: "Focus search (on pages with it)" },
   { keys: ["?"], label: "Show this help" },
