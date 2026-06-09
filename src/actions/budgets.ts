@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 
 const budgetSchema = z.object({
   categoryId: z.string().min(1),
@@ -17,6 +18,7 @@ export type BudgetInput = z.input<typeof budgetSchema>;
 
 /** Create or update a category budget for a given month. A limit of 0 removes it. */
 export async function setBudgetAction(input: BudgetInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const data = budgetSchema.parse(input);
@@ -48,6 +50,7 @@ export type CopyBudgetsInput = z.input<typeof copySchema>;
 
 /** Copy every category limit from one month into another (upserting). */
 export async function copyBudgetsAction(input: CopyBudgetsInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const { fromMonth, toMonth } = copySchema.parse(input);

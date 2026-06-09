@@ -3,6 +3,9 @@ import { getBudgetMonth, getBudgetYear } from "@/lib/queries";
 import { addUTCMonths, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { BudgetsManager } from "./BudgetsManager";
 import { BudgetYearView } from "./BudgetYearView";
+import { DEMO_BUDGETS } from "@/lib/demo-data";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 function localTodayISO(): string {
   const d = new Date();
@@ -14,12 +17,11 @@ export default async function BudgetsPage({
 }: {
   searchParams: Promise<{ m?: string; view?: string; y?: string }>;
 }) {
-  const { householdId } = await requireHousehold();
   const { m, view, y } = await searchParams;
-
   const todayISO = localTodayISO();
 
-  if (view === "year") {
+  if (!DEMO_MODE && view === "year") {
+    const { householdId } = await requireHousehold();
     const year = /^\d{4}$/.test(y ?? "") ? Number(y) : Number(todayISO.slice(0, 4));
     const months = await getBudgetYear(householdId, year);
     return (
@@ -34,7 +36,9 @@ export default async function BudgetsPage({
   const monthISO = isoDay(monthFirst);
   const prevMonthFirst = addUTCMonths(monthFirst, -1);
 
-  const lines = await getBudgetMonth(householdId, monthISO);
+  const lines = DEMO_MODE
+    ? DEMO_BUDGETS
+    : await getBudgetMonth((await requireHousehold()).householdId, monthISO);
 
   return (
     <div className="mx-auto max-w-4xl">

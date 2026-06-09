@@ -2,10 +2,12 @@ import { requireHousehold } from "@/lib/session";
 import { getSavingsGoals } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
 import { GoalsManager } from "./GoalsManager";
+import { DEMO_GOALS } from "@/lib/demo-data";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 export default async function GoalsPage() {
-  const { householdId } = await requireHousehold();
-  const goals = await getSavingsGoals(householdId);
+  const goals = DEMO_MODE ? DEMO_GOALS : await getSavingsGoals((await requireHousehold()).householdId);
 
   return (
     <div className="mx-auto max-w-3xl">

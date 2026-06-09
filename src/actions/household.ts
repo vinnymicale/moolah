@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { isDemoMode } from "@/lib/demo-guard";
 import { createHouseholdForUser, joinHouseholdByCode } from "@/lib/household";
 
 export async function createHouseholdAction(name: string) {
@@ -30,6 +31,7 @@ export async function joinHouseholdAction(code: string) {
 }
 
 export async function updateHouseholdNameAction(name: string) {
+  if (isDemoMode()) return { ok: true as const };
   const session = await auth();
   if (!session?.user?.householdId) return { ok: false as const, error: "No household." };
   await prisma.household.update({
@@ -41,6 +43,7 @@ export async function updateHouseholdNameAction(name: string) {
 }
 
 export async function updateAiConfigAction(provider: string, apiKey: string) {
+  if (isDemoMode()) return { ok: true as const };
   const session = await auth();
   if (!session?.user?.householdId) return { ok: false as const, error: "No household." };
   const validProviders = ["anthropic", "openai", "gemini"];
@@ -58,6 +61,7 @@ export async function updateAiConfigAction(provider: string, apiKey: string) {
 }
 
 export async function clearAiConfigAction() {
+  if (isDemoMode()) return { ok: true as const };
   const session = await auth();
   if (!session?.user?.householdId) return { ok: false as const, error: "No household." };
   await prisma.household.update({

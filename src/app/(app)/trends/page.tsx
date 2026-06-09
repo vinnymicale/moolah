@@ -2,6 +2,9 @@ import { requireHousehold } from "@/lib/session";
 import { computeReports } from "@/lib/reports";
 import { PageHeader, StatCard } from "@/components/ui-bits";
 import { TrendsCharts } from "./TrendsCharts";
+import { getDemoHouseholdId } from "@/lib/demo-session";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 function localTodayISO(): string {
   const d = new Date();
@@ -9,7 +12,9 @@ function localTodayISO(): string {
 }
 
 export default async function TrendsPage() {
-  const { householdId } = await requireHousehold();
+  const householdId = DEMO_MODE
+    ? (await getDemoHouseholdId() ?? "")
+    : (await requireHousehold()).householdId;
   const reports = await computeReports(householdId, localTodayISO());
 
   const latestNet = reports.netWorthSeries.at(-1)?.value ?? 0;

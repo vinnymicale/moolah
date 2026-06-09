@@ -20,6 +20,7 @@ export interface SidebarProps {
   user: { name?: string | null; email?: string | null; image?: string | null };
   householdName: string;
   authBypass: boolean;
+  demoMode?: boolean;
   nav: NavItem[];
   isActive: (href: string) => boolean;
   customized: boolean;
@@ -40,6 +41,7 @@ export function Sidebar({
   user,
   householdName,
   authBypass,
+  demoMode = false,
   nav,
   isActive,
   customized,
@@ -193,15 +195,23 @@ export function Sidebar({
             <LogOut size={15} /> {!compact && "Sign out"}
           </button>
         )}
-        <a
-          href={COFFEE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`btn-ghost w-full text-sm text-muted ${compact ? "justify-center px-0!" : "justify-start"}`}
-          title="Enjoying Moolah? Buy me a coffee"
-        >
-          <Coffee size={15} /> {!compact && "Buy me a coffee"}
-        </a>
+        {!demoMode && (
+          <a
+            href={COFFEE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`btn-ghost w-full text-sm text-muted ${compact ? "justify-center px-0!" : "justify-start"}`}
+            title="Enjoying Moolah? Buy me a coffee"
+          >
+            <Coffee size={15} /> {!compact && "Buy me a coffee"}
+          </a>
+        )}
+        {demoMode && !compact && (
+          <div className="rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-xs text-brand">
+            <p className="font-semibold">Demo mode</p>
+            <p className="text-brand/70">Changes are local only and reset on refresh.</p>
+          </div>
+        )}
       </div>
     </div>
   );

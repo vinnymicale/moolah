@@ -3,10 +3,12 @@ import { getAccounts } from "@/lib/queries";
 import { LIABILITY_TYPES } from "@/lib/account-meta";
 import { PageHeader, EmptyState } from "@/components/ui-bits";
 import { DebtPlanner } from "./DebtPlanner";
+import { DEMO_ACCOUNTS } from "@/lib/demo-data";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 export default async function DebtPage() {
-  const { householdId } = await requireHousehold();
-  const accounts = await getAccounts(householdId);
+  const accounts = DEMO_MODE ? DEMO_ACCOUNTS : await getAccounts((await requireHousehold()).householdId);
   const debts = accounts.filter((a) => LIABILITY_TYPES.includes(a.type) && a.currentBalance > 0);
 
   return (
