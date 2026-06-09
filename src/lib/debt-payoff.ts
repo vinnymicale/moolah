@@ -73,7 +73,7 @@ export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: nu
   // Gap check: if any debt's minimum doesn't cover its monthly interest, the
   // extra payment must cover the combined shortfall. If it does, the simulation
   // automatically routes the gap amount to those debts before applying the rest
-  // to the strategy focus debt — so the user doesn't need to change their minimums.
+  // to the strategy focus debt - so the user doesn't need to change their minimums.
   const firstMonthGaps = active.map((d) => Math.max(0, (d.balance * d.apr) / 100 / 12 - d.minPayment));
   const totalGap = firstMonthGaps.reduce((s, g) => s + g, 0);
   if (totalGap > extra) {
@@ -83,7 +83,7 @@ export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: nu
     const needed = Math.ceil(totalGap - extra);
     return {
       feasible: false,
-      reason: `${underwater.join(", ")} — minimum payment${underwater.length > 1 ? "s don't" : " doesn't"} cover monthly interest. Add at least ${fmt(needed)}/mo more to the extra payment and this will be handled automatically.`,
+      reason: `${underwater.join(", ")} - minimum payment${underwater.length > 1 ? "s don't" : " doesn't"} cover monthly interest. Add at least ${fmt(needed)}/mo more to the extra payment and this will be handled automatically.`,
       months: [],
       perDebt: [],
       totalMonths: 0,
@@ -98,7 +98,7 @@ export function simulatePayoff(debts: DebtInput[], strategy: Strategy, extra: nu
   if (totalMin + extra <= firstMonthInterest) {
     return {
       feasible: false,
-      reason: "Your total monthly payment doesn't cover the interest — the balance would grow. Increase the extra payment.",
+      reason: "Your total monthly payment doesn't cover the interest - the balance would grow. Increase the extra payment.",
       months: [],
       perDebt: [],
       totalMonths: 0,

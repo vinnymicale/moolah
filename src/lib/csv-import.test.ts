@@ -57,7 +57,7 @@ describe("parseDateCell", () => {
   });
 });
 
-describe("parseBankCsv — Discover debit/credit format", () => {
+describe("parseBankCsv - Discover debit/credit format", () => {
   const result = parseBankCsv(DISCOVER);
 
   it("detects the debit/credit format", () => {
@@ -74,7 +74,7 @@ describe("parseBankCsv — Discover debit/credit format", () => {
   });
 });
 
-describe("parseBankCsv — single signed amount format", () => {
+describe("parseBankCsv - single signed amount format", () => {
   const csv = `Date,Description,Amount
 2026-01-10,Coffee Shop,-4.50
 2026-01-11,Paycheck,1500.00`;
@@ -88,7 +88,7 @@ describe("parseBankCsv — single signed amount format", () => {
   });
 });
 
-describe("parseBankCsv — error handling", () => {
+describe("parseBankCsv - error handling", () => {
   it("skips rows with bad dates or no amount", () => {
     const csv = `Transaction Date,Transaction Description,Debit,Credit
 not-a-date,Bad row,$5.00 ,0

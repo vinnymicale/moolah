@@ -22,7 +22,7 @@ async function main() {
   writeFileSync(file, JSON.stringify(payload));
 
   console.log(`\nWrote ${file}`);
-  console.log(`(${total} rows across ${payload.tables.length} tables — includes Plaid access tokens.)`);
+  console.log(`(${total} rows across ${payload.tables.length} tables - includes Plaid access tokens.)`);
   console.log("Keep this file private and copy it somewhere safe; it can restore your linked banks.");
 }
 

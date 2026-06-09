@@ -193,7 +193,7 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
 
-      // Use authorized_date when available — it's when the user actually made
+      // Use authorized_date when available - it's when the user actually made
       // the purchase, vs. date which is the posting date for settled txns.
       const txnDate = parseISODay(txn.authorized_date ?? txn.date);
       const description = txn.merchant_name ?? txn.name;

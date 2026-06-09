@@ -45,7 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             async authorize(credentials) {
               const email = String(credentials?.email || "demo@example.com").toLowerCase();
               // When bypass is on the auto-signin route always uses the local
-              // user email — let it through regardless of the allow-list.
+              // user email - let it through regardless of the allow-list.
               const isBypassUser =
                 process.env.AUTH_BYPASS === "true" &&
                 email === (process.env.LOCAL_USER_EMAIL?.trim() || "local@moolah.local").toLowerCase();
@@ -74,7 +74,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const uid = token.uid as string | undefined;
       // Always resolve the current household from the DB so the session never
       // goes stale (e.g. right after creating or joining a household). This is
-      // a single indexed lookup per session check — negligible for this app.
+      // a single indexed lookup per session check - negligible for this app.
       if (uid) {
         const dbUser = await prisma.user.findUnique({
           where: { id: uid },

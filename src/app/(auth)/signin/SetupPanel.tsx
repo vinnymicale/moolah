@@ -54,7 +54,7 @@ export function SetupPanel({
         className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-surface2"
       >
         <Settings size={16} className="shrink-0 text-muted" />
-        <span className="flex-1">{plaidOnly ? "Plaid bank sync setup" : "First-time setup — Plaid bank sync"}</span>
+        <span className="flex-1">{plaidOnly ? "Plaid bank sync setup" : "First-time setup - Plaid bank sync"}</span>
         <StatusPill ok={status.plaidConfigured} label="Plaid" />
         <ChevronDown size={18} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -67,7 +67,7 @@ export function SetupPanel({
                 <Check size={16} /> Saved to .env.
               </p>
               <p className="text-muted">
-                Restart Moolah for the changes to take effect — <strong className="text-text">close the app
+                Restart Moolah for the changes to take effect - <strong className="text-text">close the app
                 window and reopen it</strong> (or restart the server). Your new sign-in / Plaid options will
                 appear then.
               </p>
@@ -75,7 +75,7 @@ export function SetupPanel({
           ) : (
             <div className="space-y-5 text-sm">
               <p className="text-xs text-muted">
-                Paste your keys below — blank fields keep whatever&apos;s already set. Saved to your local{" "}
+                Paste your keys below - blank fields keep whatever&apos;s already set. Saved to your local{" "}
                 <code className="rounded bg-surface2 px-1 text-text">.env</code>; nothing leaves your machine.
               </p>
 
@@ -110,7 +110,7 @@ export function SetupPanel({
                   </h3>
                   <input
                     className="input"
-                    placeholder="you@gmail.com, friend@gmail.com — leave blank to allow anyone"
+                    placeholder="you@gmail.com, friend@gmail.com - leave blank to allow anyone"
                     value={emails}
                     onChange={(e) => setEmails(e.target.value)}
                   />

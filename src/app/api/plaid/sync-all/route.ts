@@ -5,14 +5,14 @@ import { syncPlaidItem } from "@/lib/plaid-sync";
 
 // "Sync on visit" throttle: only re-sync an item that hasn't synced within this
 // window, so opening (or reloading) the app repeatedly doesn't hammer Plaid.
-// Tune to taste — bank data rarely changes more than a few times a day.
+// Tune to taste - bank data rarely changes more than a few times a day.
 const STALE_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Syncs every linked bank for the signed-in household that is "stale" (never
  * synced, or last synced longer ago than STALE_MS). Best-effort: one item
  * failing doesn't stop the others. Called in the background from the app on
- * load — see AutoPlaidSync.
+ * load - see AutoPlaidSync.
  */
 export async function POST() {
   const session = await auth();

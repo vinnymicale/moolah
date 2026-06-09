@@ -39,7 +39,7 @@ export function MilestonesBanner({ milestones }: { milestones: Milestone[] }) {
     });
   };
 
-  // Avoid SSR mismatch — render nothing until localStorage is read.
+  // Avoid SSR mismatch - render nothing until localStorage is read.
   if (!hydrated) return null;
 
   const visible = milestones.filter((m) => !dismissed.has(m.id));

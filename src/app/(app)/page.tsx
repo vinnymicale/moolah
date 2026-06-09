@@ -90,7 +90,7 @@ export default async function DashboardPage() {
                       <p className="text-xs text-muted">{formatDay(u.date)}</p>
                     </div>
                     <span className={`shrink-0 tabular-nums text-sm font-semibold ${u.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                      {u.type === "INCOME" ? "+" : "−"}
+                      {u.type === "INCOME" ? "+" : "-"}
                       {formatUSD(u.amount)}
                     </span>
                   </li>
@@ -206,7 +206,7 @@ export default async function DashboardPage() {
                         </p>
                       </div>
                       <span className="shrink-0 tabular-nums text-sm font-semibold text-expense">
-                        −{formatUSD(m.amount)}
+                        -{formatUSD(m.amount)}
                       </span>
                     </li>
                   );
@@ -293,7 +293,7 @@ export default async function DashboardPage() {
                       <p className="text-xs text-muted">{formatDay(t.date)}{cat ? ` · ${cat.name}` : ""}</p>
                     </div>
                     <span className={`shrink-0 tabular-nums text-sm font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                      {t.type === "INCOME" ? "+" : "−"}
+                      {t.type === "INCOME" ? "+" : "-"}
                       {formatUSD(t.amount)}
                     </span>
                   </li>
@@ -329,7 +329,7 @@ export default async function DashboardPage() {
         />
         <StatCard
           label="Savings rate"
-          value={savingsRate === null ? "—" : `${savingsRate}%`}
+          value={savingsRate === null ? "-" : `${savingsRate}%`}
           tone={savingsRate !== null && savingsRate >= 0 ? "income" : "expense"}
           hint={`Net ${formatUSD(net)}`}
         />

@@ -30,7 +30,7 @@ export interface CalendarEvent {
   /** True when projected from a recurring rule and not yet materialised. */
   isVirtual: boolean;
   /**
-   * True for credit-card payment credits — these reduce the CC balance but are
+   * True for credit-card payment credits - these reduce the CC balance but are
    * not real income (the actual expenses were already recorded as CC purchases).
    * Excluded from monthIncome / filtered totals.
    */
@@ -179,7 +179,7 @@ export async function getCalendarMonth(
       accountId: t.accountId,
       cleared: t.cleared,
       isVirtual: false,
-      // Credit-card payment credits are not real income — they reduce the CC
+      // Credit-card payment credits are not real income - they reduce the CC
       // balance. The corresponding checking debit is the true cash outflow.
       isTransfer: acct?.type === "CREDIT_CARD" && t.type === "INCOME",
       recurringRuleId: t.recurringRuleId,
@@ -190,7 +190,7 @@ export async function getCalendarMonth(
 
   // Track materialised dates per rule with a 4-day proximity window so that
   // a virtual occurrence on (e.g.) the 7th is suppressed when the real payment
-  // landed on the 8th — common with bank processing delays.
+  // landed on the 8th - common with bank processing delays.
   const materialisedByRule = new Map<string, number[]>();
   for (const t of txnRows) {
     if (t.recurringRuleId) {
@@ -279,7 +279,7 @@ export async function getCalendarMonth(
     if (!gridIso.has(e.date)) continue;
     (eventsByDay[e.date] ??= []).push(e);
     if (toUTCDay(e.date).getUTCMonth() === visibleMonth) {
-      // Credit-card payment credits (isTransfer) are not real income — skip them.
+      // Credit-card payment credits (isTransfer) are not real income - skip them.
       if (e.type === "INCOME" && !e.isTransfer) monthIncome += e.amount;
       else if (e.type === "EXPENSE") monthExpense += e.amount;
     }
@@ -289,7 +289,7 @@ export async function getCalendarMonth(
     list.sort((a, b) => (a.type === b.type ? b.amount - a.amount : a.type === "INCOME" ? -1 : 1));
   }
 
-  // Credit card payment due dates — show on the calendar for any account whose
+  // Credit card payment due dates - show on the calendar for any account whose
   // nextPaymentDueDate falls within the visible grid.
   const ccDueByDay: Record<string, CcDueEvent[]> = {};
   for (const acct of accounts) {

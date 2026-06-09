@@ -36,7 +36,7 @@ function key(type: ImportType | TxnType, dateISO: string, cents: number): string
 /**
  * Annotate parsed rows with duplicate detection (against existing concrete
  * transactions and projected recurring occurrences) and a suggested category.
- * Pure read — does not write anything.
+ * Pure read - does not write anything.
  */
 export async function analyzeImportAction(
   rowsInput: ParsedRowInput[],

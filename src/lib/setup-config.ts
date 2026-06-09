@@ -1,8 +1,8 @@
 // First-run setup: read the current credential status and write the .env file
 // from the in-app setup screen, so users don't have to edit .env by hand.
 //
-// This only ever runs locally — the API route and the sign-in screen both gate
-// it behind isLocalHost() — because it writes secrets to disk and would be
+// This only ever runs locally - the API route and the sign-in screen both gate
+// it behind isLocalHost() - because it writes secrets to disk and would be
 // dangerous to expose on a deployment.
 
 import { promises as fs } from "node:fs";

@@ -19,7 +19,7 @@ const accountSchema = z.object({
   includeInNetWorth: z.boolean().optional().default(true),
   includeInDebtPlanner: z.boolean().optional().default(true),
   color: z.string().max(20).optional(),
-  // Debt-only — sent for liability accounts to power the payoff planner.
+  // Debt-only - sent for liability accounts to power the payoff planner.
   interestRate: z.coerce.number().min(0).max(100).optional().nullable(),
   minimumPayment: z.coerce.number().min(0).finite().optional().nullable(),
 });

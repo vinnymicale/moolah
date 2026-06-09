@@ -1,7 +1,7 @@
 /**
  * One-time cleanup: removes duplicate FinancialAccounts and stale PlaidItems
  * that were created when re-linking accounts via the full Plaid Link flow
- * (instead of update mode). Safe to run multiple times — idempotent.
+ * (instead of update mode). Safe to run multiple times - idempotent.
  *
  * Strategy:
  *   1. Find FinancialAccounts that share the same (householdId, name).

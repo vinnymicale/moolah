@@ -62,10 +62,10 @@ function CategoryMoMTable({ current, last }: { current: CategorySlice[]; last: C
                   </Link>
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums text-muted">
-                  {r.lastVal > 0 ? formatUSD(r.lastVal) : "—"}
+                  {r.lastVal > 0 ? formatUSD(r.lastVal) : "-"}
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums font-medium">
-                  {r.thisVal > 0 ? formatUSD(r.thisVal) : "—"}
+                  {r.thisVal > 0 ? formatUSD(r.thisVal) : "-"}
                 </td>
                 <td className={`py-2 text-right tabular-nums ${changeColor}`}>
                   <span className="flex items-center justify-end gap-1">
@@ -181,7 +181,7 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
 
       {(categorySpending.length > 0 || categoryLastMonth.length > 0) && (
         <div className="lg:col-span-2">
-          <ChartCard title="Category spending — this month vs. last month">
+          <ChartCard title="Category spending - this month vs. last month">
             <CategoryMoMTable current={categorySpending} last={categoryLastMonth} />
           </ChartCard>
         </div>

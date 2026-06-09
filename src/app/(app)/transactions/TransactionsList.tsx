@@ -16,25 +16,13 @@ import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
 } from "@/actions/transactions";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
+import { ManageFilters } from "./ManageFilters";
+import {
+  csvField, endOfMonthDay, toSet,
+  type SavedFilter, type StatusOpt, type TxnTypeOpt,
+} from "./transactions-utils";
 
 const SAVED_FILTERS_KEY = "txnSavedFilters";
-
-type TxnTypeOpt = "INCOME" | "EXPENSE";
-type StatusOpt = "CLEARED" | "PENDING";
-
-interface SavedFilter {
-  name: string;
-  search: string;
-  types: TxnTypeOpt[];
-  statuses: StatusOpt[];
-  cats: string[];
-  accts: string[];
-}
-
-/** Split a comma-separated query value into a Set of non-empty tokens. */
-function toSet(csv: string): Set<string> {
-  return new Set(csv.split(",").map((s) => s.trim()).filter(Boolean));
-}
 
 export function TransactionsList({
   transactions,
@@ -218,11 +206,11 @@ export function TransactionsList({
       t.date,
       t.type,
       String(t.amount),
-      csv(t.description),
-      csv(t.categoryId ? catById.get(t.categoryId)?.name ?? "" : ""),
-      csv(t.accountId ? acctById.get(t.accountId)?.name ?? "" : ""),
+      csvField(t.description),
+      csvField(t.categoryId ? catById.get(t.categoryId)?.name ?? "" : ""),
+      csvField(t.accountId ? acctById.get(t.accountId)?.name ?? "" : ""),
       t.cleared ? "yes" : "no",
-      csv(t.note ?? ""),
+      csvField(t.note ?? ""),
     ]);
     const content = [header, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([content], { type: "text/csv" });
@@ -426,7 +414,7 @@ export function TransactionsList({
           </button>
           <span className="text-muted">{filtered.length} transactions</span>
           <span className="text-income">+{formatUSD(income)}</span>
-          <span className="text-expense">−{formatUSD(expense)}</span>
+          <span className="text-expense">-{formatUSD(expense)}</span>
           <span className="font-medium">Net {formatUSD(income - expense)}</span>
         </div>
       )}
@@ -497,7 +485,7 @@ export function TransactionsList({
                     </p>
                   </div>
                   <span className={`shrink-0 tabular-nums font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                    {t.type === "INCOME" ? "+" : "−"}
+                    {t.type === "INCOME" ? "+" : "-"}
                     {formatUSD(t.amount)}
                   </span>
                 </button>
@@ -509,47 +497,6 @@ export function TransactionsList({
 
       {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} />}
       {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} />}
-    </div>
-  );
-}
-
-function csv(s: string): string {
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-/** Last day-of-month (zero-padded) for an ISO month like "2026-06-01". */
-function endOfMonthDay(monthISO: string): string {
-  const [y, m] = monthISO.slice(0, 7).split("-").map(Number);
-  return String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0");
-}
-
-/** Small popover to delete saved filters. */
-function ManageFilters({ filters, onDelete }: { filters: SavedFilter[]; onDelete: (name: string) => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button onClick={() => setOpen((o) => !o)} className="btn-ghost h-9 w-9 !p-0" title="Manage saved filters" aria-label="Manage saved filters">
-        <Trash2 size={14} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-line bg-surface p-1 shadow-lg">
-            <p className="px-2 py-1 text-xs text-muted">Delete a saved filter</p>
-            {filters.map((f) => (
-              <button
-                key={f.name}
-                onClick={() => { onDelete(f.name); if (filters.length === 1) setOpen(false); }}
-                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface2"
-              >
-                <span className="truncate">{f.name}</span>
-                <Trash2 size={13} className="shrink-0 text-expense" />
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 }

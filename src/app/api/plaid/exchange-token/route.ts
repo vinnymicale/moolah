@@ -55,14 +55,14 @@ export async function POST(req: NextRequest) {
         const instRes = await plaidClient.institutionsGetById({ institution_id: institutionId, country_codes: ["US" as never] });
         institutionName = instRes.data.institution.name;
       } catch {
-        // Non-fatal — institution name is cosmetic.
+        // Non-fatal - institution name is cosmetic.
       }
     }
 
     // Fetch the accounts attached to this item.
     const accountsRes = await plaidClient.accountsGet({ access_token });
 
-    // Upsert the PlaidItem — update mode re-links return the same item_id.
+    // Upsert the PlaidItem - update mode re-links return the same item_id.
     const plaidItem = await prisma.plaidItem.upsert({
       where: { itemId: item_id },
       create: {
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // First sync — pull all available transactions.
+    // First sync - pull all available transactions.
     const syncResult = await syncPlaidItem(plaidItem.id);
 
     return NextResponse.json({ ok: true, institutionName, ...syncResult });

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     user = created;
   }
 
-  // Ensure household exists — seeds default categories too.
+  // Ensure household exists - seeds default categories too.
   if (!user.householdId) {
     await createHouseholdForUser(user.id, "My Household");
   }

@@ -63,6 +63,6 @@ export function formatUSDWhole(value: MoneyInput): string {
 /** Signed format with an explicit leading +/- (used for transaction deltas). */
 export function formatSigned(value: MoneyInput): string {
   const n = toNumber(value);
-  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
   return `${sign}${usd.format(Math.abs(n))}`;
 }
