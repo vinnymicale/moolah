@@ -40,6 +40,34 @@ export async function updateHouseholdNameAction(name: string) {
   return { ok: true as const };
 }
 
+export async function updateAiConfigAction(provider: string, apiKey: string) {
+  const session = await auth();
+  if (!session?.user?.householdId) return { ok: false as const, error: "No household." };
+  const validProviders = ["anthropic", "openai", "gemini"];
+  if (!validProviders.includes(provider)) return { ok: false as const, error: "Invalid provider." };
+  await prisma.household.update({
+    where: { id: session.user.householdId },
+    data: {
+      aiProvider: provider,
+      // Only update the key if a non-empty value was supplied (allow updating provider without clearing key).
+      ...(apiKey.trim() ? { aiApiKey: apiKey.trim() } : {}),
+    },
+  });
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+export async function clearAiConfigAction() {
+  const session = await auth();
+  if (!session?.user?.householdId) return { ok: false as const, error: "No household." };
+  await prisma.household.update({
+    where: { id: session.user.householdId },
+    data: { aiProvider: null, aiApiKey: null },
+  });
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
 /** Leave the current household (data stays; user is detached). */
 export async function leaveHouseholdAction() {
   const session = await auth();

@@ -5,7 +5,7 @@ import { getAccounts, getCategories } from "@/lib/queries";
 import { getSetupStatus, isLocalHost } from "@/lib/setup-config";
 import { PageHeader } from "@/components/ui-bits";
 import { SetupPanel } from "@/app/(auth)/signin/SetupPanel";
-import { HouseholdNameForm, InviteCode, ExportData, BackupData } from "./SettingsForm";
+import { HouseholdNameForm, InviteCode, ExportData, BackupData, AiConfigForm } from "./SettingsForm";
 
 export default async function SettingsPage() {
   const { householdId } = await requireHousehold();
@@ -16,7 +16,13 @@ export default async function SettingsPage() {
   const [household, accounts, categories] = await Promise.all([
     prisma.household.findUnique({
       where: { id: householdId },
-      include: { users: { select: { id: true, name: true, email: true, image: true } } },
+      select: {
+        id: true, name: true, inviteCode: true,
+        aiProvider: true,
+        // Avoid leaking the actual key to the browser; just signal whether one is set.
+        aiApiKey: true,
+        users: { select: { id: true, name: true, email: true, image: true } },
+      },
     }),
     getAccounts(householdId),
     getCategories(householdId),
@@ -68,6 +74,17 @@ export default async function SettingsPage() {
           pointing at this JSON. Your accounts and linked banks come back with no re-linking (it only
           restores into an empty database).
         </p>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Finance assistant</h2>
+        <p className="mb-3 text-sm text-muted">
+          Connect your own AI account to enable the chat assistant. Your key is stored only in this household&apos;s database and never shared.
+        </p>
+        <AiConfigForm
+          currentProvider={household.aiProvider}
+          hasKey={!!household.aiApiKey}
+        />
       </section>
 
       <section className="card p-5">

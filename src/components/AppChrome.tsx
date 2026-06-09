@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Plus, Menu, FileSpreadsheet, Search } from "lucide-react";
+import { Plus, Menu, FileSpreadsheet, Search, Bot } from "lucide-react";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsModal } from "./ShortcutsModal";
+import { ChatPanel } from "./ChatPanel";
 import { Sidebar } from "./Sidebar";
 import {
   NAV_ORDER_KEY, NAV_COLLAPSED_KEY, DEFAULT_ORDER, NAV_BY_HREF, mergeNavOrder, type NavItem,
@@ -45,6 +46,7 @@ export function AppChrome({
   const [navOrder, persistOrder] = usePersistentState<string[]>(NAV_ORDER_KEY, DEFAULT_ORDER);
   const [collapsed, setCollapsed] = usePersistentState(NAV_COLLAPSED_KEY, false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const toggleCollapsed = () => setCollapsed(!collapsed);
 
@@ -61,6 +63,7 @@ export function AppChrome({
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       if (e.key === "n") { e.preventDefault(); setAddOpen(true); }
+      else if (e.key === "c") { e.preventDefault(); setChatOpen((v) => !v); }
       else if (e.key === "i") { e.preventDefault(); fileInputRef.current?.click(); }
       else if (e.key === "?") { e.preventDefault(); setShortcutsOpen(true); }
       else if (e.key === "/") {
@@ -226,6 +229,19 @@ export function AppChrome({
       />
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+
+      {/* Floating chat button */}
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-lg transition-transform hover:scale-105 active:scale-95"
+          title="Finance assistant (C)"
+          aria-label="Open finance assistant"
+        >
+          <Bot size={22} />
+        </button>
+      )}
 
       {/* Drag-to-import overlay */}
       {dragging && (
