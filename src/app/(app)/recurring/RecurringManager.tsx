@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2 } from "lucide-react";
+import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { describeFrequency } from "@/lib/recurrence";
@@ -10,7 +10,8 @@ import { useIsHydrated, usePersistentState } from "@/lib/usePersistentState";
 import { Amount } from "@/components/Amount";
 import type { AccountDTO, CategoryDTO, RecurringDTO, RecurringSuggestion } from "@/lib/queries";
 import {
-  createRecurringAction, updateRecurringAction, deleteRecurringAction, type RecurringInput,
+  createRecurringAction, updateRecurringAction, deleteRecurringAction,
+  linkSuggestionToRuleAction, type RecurringInput,
 } from "@/actions/recurring";
 import type { Frequency, TxnType } from "@/generated/prisma/enums";
 
@@ -62,6 +63,7 @@ export function RecurringManager({
       {visibleSuggestions.length > 0 && (
         <SuggestionsPanel
           suggestions={visibleSuggestions}
+          rules={rules}
           catById={catById}
           onReview={(s) => setPrefill(s)}
           onDismiss={dismiss}
@@ -107,11 +109,13 @@ export function RecurringManager({
 
 function SuggestionsPanel({
   suggestions,
+  rules,
   catById,
   onReview,
   onDismiss,
 }: {
   suggestions: RecurringSuggestion[];
+  rules: RecurringDTO[];
   catById: Map<string, CategoryDTO>;
   onReview: (s: RecurringSuggestion) => void;
   onDismiss: (key: string) => void;
@@ -125,7 +129,14 @@ function SuggestionsPanel({
       </div>
       <ul className="divide-y divide-line">
         {suggestions.map((s) => (
-          <SuggestionRow key={s.key} s={s} cat={s.categoryId ? catById.get(s.categoryId) : undefined} onReview={onReview} onDismiss={onDismiss} />
+          <SuggestionRow
+            key={s.key}
+            s={s}
+            rules={rules}
+            cat={s.categoryId ? catById.get(s.categoryId) : undefined}
+            onReview={onReview}
+            onDismiss={onDismiss}
+          />
         ))}
       </ul>
     </div>
@@ -134,17 +145,23 @@ function SuggestionsPanel({
 
 function SuggestionRow({
   s,
+  rules,
   cat,
   onReview,
   onDismiss,
 }: {
   s: RecurringSuggestion;
+  rules: RecurringDTO[];
   cat?: CategoryDTO;
   onReview: (s: RecurringSuggestion) => void;
   onDismiss: (key: string) => void;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+
+  // Only same-type rules can plausibly be the same series.
+  const linkableRules = rules.filter((r) => r.type === s.type);
 
   const quickAdd = () =>
     start(async () => {
@@ -165,28 +182,78 @@ function SuggestionRow({
       if (!res.ok) setError(res.error);
     });
 
+  const linkTo = (ruleId: string) =>
+    start(async () => {
+      setError(null);
+      const res = await linkSuggestionToRuleAction(ruleId, s.key);
+      if (!res.ok) setError(res.error);
+      // On success the page revalidates: the matched transactions are now linked,
+      // so this suggestion drops out on its own.
+    });
+
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
-        <CategoryIcon name={cat?.icon ?? "repeat"} size={16} />
-      </span>
-      <button onClick={() => onReview(s)} className="min-w-0 flex-1 text-left" title="Review & edit before adding">
-        <p className="truncate font-medium">{s.description}</p>
-        <p className="truncate text-xs text-muted">
-          Seen {s.count}× · {s.cadence}
-          {cat ? ` · ${cat.name}` : ""}
-        </p>
-        {error && <p className="text-xs text-expense">{error}</p>}
-      </button>
-      <Amount type={s.type} amount={s.amount} className="shrink-0 font-semibold" />
-      <div className="flex shrink-0 items-center gap-1">
-        <button onClick={quickAdd} disabled={pending} className="btn-primary h-8 text-xs" title="Add as recurring">
-          {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Add
+    <li className="px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
+          <CategoryIcon name={cat?.icon ?? "repeat"} size={16} />
+        </span>
+        <button onClick={() => onReview(s)} className="min-w-0 flex-1 text-left" title="Review & edit before adding">
+          <p className="truncate font-medium">{s.description}</p>
+          <p className="truncate text-xs text-muted">
+            Seen {s.count}× · {s.cadence}
+            {cat ? ` · ${cat.name}` : ""}
+          </p>
         </button>
-        <button onClick={() => onDismiss(s.key)} className="btn-ghost h-8 w-8 !p-0" title="Dismiss" aria-label="Dismiss suggestion">
-          <X size={15} />
-        </button>
+        <Amount type={s.type} amount={s.amount} className="shrink-0 font-semibold" />
+        <div className="flex shrink-0 items-center gap-1">
+          <button onClick={quickAdd} disabled={pending} className="btn-primary h-8 text-xs" title="Add as recurring">
+            {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Add
+          </button>
+          {linkableRules.length > 0 && (
+            <button
+              onClick={() => setLinking((v) => !v)}
+              disabled={pending}
+              className={`btn-ghost h-8 w-8 p-0! ${linking ? "text-brand" : ""}`}
+              title="Already a recurring item? Link it to that rule"
+              aria-label="Link to an existing recurring rule"
+            >
+              <Link2 size={15} />
+            </button>
+          )}
+          <button onClick={() => onDismiss(s.key)} className="btn-ghost h-8 w-8 p-0!" title="Dismiss" aria-label="Dismiss suggestion">
+            <X size={15} />
+          </button>
+        </div>
       </div>
+
+      {linking && linkableRules.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-surface2 px-3 py-2">
+          <span className="text-xs text-muted">Already tracked by:</span>
+          <select
+            className="input h-8 w-auto text-xs"
+            defaultValue=""
+            disabled={pending}
+            aria-label="Choose the existing recurring rule"
+            onChange={(e) => { if (e.target.value) linkTo(e.target.value); }}
+          >
+            <option value="" disabled>Choose a rule…</option>
+            {linkableRules.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.description} · {describeFrequency(r.frequency, r.interval)}
+              </option>
+            ))}
+          </select>
+          {pending && <Loader2 size={14} className="animate-spin text-muted" />}
+          <button onClick={() => setLinking(false)} disabled={pending} className="btn-ghost h-8 text-xs">
+            Cancel
+          </button>
+          <p className="w-full text-[11px] text-muted">
+            Links the {s.count} matching transactions to that rule so this stops being suggested.
+          </p>
+        </div>
+      )}
+
+      {error && <p className="mt-1 text-xs text-expense">{error}</p>}
     </li>
   );
 }
