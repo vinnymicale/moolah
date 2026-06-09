@@ -1,7 +1,7 @@
 // Full-database backup / restore as a single JSON payload.
 //
-// The export dumps every row of every table in the public schema — including
-// the PlaidItem access tokens — so a restore reconstructs the app exactly,
+// The export dumps every row of every table in the public schema - including
+// the PlaidItem access tokens - so a restore reconstructs the app exactly,
 // keeping your linked banks WITHOUT re-linking (no new, billed Plaid items).
 //
 // Uses a raw pg connection (not Prisma) so it's schema-agnostic: new tables are
@@ -10,7 +10,7 @@
 
 import { Client } from "pg";
 
-// Prisma's migration bookkeeping table — not part of the app's data.
+// Prisma's migration bookkeeping table - not part of the app's data.
 const EXCLUDE = new Set(["_prisma_migrations"]);
 
 export interface BackupTable {

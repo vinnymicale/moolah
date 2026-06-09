@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { exportAllData, backupStamp } from "@/lib/backup";
 
 // Full-database backup download. Returns a single JSON file containing every
-// table — including the Plaid access tokens — so it can be restored on another
+// table - including the Plaid access tokens - so it can be restored on another
 // machine without re-linking banks. Gated behind a signed-in household member.
 export async function GET() {
   const session = await auth();

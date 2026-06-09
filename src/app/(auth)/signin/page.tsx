@@ -6,7 +6,7 @@ import { SignInForm } from "./SignInForm";
 import { SetupPanel } from "./SetupPanel";
 
 export default async function SignInPage() {
-  // When bypass is on there's no manual sign-in — hand off to auto-signin.
+  // When bypass is on there's no manual sign-in - hand off to auto-signin.
   if (process.env.AUTH_BYPASS === "true") redirect("/api/auth/auto-signin");
 
   const session = await auth();
@@ -16,7 +16,7 @@ export default async function SignInPage() {
   // Pre-fill the first allowed email so dev login works out of the box.
   const defaultDevEmail = process.env.ALLOWED_EMAILS?.split(",")[0]?.trim() || "";
 
-  // First-time setup panel — only when running locally and Plaid isn't configured yet.
+  // First-time setup panel - only when running locally and Plaid isn't configured yet.
   const host = (await headers()).get("host");
   const status = getSetupStatus();
   const showSetup = isLocalHost(host) && !status.plaidConfigured;

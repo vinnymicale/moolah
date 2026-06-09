@@ -263,7 +263,7 @@ export async function materializeOccurrenceAction(ruleId: string, dateISO: strin
 }
 
 // ---------------------------------------------------------------------------
-// Global search — queries the entire transaction history (all accounts, all
+// Global search - queries the entire transaction history (all accounts, all
 // time) by description/note text, with an optional amount match. Drives the
 // ⌘K command palette.
 // ---------------------------------------------------------------------------

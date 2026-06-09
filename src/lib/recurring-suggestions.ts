@@ -63,7 +63,7 @@ function matchTokens(desc: string): string[] {
 /**
  * Heuristic: do two descriptions likely refer to the same merchant/payer even
  * when worded differently? True when they share a distinctive token, or when a
- * longer token of one appears inside the other's concatenated form — so
+ * longer token of one appears inside the other's concatenated form - so
  * "GOOGLE *YOUTUBE" matches "YouTube Premium" and "PRIVATEINTERNET" matches
  * "Private Internet Access (VPN)".
  */

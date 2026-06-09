@@ -1,4 +1,4 @@
-// DELETE — disconnect a bank. Calls Plaid item/remove and cleans up local rows.
+// DELETE - disconnect a bank. Calls Plaid item/remove and cleans up local rows.
 // Associated FinancialAccounts and their transactions are left intact so
 // historical data is preserved; only the Plaid link is removed.
 
@@ -25,7 +25,7 @@ export async function DELETE(
     // Tell Plaid to revoke the access token.
     await plaidClient.itemRemove({ access_token: item.accessToken });
   } catch {
-    // Non-fatal — the item may already be removed on Plaid's side.
+    // Non-fatal - the item may already be removed on Plaid's side.
   }
 
   // Remove the PlaidItem (cascades to PlaidLinkedAccount via FK).

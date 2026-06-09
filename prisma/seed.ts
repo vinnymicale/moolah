@@ -163,7 +163,7 @@ async function main() {
     ].map((t) => ({ ...t, date: day(t.date.getUTCDate(), -1) })),
   });
 
-  // A repeating charge the user never turned into a rule — the Recurring page's
+  // A repeating charge the user never turned into a rule - the Recurring page's
   // detector (getRecurringSuggestions) spots it and suggests creating a rule.
   await prisma.transaction.createMany({
     data: [1, 2, 3, 4].map((k) => ({

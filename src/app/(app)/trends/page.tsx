@@ -23,12 +23,12 @@ export default async function TrendsPage() {
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <StatCard
           label="Net worth (12-mo change)"
-          value={`${change >= 0 ? "+" : "−"}$${Math.abs(Math.round(change)).toLocaleString()}`}
+          value={`${change >= 0 ? "+" : "-"}$${Math.abs(Math.round(change)).toLocaleString()}`}
           tone={change >= 0 ? "income" : "expense"}
         />
         <StatCard
           label="Savings rate (this month)"
-          value={reports.savingsRate === null ? "—" : `${reports.savingsRate}%`}
+          value={reports.savingsRate === null ? "-" : `${reports.savingsRate}%`}
           tone={reports.savingsRate !== null && reports.savingsRate >= 0 ? "income" : "expense"}
         />
         <StatCard

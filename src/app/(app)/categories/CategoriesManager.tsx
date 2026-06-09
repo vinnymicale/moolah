@@ -56,7 +56,7 @@ function Group({ title, items, onEdit }: { title: string; items: CategoryDTO[]; 
                 <CategoryIcon name={c.icon} size={16} />
               </span>
               <span className="flex-1 truncate text-sm font-medium">{c.name}</span>
-              <button onClick={() => onEdit(c)} className="btn-ghost h-7 w-7 !p-0" title="Edit">
+              <button onClick={() => onEdit(c)} className="btn-ghost h-7 w-7 p-0!" title="Edit">
                 <Pencil size={13} />
               </button>
             </li>

@@ -1,5 +1,5 @@
 // Derives celebratory "milestone" moments from current financial state. These
-// are intentionally stateless — each milestone has a stable id so the UI can
+// are intentionally stateless - each milestone has a stable id so the UI can
 // remember (in localStorage) which ones the user has already dismissed.
 
 import type { SavingsGoalDTO } from "@/lib/queries";
@@ -65,7 +65,7 @@ export function computeMilestones({
       id: `savings-${new Date().getFullYear()}-${new Date().getMonth() + 1}-${savingsRate >= 50 ? "50" : savingsRate >= 30 ? "30" : "20"}`,
       kind: "savings",
       title: `${savingsRate}% savings rate this month`,
-      detail: `You're keeping ${savingsRate}% of your income this month — that's well above average.`,
+      detail: `You're keeping ${savingsRate}% of your income this month - that's well above average.`,
     });
   }
 

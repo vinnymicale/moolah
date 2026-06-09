@@ -55,7 +55,7 @@ export default async function SettingsPage() {
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Back up everything</h2>
         <p className="mb-3 text-sm text-muted">
-          Download a full backup — all your data <em>and</em> your linked bank connections — as one
+          Download a full backup - all your data <em>and</em> your linked bank connections - as one
           JSON file. Restore it on a new machine to keep your banks without re-linking. Keep the file
           private: it contains your bank access tokens.
         </p>
@@ -84,7 +84,7 @@ export default async function SettingsPage() {
                 </div>
               )}
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{u.name ?? "—"}</p>
+                <p className="truncate text-sm font-medium">{u.name ?? "-"}</p>
                 <p className="truncate text-xs text-muted">{u.email}</p>
               </div>
             </li>

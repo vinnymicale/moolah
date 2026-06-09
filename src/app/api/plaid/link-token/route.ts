@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     let linkTokenParams: Parameters<typeof plaidClient.linkTokenCreate>[0];
 
     if (body.itemId) {
-      // Update mode — re-authenticate an existing connection without creating a new item.
+      // Update mode - re-authenticate an existing connection without creating a new item.
       const item = await prisma.plaidItem.findFirst({
         where: { id: body.itemId, householdId: user.householdId },
       });
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
         access_token: item.accessToken,
       };
     } else {
-      // Fresh link — connect a new bank.
+      // Fresh link - connect a new bank.
       linkTokenParams = {
         user: { client_user_id: user.householdId },
         client_name: "Moolah",

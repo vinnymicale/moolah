@@ -11,7 +11,7 @@ let fired = false;
 /**
  * Fires a background "sync all stale banks" when the app loads, then refreshes
  * the route if anything actually changed. Renders nothing. Mounted once in the
- * app layout, so it runs on visit/reload — not on every client-side navigation.
+ * app layout, so it runs on visit/reload - not on every client-side navigation.
  */
 export function AutoPlaidSync() {
   const router = useRouter();

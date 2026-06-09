@@ -10,7 +10,7 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=flat&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/vinnymicale)
 
 > **AI disclaimer:** Moolah was built with help from AI (Anthropic's Claude). Treat it
-> accordingly — review the code yourself before trusting it with sensitive financial data, and note
+> accordingly - review the code yourself before trusting it with sensitive financial data, and note
 > that it comes with no warranty (see [Disclaimer](#disclaimer)).
 
 ![Moolah dashboard](docs/screenshots/dashboard.png)
@@ -23,87 +23,87 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 ## Features
 
 ### Money in & out
-- **Monthly calendar** — each day shows its income/expense events and a projected end-of-day
+- **Monthly calendar** - each day shows its income/expense events and a projected end-of-day
   cash balance that accounts for upcoming/expected and recurring transactions, with low-balance
   warnings. Days with many events expand into a full day view.
-- **Recurring transactions** — paychecks, rent, subscriptions; projected onto future days and
+- **Recurring transactions** - paychecks, rent, subscriptions; projected onto future days and
   "marked paid" when they actually happen. Plaid sync smart-matches real charges to recurring
   rules so projections don't double-count.
-- **Plaid bank integration** — securely link checking, savings, and credit-card accounts; balances
+- **Plaid bank integration** - securely link checking, savings, and credit-card accounts; balances
   and posted transactions sync automatically and are auto-categorised using the bank's own
   category data (with a one-click "fix categories" re-run).
-- **CSV import** — drag-and-drop a bank CSV anywhere to review and import transactions.
+- **CSV import** - drag-and-drop a bank CSV anywhere to review and import transactions.
 
 ### Planning
-- **Budgets** — set monthly limits per category and track spent-vs-remaining, on the dashboard
+- **Budgets** - set monthly limits per category and track spent-vs-remaining, on the dashboard
   and in trends.
-- **Savings goals** — track progress toward targets (emergency fund, vacation, down payment) with
+- **Savings goals** - track progress toward targets (emergency fund, vacation, down payment) with
   contributions and target dates.
-- **Debt payoff planner** — model **avalanche** (highest APR first) or **snowball** (smallest
+- **Debt payoff planner** - model **avalanche** (highest APR first) or **snowball** (smallest
   balance first) strategies, add an extra monthly payment, and see your debt-free date, total
   interest, interest saved vs. minimums, a balance-over-time chart, and per-debt payoff order.
-- **Safe-to-transfer suggestion** — the dashboard estimates how much you can safely move out of
+- **Safe-to-transfer suggestion** - the dashboard estimates how much you can safely move out of
   checking this month after remaining bills and a history-based buffer for next month's typical
   early-month spending.
 
 ### Accounts & insight
-- **Accounts & net worth** — assets vs. liabilities with a live net-worth total; manual balance
+- **Accounts & net worth** - assets vs. liabilities with a live net-worth total; manual balance
   snapshots build net-worth history (great for retirement, vehicle, or property values). Any
   account can be **excluded from net worth** while still being tracked (e.g. student loans).
-- **Trends** — net worth over time, income vs. expenses, spending by category, budget vs. actual,
+- **Trends** - net worth over time, income vs. expenses, spending by category, budget vs. actual,
   and a category month-over-month comparison table.
-- **Dashboard** — net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
+- **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
   spending alerts (categories trending over their 3-month average), top payees, and net-worth
   milestone celebrations. Cards are drag-to-reorder.
 
 ### Finding & exporting
-- **Global search (⌘K)** — a command palette to search your entire transaction history by name,
+- **Global search (⌘K)** - a command palette to search your entire transaction history by name,
   note, or amount from anywhere, with keyboard navigation.
-- **Powerful filtering** — multi-select filters (type, status, categories, accounts), custom date
+- **Powerful filtering** - multi-select filters (type, status, categories, accounts), custom date
   ranges, and named **saved filters** on the Transactions page.
-- **Data export** — download your full transaction history as CSV, filtered by date, account, or
+- **Data export** - download your full transaction history as CSV, filtered by date, account, or
   category, from Settings.
 
 ### Shared & polished
-- **Shared household** — invite your partner with a code; everything shows on one calendar with
+- **Shared household** - invite your partner with a code; everything shows on one calendar with
   "who entered it" attribution.
-- **Extras** — dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and
+- **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and
   unit-tested recurrence / projection / debt-payoff math.
 
 ---
 
 ## Screenshots
 
-A tour of every page. _(Sample data — generated from the isolated `demo@example.com` household.)_
+A tour of every page. _(Sample data - generated from the isolated `demo@example.com` household.)_
 
 ### Money in & out
 
-**Monthly calendar** — each day shows its income/expense events and a projected end-of-day cash balance.
+**Monthly calendar** - each day shows its income/expense events and a projected end-of-day cash balance.
 ![Calendar](docs/screenshots/calendar.png)
 
-**Transactions** — search, multi-select filters (type, status, category, account), date ranges, and CSV export.
+**Transactions** - search, multi-select filters (type, status, category, account), date ranges, and CSV export.
 ![Transactions](docs/screenshots/transactions.png)
 
-**Recurring** — paychecks, bills, and subscriptions that repeat automatically on the calendar.
+**Recurring** - paychecks, bills, and subscriptions that repeat automatically on the calendar.
 ![Recurring](docs/screenshots/recurring.png)
 
 ### Planning
 
-**Budgets** — set a monthly limit per category and track spent-vs-remaining, with copy-from-last-month.
+**Budgets** - set a monthly limit per category and track spent-vs-remaining, with copy-from-last-month.
 ![Budgets](docs/screenshots/budgets.png)
 
-**Savings goals** — track progress toward targets (emergency fund, vacation, down payment) with contributions and target dates.
+**Savings goals** - track progress toward targets (emergency fund, vacation, down payment) with contributions and target dates.
 ![Savings goals](docs/screenshots/goals.png)
 
-**Debt payoff** — model **avalanche** or **snowball**, add an extra payment, and see your debt-free date, total interest, a balance-over-time chart, and per-debt payoff order.
+**Debt payoff** - model **avalanche** or **snowball**, add an extra payment, and see your debt-free date, total interest, a balance-over-time chart, and per-debt payoff order.
 ![Debt payoff](docs/screenshots/debt.png)
 
 ### Accounts & insight
 
-**Accounts & net worth** — assets vs. liabilities with a live net-worth total and per-account balance history.
+**Accounts & net worth** - assets vs. liabilities with a live net-worth total and per-account balance history.
 ![Accounts & net worth](docs/screenshots/accounts.png)
 
-**Trends** — net worth over time, income vs. expenses, spending by category, budget vs. actual, and month-over-month comparison.
+**Trends** - net worth over time, income vs. expenses, spending by category, budget vs. actual, and month-over-month comparison.
 ![Trends](docs/screenshots/trends.png)
 
 ### Dark mode
@@ -113,13 +113,13 @@ A built-in **dark theme** (toggle in the sidebar) carries across every page.
 
 ### Setup & organization
 
-**Categories** — organize how you classify income and spending, each with its own icon and color.
+**Categories** - organize how you classify income and spending, each with its own icon and color.
 ![Categories](docs/screenshots/categories.png)
 
-**Settings** — rename your household, share the invite code, export data as CSV, and manage members.
+**Settings** - rename your household, share the invite code, export data as CSV, and manage members.
 ![Settings](docs/screenshots/settings.png)
 
-**Sign in & onboarding** — Google sign-in (with a local dev login), then create or join a shared household.
+**Sign in & onboarding** - Google sign-in (with a local dev login), then create or join a shared household.
 
 | Sign in | Set up your household |
 | --- | --- |
@@ -129,7 +129,7 @@ A built-in **dark theme** (toggle in the sidebar) carries across every page.
 
 ## Quick start (local, zero cloud setup)
 
-You need **Node 20.9+** (the minimum for Next.js 16). No Docker or system Postgres required — a real
+You need **Node 20.9+** (the minimum for Next.js 16). No Docker or system Postgres required - a real
 Postgres is downloaded and run for you by
 [`embedded-postgres`](https://www.npmjs.com/package/embedded-postgres).
 
@@ -144,7 +144,7 @@ npm run start:all          # run the database and web app together
 `concurrently`), so you only need one terminal. Open <http://localhost:3000>.
 
 With the shipped defaults (`AUTH_BYPASS="true"`) you're **signed in automatically** into your own
-local household — no Google account, password, or sign-in screen — so you can start adding
+local household - no Google account, password, or sign-in screen - so you can start adding
 transactions right away. Set up Google sign-in below when you want real, multi-user login.
 
 > **Heads up:** the web app needs the database running. Use `npm run start:all` (DB + web) rather
@@ -181,12 +181,12 @@ Useful scripts:
 
 ## Sharing it with others (testers / collaborators)
 
-Each person runs their **own local copy** — there's no shared server, so everyone's data stays
+Each person runs their **own local copy** - there's no shared server, so everyone's data stays
 separate. To let someone test it:
 
 1. Add them as a **collaborator** on the repo (GitHub → **Settings → Collaborators**).
 2. They clone it and follow the **Quick start** above. With the shipped `.env.example`
-   (`AUTH_BYPASS="true"`), they're signed straight into their own empty household — no credentials
+   (`AUTH_BYPASS="true"`), they're signed straight into their own empty household - no credentials
    needed to look around.
 3. To use it for real (their own Google sign-in and/or bank sync), they don't need to hand-edit
    `.env`: set `AUTH_BYPASS="false"` and the **sign-in screen shows a built-in "First-time setup"
@@ -195,7 +195,7 @@ separate. To let someone test it:
    See the next two sections for
    where to get those keys.
 
-> The setup panel is **localhost-only** by design — both the panel and its write endpoint refuse any
+> The setup panel is **localhost-only** by design - both the panel and its write endpoint refuse any
 > non-local request, so it can never expose a config-writing endpoint on a deployment.
 
 ---
@@ -205,12 +205,12 @@ separate. To let someone test it:
 `scripts/launch.sh` runs Moolah like a desktop app. One launch: it starts the database + production
 server, **applies pending migrations**, writes a **throttled automatic backup** (skips if one was
 made in the last 12h; keeps the 10 most recent), **rebuilds only if the source changed**, opens
-Moolah in a dedicated browser **app window**, and — when you close that window — shuts the whole
+Moolah in a dedicated browser **app window**, and - when you close that window - shuts the whole
 stack down cleanly (`scripts/stop.sh` also does this, with a port-based safety net).
 
 On the maintainer's machine it's wired to a single **Moolah** desktop shortcut: a hidden `.vbs` that
 runs `wsl.exe … bash scripts/launch.sh`, opening an Edge `--app` window. The paths inside the
-scripts/shortcut are machine-specific — adapt them for your own setup.
+scripts/shortcut are machine-specific - adapt them for your own setup.
 
 ---
 
@@ -248,7 +248,7 @@ on the **Settings** page.
 ## Connecting banks with Plaid (optional)
 
 Create a free account at the [Plaid Dashboard](https://dashboard.plaid.com/), grab your keys from
-**Developers → Keys**, and add them to `.env` — or paste them into the **"First-time setup" panel on
+**Developers → Keys**, and add them to `.env` - or paste them into the **"First-time setup" panel on
 the sign-in screen** (then relaunch). Manually, they go in `.env` as:
 
 ```env
@@ -258,14 +258,14 @@ PLAID_ENV="sandbox"          # "sandbox" = fake test data; "production" = your r
 ```
 
 - **`sandbox`** lets you link Plaid's test institutions (use credentials like `user_good` /
-  `pass_good`) with fake data — perfect for trying everything out at no cost.
+  `pass_good`) with fake data - perfect for trying everything out at no cost.
 - **`production`** connects your **real** banks. It requires requesting production access in the
-  Plaid Dashboard, and Plaid **bills you per linked item (bank connection)** — so avoid
+  Plaid Dashboard, and Plaid **bills you per linked item (bank connection)** - so avoid
   re-linking the same bank (see [Backing up your data](#backing-up-your-data-and-your-plaid-connections)).
 - Plaid's old **`development`** environment has been retired and is no longer an option.
 
 Once set, use **Connect a bank** on the Accounts page; balances and posted transactions sync
-automatically and are auto-categorised from the bank's category data. Linking is optional — manual
+automatically and are auto-categorised from the bank's category data. Linking is optional - manual
 and CSV entry work without Plaid.
 
 ---
@@ -273,17 +273,17 @@ and CSV entry work without Plaid.
 ## Backing up your data (and your Plaid connections)
 
 When you run locally, **everything lives in one place**: the Postgres data directory `.pgdata/` in
-the project root. That includes your accounts, transactions, budgets, goals — **and your Plaid
+the project root. That includes your accounts, transactions, budgets, goals - **and your Plaid
 access tokens** (stored in the `PlaidItem.accessToken` column). If you lose `.pgdata/`, you have to
 re-link every bank, and on the **production** Plaid environment each re-link is a fresh, *billed*
 connection. So if you connect real banks, back this up.
 
 **The reassuring part:** a Plaid access token is tied to your `PLAID_CLIENT_ID` + `PLAID_SECRET` +
-`PLAID_ENV` — **not** to this computer or database. You can copy the token data to another machine
+`PLAID_ENV` - **not** to this computer or database. You can copy the token data to another machine
 (or a future packaged build) and keep using the same connections. **Restoring a saved token never
-costs a new Plaid item — only clicking "Connect a bank" does.**
+costs a new Plaid item - only clicking "Connect a bank" does.**
 
-### Option A — one-command backup (recommended)
+### Option A - one-command backup (recommended)
 
 Export everything to a single JSON file (all tables, including the Plaid tokens):
 
@@ -306,7 +306,7 @@ npm run db:restore -- ./path/to/moolah-backup-<timestamp>.json
 Your banks reconnect with **no new Plaid items** and no re-linking. (`db:restore` only writes into an
 empty database; pass `--force` to overwrite an existing one.) The `backups/` folder is gitignored.
 
-### Option B — raw data-directory copy
+### Option B - raw data-directory copy
 
 For a full cold copy you can also just back up the database folder itself:
 
@@ -321,16 +321,16 @@ For a full cold copy you can also just back up the database folder itself:
    ```
    Then start the app. (Option A avoids this entirely, since it restores into a fresh `.pgdata`.)
 
-> ⚠️ Treat any backup as a secret — the Plaid access tokens are stored **unencrypted** and grant
+> ⚠️ Treat any backup as a secret - the Plaid access tokens are stored **unencrypted** and grant
 > access to your bank data. Keep them somewhere private.
 
-> Never run `npm run db:reset` or delete `.pgdata/` without a current backup — both wipe your tokens.
+> Never run `npm run db:reset` or delete `.pgdata/` without a current backup - both wipe your tokens.
 
 ---
 
 ## Deploying to Vercel + Postgres
 
-1. **Database** — create a free Postgres (e.g. [Neon](https://neon.tech) or Vercel Postgres) and
+1. **Database** - create a free Postgres (e.g. [Neon](https://neon.tech) or Vercel Postgres) and
    copy its connection string.
 2. **Push** this repo to GitHub and **import** it into [Vercel](https://vercel.com).
 3. **Environment variables** in the Vercel project settings:
@@ -358,9 +358,9 @@ For a full cold copy you can also just back up the database folder itself:
 
 Each cash account (checking/savings/cash flagged "include in cash flow") has a `currentBalance`
 that's treated as the truth **as of today**. For any calendar day the projected end-of-day balance
-is `todayBalance + (cumulative signed transactions up to that day − cumulative up to today)`, where
-income is `+` and expense is `−`. This single formula reconstructs past days and projects future
-ones — including not-yet-cleared and recurring items. The logic lives in
+is `todayBalance + (cumulative signed transactions up to that day - cumulative up to today)`, where
+income is `+` and expense is `-`. This single formula reconstructs past days and projects future
+ones - including not-yet-cleared and recurring items. The logic lives in
 [`src/lib/projection.ts`](src/lib/projection.ts) and [`src/lib/recurrence.ts`](src/lib/recurrence.ts)
 and is covered by unit tests.
 
@@ -393,7 +393,7 @@ src/
 ## Support
 
 Moolah is free and self-hosted. If you find it useful and want to support its development, you can
-[**buy me a coffee** ☕](https://buymeacoffee.com/vinnymicale) — entirely optional, and always
+[**buy me a coffee** ☕](https://buymeacoffee.com/vinnymicale) - entirely optional, and always
 appreciated.
 
 ---
@@ -407,4 +407,4 @@ remember that anything it shows you (projections, "safe to transfer", debt payof
 informational purposes only and is **not financial advice**. You are responsible for the security of
 your own deployment, credentials, and Plaid access tokens.
 
-Moolah is released under the [MIT License](LICENSE) — you're free to use, modify, and self-host it.
+Moolah is released under the [MIT License](LICENSE) - you're free to use, modify, and self-host it.

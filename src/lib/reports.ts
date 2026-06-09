@@ -138,7 +138,7 @@ export async function computeReports(householdId: string, todayISO: string): Pro
     .map((b) => {
       const cat = catById.get(b.categoryId);
       return {
-        name: cat?.name ?? "—",
+        name: cat?.name ?? "-",
         color: cat?.color ?? "#94a3b8",
         budget: toNumber(b.limit),
         actual: round(catTotals.get(b.categoryId) ?? 0),

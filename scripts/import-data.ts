@@ -28,7 +28,7 @@ async function main() {
 
   const res = await importAllData(payload, undefined, { force });
   console.log(`Restored ${res.imported} rows across ${res.tables} tables from ${file}.`);
-  console.log("Your linked banks were restored with their existing tokens — no re-linking needed.");
+  console.log("Your linked banks were restored with their existing tokens - no re-linking needed.");
 }
 
 main().catch((err) => {

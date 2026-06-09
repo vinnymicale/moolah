@@ -5,44 +5,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
-  Settings, Plus, Menu, LogOut, Upload, FileSpreadsheet, PiggyBank, Target,
-  GripVertical, RotateCcw, ChevronsLeft, Keyboard, Search, TrendingDown, Coffee,
+  Plus, Menu, LogOut, Upload, FileSpreadsheet,
+  GripVertical, RotateCcw, ChevronsLeft, Keyboard, Search, Coffee,
 } from "lucide-react";
-
-const COFFEE_URL = "https://buymeacoffee.com/vinnymicale";
 import { ThemeToggle } from "./ThemeToggle";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
-import { Modal } from "./Modal";
 import { CommandPalette } from "./CommandPalette";
+import { Avatar } from "./Avatar";
+import { ShortcutsModal } from "./ShortcutsModal";
+import {
+  NAV_ORDER_KEY, NAV_COLLAPSED_KEY, DEFAULT_ORDER, NAV_BY_HREF, mergeNavOrder, type NavItem,
+} from "./app-nav";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/transactions", label: "Transactions", icon: Receipt },
-  { href: "/accounts", label: "Accounts", icon: Landmark },
-  { href: "/recurring", label: "Recurring", icon: Repeat },
-  { href: "/budgets", label: "Budgets", icon: PiggyBank },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/debt", label: "Debt payoff", icon: TrendingDown },
-  { href: "/categories", label: "Categories", icon: Tags },
-  { href: "/trends", label: "Trends", icon: LineChart },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
-
-const NAV_ORDER_KEY = "navOrder";
-const NAV_COLLAPSED_KEY = "navCollapsed";
-const DEFAULT_ORDER = NAV.map((n) => n.href);
-const NAV_BY_HREF = new Map(NAV.map((n) => [n.href, n] as const));
-
-/** Keep the stored order but drop hrefs that no longer exist and append any new ones. */
-function mergeNavOrder(stored: string[]): string[] {
-  const valid = stored.filter((h) => NAV_BY_HREF.has(h));
-  const missing = DEFAULT_ORDER.filter((h) => !valid.includes(h));
-  return [...valid, ...missing];
-}
+const COFFEE_URL = "https://buymeacoffee.com/vinnymicale";
 
 export function AppChrome({
   children,
@@ -108,7 +85,7 @@ export function AppChrome({
   // Global keyboard shortcuts (ignored while typing in a field).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // ⌘K / Ctrl+K opens global search — handled even while typing.
+      // ⌘K / Ctrl+K opens global search - handled even while typing.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSearchOpen((v) => !v);
@@ -154,7 +131,7 @@ export function AppChrome({
 
   const orderedNav = (mounted ? navOrder : DEFAULT_ORDER)
     .map((h) => NAV_BY_HREF.get(h))
-    .filter((x): x is (typeof NAV)[number] => !!x);
+    .filter((x): x is NavItem => !!x);
   const customized = mounted && navOrder.join() !== DEFAULT_ORDER.join();
   const isCollapsed = mounted && collapsed;
 
@@ -371,7 +348,7 @@ export function AppChrome({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar — mobile only (desktop header is just wasted space) */}
+        {/* Top bar - mobile only (desktop header is just wasted space) */}
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur md:hidden">
           <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Open menu">
             <Menu size={18} />
@@ -425,59 +402,6 @@ export function AppChrome({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ["⌘", "K"], label: "Search all transactions" },
-  { keys: ["n"], label: "Add a transaction" },
-  { keys: ["i"], label: "Import a CSV" },
-  { keys: ["/"], label: "Focus search (on pages with it)" },
-  { keys: ["?"], label: "Show this help" },
-];
-
-function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Modal open={open} onClose={onClose} title="Keyboard shortcuts" widthClass="max-w-sm">
-      <ul className="space-y-2">
-        {SHORTCUTS.map((s) => (
-          <li key={s.label} className="flex items-center justify-between gap-4 text-sm">
-            <span className="text-muted">{s.label}</span>
-            <span className="flex gap-1">
-              {s.keys.map((k) => (
-                <kbd key={k} className="rounded border border-line bg-surface2 px-2 py-0.5 font-mono text-xs">{k}</kbd>
-              ))}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-4 text-xs text-muted">Shortcuts are ignored while you&apos;re typing in a field.</p>
-    </Modal>
-  );
-}
-
-function Avatar({ user }: { user: { name?: string | null; email?: string | null; image?: string | null } }) {
-  const [failed, setFailed] = useState(false);
-  if (user.image && !failed) {
-    return (
-      // referrerPolicy="no-referrer" is required for Google profile images
-      // (lh3.googleusercontent.com), which otherwise often fail to load. Fall
-      // back to the initial avatar if the image still can't be fetched.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={user.image}
-        alt=""
-        referrerPolicy="no-referrer"
-        onError={() => setFailed(true)}
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    );
-  }
-  const initial = (user.name ?? user.email ?? "?").charAt(0).toUpperCase();
-  return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-sm font-semibold text-brand">
-      {initial}
     </div>
   );
 }

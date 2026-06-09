@@ -4,23 +4,27 @@ import { useMemo, useState, useTransition } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
-import { TrendingDown, Snowflake, Mountain, Check, Loader2, AlertTriangle, Pencil, ArrowRight } from "lucide-react";
+import { TrendingDown, Snowflake, Mountain, AlertTriangle, ArrowRight } from "lucide-react";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import { simulatePayoff, monthsToLabel, type Strategy, type DebtInput } from "@/lib/debt-payoff";
-import { updateDebtTermsAction } from "@/actions/accounts";
 import type { AccountDTO } from "@/lib/queries";
+import { StrategyButton } from "./StrategyButton";
+import { StatBox } from "./StatBox";
+import { TermsRow } from "./TermsRow";
+import { payoffDateLabel } from "./debt-utils";
 
 export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
   const [strategy, setStrategy] = useState<Strategy>("avalanche");
   const [extra, setExtra] = useState("0");
   const [cascade, setCascade] = useState(true);
-  // Per-account inclusion — all enabled by default.
+  // Per-account inclusion - all enabled by default.
   const [included, setIncluded] = useState<Set<string>>(() => new Set(debts.map((d) => d.id)));
 
   const toggleIncluded = (id: string) =>
     setIncluded((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
 
@@ -164,7 +168,7 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                 <StatBox label="Total interest" value={formatUSD(plan.totalInterest)} tone="expense" hint={`on ${formatUSD(totalBalance)} of debt`} />
                 <StatBox
                   label="Saved vs. minimums"
-                  value={interestSaved > 0.5 ? formatUSD(interestSaved) : "—"}
+                  value={interestSaved > 0.5 ? formatUSD(interestSaved) : "-"}
                   tone="income"
                   hint={monthsSaved > 0 ? `${monthsToLabel(monthsSaved)} sooner` : "Add an extra payment to save"}
                 />
@@ -249,8 +253,8 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                               <ArrowRight size={10} className="text-brand" />
                               <span>
                                 {cascade
-                                  ? <><span className="font-medium text-brand">{formatUSD(minPayment)}/mo</span> freed — rolls onto next debt</>
-                                  : <><span className="font-medium text-muted">{formatUSD(minPayment)}/mo</span> freed — rollover is off, leaves the pool</>
+                                  ? <><span className="font-medium text-brand">{formatUSD(minPayment)}/mo</span> freed - rolls onto next debt</>
+                                  : <><span className="font-medium text-muted">{formatUSD(minPayment)}/mo</span> freed - rollover is off, leaves the pool</>
                                 }
                               </span>
                             </div>
@@ -269,83 +273,4 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
       )}
     </div>
   );
-}
-
-function StrategyButton({ active, onClick, icon, label, hint }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; hint: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex flex-col items-start rounded-md px-3 py-1.5 text-left transition-colors ${active ? "bg-surface shadow-sm" : "text-muted hover:text-text"}`}
-    >
-      <span className="flex items-center gap-1.5 text-sm font-medium">{icon} {label}</span>
-      <span className="text-[10px] text-muted">{hint}</span>
-    </button>
-  );
-}
-
-function StatBox({ label, value, tone, hint }: { label: string; value: string; tone: "brand" | "income" | "expense"; hint: string }) {
-  const c = tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "text-brand";
-  return (
-    <div className="card p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${c}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-muted">{hint}</p>
-    </div>
-  );
-}
-
-function TermsRow({ debt }: { debt: AccountDTO }) {
-  const [editing, setEditing] = useState(true);
-  const [apr, setApr] = useState(debt.interestRate !== null ? String(debt.interestRate) : "");
-  const [min, setMin] = useState(debt.minimumPayment !== null ? String(debt.minimumPayment) : "");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  const save = () =>
-    start(async () => {
-      setError(null);
-      const res = await updateDebtTermsAction(debt.id, { interestRate: apr, minimumPayment: min });
-      if (!res.ok) return setError(res.error);
-      setEditing(false);
-    });
-
-  if (!editing) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm">
-        <span className="flex-1 font-medium">{debt.name}</span>
-        <span className="text-muted">{apr}% · {formatUSD(Number(min))}/mo</span>
-        <button onClick={() => setEditing(true)} className="btn-ghost h-7 w-7 p-0!" title="Edit"><Pencil size={13} /></button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg bg-surface px-3 py-2">
-      <div className="flex flex-wrap items-end gap-2">
-        <span className="min-w-24 flex-1 text-sm font-medium">{debt.name}</span>
-        <label className="text-[11px] text-muted">
-          APR %
-          <input value={apr} onChange={(e) => setApr(e.target.value)} inputMode="decimal" className="input h-8 w-20 text-sm" placeholder="19.99" />
-        </label>
-        <label className="text-[11px] text-muted">
-          Min / mo
-          <div className="relative w-24">
-            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted">$</span>
-            <input value={min} onChange={(e) => setMin(e.target.value)} inputMode="decimal" className="input h-8 w-full pl-5 text-sm" placeholder="35" />
-          </div>
-        </label>
-        <button onClick={save} disabled={pending || !apr || !min} className="btn-primary h-8">
-          {pending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Save
-        </button>
-      </div>
-      {error && <p className="mt-1 text-xs text-expense">{error}</p>}
-    </div>
-  );
-}
-
-function payoffDateLabel(months: number): string {
-  if (months <= 0) return "";
-  const d = new Date();
-  d.setMonth(d.getMonth() + months);
-  return `by ${d.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`;
 }

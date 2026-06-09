@@ -61,7 +61,7 @@ export function SafeTransferCard({
 
   return (
     <div className="mb-5 overflow-hidden rounded-xl border border-brand/30 bg-gradient-to-br from-brand/5 to-brand/10">
-      {/* Header — click to collapse/expand (always visible) */}
+      {/* Header - click to collapse/expand (always visible) */}
       <button
         type="button"
         onClick={toggleCollapsed}
@@ -112,11 +112,11 @@ export function SafeTransferCard({
             <p className="leading-snug">
               We start with the cash in your checking, subtract what you still owe this month,
               then hold back a cushion for the first half of next month based on your history.
-              Only transactions from liquid bank accounts feed the historical figures — individual
+              Only transactions from liquid bank accounts feed the historical figures - individual
               credit card charges are excluded.
             </p>
 
-            {/* Step 1 — checking balance */}
+            {/* Step 1 - checking balance */}
             <div className="border-t border-line pt-2">
               <Row
                 label={`Checking balance${data.checkingCount > 1 ? ` (${data.checkingCount} accounts)` : ""}`}
@@ -126,21 +126,21 @@ export function SafeTransferCard({
               <p className="mt-0.5 text-[11px] leading-snug">
                 {data.checkingCount > 1
                   ? `All ${data.checkingCount} checking accounts are summed together. Savings and cash accounts are not included in this starting balance.`
-                  : "Savings and cash accounts are not included — only your checking balance is used as the starting point."}
+                  : "Savings and cash accounts are not included - only your checking balance is used as the starting point."}
               </p>
             </div>
 
-            {/* Step 2 — remaining bills */}
+            {/* Step 2 - remaining bills */}
             <div className="border-t border-line pt-2">
-              <Row label="− Remaining bills this month" value={`−${formatUSD(data.remainingExpenses)}`} tone="expense" bold />
+              <Row label="- Remaining bills this month" value={`-${formatUSD(data.remainingExpenses)}`} tone="expense" bold />
               <div className="mt-1 space-y-0.5 pl-3">
                 <Row
                   label={`Recurring bills due (${data.remainingRecurringCount})`}
-                  value={`−${formatUSD(data.remainingRecurring)}`}
+                  value={`-${formatUSD(data.remainingRecurring)}`}
                 />
                 <Row
                   label={`Other expected payments (${data.remainingOneOffCount})`}
-                  value={`−${formatUSD(data.remainingOneOff)}`}
+                  value={`-${formatUSD(data.remainingOneOff)}`}
                 />
               </div>
               <p className="mt-1 text-[11px] leading-snug">
@@ -149,9 +149,9 @@ export function SafeTransferCard({
               </p>
             </div>
 
-            {/* Step 3 — next-month buffer */}
+            {/* Step 3 - next-month buffer */}
             <div className="border-t border-line pt-2">
-              <Row label="− Next-month buffer" value={`−${formatUSD(data.nextMonthBuffer)}`} tone="expense" bold />
+              <Row label="- Next-month buffer" value={`-${formatUSD(data.nextMonthBuffer)}`} tone="expense" bold />
               <div className="mt-1 space-y-0.5 pl-3">
                 <Row
                   label={
@@ -183,7 +183,7 @@ export function SafeTransferCard({
               <p className="border-t border-line pt-2 text-[11px] leading-snug">
                 Heads up: <span className="font-medium text-text">{formatUSD(data.totalCCBalance)}</span> is
                 outstanding on your credit cards. We don&apos;t subtract it here because the statement
-                payment shows up in your bank history and is already baked into the next-month buffer —
+                payment shows up in your bank history and is already baked into the next-month buffer -
                 subtracting both would double-count it.
               </p>
             )}
@@ -280,7 +280,7 @@ export function SafeTransferCard({
                 </div>
                 {data.anchorBalance - parsedAmount < 0 && (
                   <p className="mt-1.5 text-[11px] leading-snug text-expense">
-                    This is more than your checking balance — you&apos;d overdraw the account.
+                    This is more than your checking balance - you&apos;d overdraw the account.
                   </p>
                 )}
               </div>

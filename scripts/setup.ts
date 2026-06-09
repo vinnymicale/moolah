@@ -41,7 +41,7 @@ async function main() {
     try {
       const pid = parseInt(readFileSync(pidFile, "utf8").split("\n")[0], 10);
       process.kill(pid, 0); // signal 0 = liveness check only
-      console.log(`Postgres is already running (PID ${pid}) — using it.`);
+      console.log(`Postgres is already running (PID ${pid}) - using it.`);
     } catch {
       await pg.start();
       weStarted = true;
@@ -54,7 +54,7 @@ async function main() {
   try {
     await pg.createDatabase(DB_NAME);
   } catch {
-    // Database already exists — fine.
+    // Database already exists - fine.
   }
 
   console.log("Syncing the database schema …");

@@ -117,7 +117,7 @@ export function projectDailyBalances(opts: ProjectionOptions): DayProjection[] {
 }
 
 /**
- * Find the lowest projected balance and the day it occurs across a projection —
+ * Find the lowest projected balance and the day it occurs across a projection -
  * useful for "you'll dip to $X on the 23rd" warnings.
  */
 export function lowestPoint(projections: DayProjection[]): DayProjection | null {

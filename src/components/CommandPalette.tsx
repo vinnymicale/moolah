@@ -150,7 +150,7 @@ export function CommandPalette({
                         </p>
                       </div>
                       <span className={`shrink-0 tabular-nums text-sm font-semibold ${hit.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                        {hit.type === "INCOME" ? "+" : "−"}
+                        {hit.type === "INCOME" ? "+" : "-"}
                         {formatUSD(hit.amount)}
                       </span>
                       {i === active && <CornerDownLeft size={13} className="shrink-0 text-muted" />}

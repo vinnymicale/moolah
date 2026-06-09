@@ -1,6 +1,6 @@
 /**
  * Starts a real PostgreSQL server locally with no Docker, no sudo, and no
- * system install — the binary is downloaded by the `embedded-postgres` package.
+ * system install - the binary is downloaded by the `embedded-postgres` package.
  * Connection details match the default DATABASE_URL in .env:
  *
  *     postgresql://finance:finance@localhost:5433/finance
@@ -43,9 +43,9 @@ async function main() {
       // Signal 0 just checks for process existence without sending a signal.
       process.kill(pid, 0);
       alreadyRunning = true;
-      console.log(`Postgres is already running (PID ${pid}) on port ${PORT} — attaching.`);
+      console.log(`Postgres is already running (PID ${pid}) on port ${PORT} - attaching.`);
     } catch {
-      // PID file exists but process is gone — stale lockfile, proceed to start normally.
+      // PID file exists but process is gone - stale lockfile, proceed to start normally.
     }
   }
 
@@ -58,7 +58,7 @@ async function main() {
     await pg.createDatabase(DB_NAME);
     console.log(`Created database "${DB_NAME}".`);
   } catch {
-    // Database already exists — fine.
+    // Database already exists - fine.
   }
 
   console.log(
@@ -67,7 +67,7 @@ async function main() {
   console.log("Leave this running. Press Ctrl+C to stop.\n");
 
   // Keep the Node event loop alive until a signal arrives. A bare unresolved
-  // promise is NOT enough — without an active handle (child process, timer,
+  // promise is NOT enough - without an active handle (child process, timer,
   // socket) Node considers the loop idle and exits. When we start Postgres
   // ourselves embedded-postgres holds the child handle, but when *attaching*
   // to an already-running instance there is no such handle, so we register an

@@ -17,7 +17,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
   { name: "Refund", kind: "INCOME", color: "#34d399", icon: "rotate-ccw" },
   { name: "Other Income", kind: "INCOME", color: "#6ee7b7", icon: "plus-circle" },
 
-  // Expense — housing & utilities
+  // Expense - housing & utilities
   { name: "Rent / Mortgage", kind: "EXPENSE", color: "#dc2626", icon: "home" },
   { name: "Utilities", kind: "EXPENSE", color: "#ea580c", icon: "zap" },
   { name: "Internet / Phone", kind: "EXPENSE", color: "#f97316", icon: "wifi" },

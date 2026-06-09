@@ -110,7 +110,7 @@ export function RecurringManager({
                   </p>
                 </div>
                 <span className={`shrink-0 tabular-nums font-semibold ${r.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                  {r.type === "INCOME" ? "+" : "−"}
+                  {r.type === "INCOME" ? "+" : "-"}
                   {formatUSD(r.amount)}
                 </span>
               </button>
@@ -200,7 +200,7 @@ function SuggestionRow({
         {error && <p className="text-xs text-expense">{error}</p>}
       </button>
       <span className={`shrink-0 tabular-nums font-semibold ${s.type === "INCOME" ? "text-income" : "text-expense"}`}>
-        {s.type === "INCOME" ? "+" : "−"}
+        {s.type === "INCOME" ? "+" : "-"}
         {formatUSD(s.amount)}
       </span>
       <div className="flex shrink-0 items-center gap-1">

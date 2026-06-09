@@ -263,7 +263,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                       {acct.mask ? <span className="ml-1 text-xs text-muted">·· {acct.mask}</span> : null}
                     </span>
                     <span className="shrink-0 tabular-nums text-sm font-semibold">
-                      {acct.currentBalance !== null ? formatUSD(acct.currentBalance) : "—"}
+                      {acct.currentBalance !== null ? formatUSD(acct.currentBalance) : "-"}
                     </span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted capitalize">
@@ -283,7 +283,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
         <Modal open onClose={() => setConfirmDisconnect(null)} title="Disconnect bank?" widthClass="max-w-sm">
           <div className="space-y-4">
             <p className="text-sm text-muted">
-              This removes the Plaid connection to <strong>{confirmDisconnect.institutionName ?? "this bank"}</strong>. Your existing accounts and transactions are kept — only the live sync link is removed.
+              This removes the Plaid connection to <strong>{confirmDisconnect.institutionName ?? "this bank"}</strong>. Your existing accounts and transactions are kept - only the live sync link is removed.
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setConfirmDisconnect(null)} className="btn-ghost">Cancel</button>

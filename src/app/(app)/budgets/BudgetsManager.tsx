@@ -54,7 +54,7 @@ export function BudgetsManager({
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Link href={`/budgets?m=${prevMonthISO}`} className="btn-ghost h-9 w-9 !p-0" aria-label="Previous month">
+          <Link href={`/budgets?m=${prevMonthISO}`} className="btn-ghost h-9 w-9 p-0!" aria-label="Previous month">
             <ChevronLeft size={18} />
           </Link>
           <h1 className="min-w-44 text-center text-lg font-semibold md:text-xl">{monthTitle}</h1>

@@ -1,5 +1,5 @@
 // Read layer. Returns plain, serializable DTOs (numbers, strings, ISO dates) so
-// results can be passed straight into client components — Prisma Decimal values
+// results can be passed straight into client components - Prisma Decimal values
 // are never sent across that boundary.
 
 import { prisma } from "@/lib/prisma";
@@ -433,8 +433,8 @@ const BUFFER_CUSHION_PCT = 15;
 /**
  * Computes how much the household can safely move out of checking.
  *
- * Formula: checkingBalance − remaining uncleared expenses this month
- *          − (earlyMonthAvg × 1.15 next-month buffer), rounded down to $50.
+ * Formula: checkingBalance - remaining uncleared expenses this month
+ *          - (earlyMonthAvg × 1.15 next-month buffer), rounded down to $50.
  *
  * Shown throughout the entire month (not gated on remaining days).
  * Returns show:false when no checking accounts exist or the safe amount < $50.
@@ -464,14 +464,14 @@ export async function getSafeToTransfer(householdId: string, todayISO: string): 
   const bankIds = allAccounts
     .filter((a) => a.type === "CHECKING" || a.type === "SAVINGS" || a.type === "CASH")
     .map((a) => a.id);
-  // Credit card IDs — used to exclude their transactions from cash-flow maths.
+  // Credit card IDs - used to exclude their transactions from cash-flow maths.
   const ccIds = allAccounts.filter((a) => a.type === "CREDIT_CARD").map((a) => a.id);
 
   if (checkingIds.length === 0) return nothing;
 
   const anchorBalance = checkingAccounts.reduce((s, a) => s + toNumber(a.currentBalance), 0);
 
-  // Outstanding credit card balances (informational — represents what will
+  // Outstanding credit card balances (informational - represents what will
   // become next cycle's statement payment, not double-counted in the formula).
   const totalCCBalance = allAccounts
     .filter((a) => ccIds.includes(a.id))
@@ -479,7 +479,7 @@ export async function getSafeToTransfer(householdId: string, todayISO: string): 
 
   // ── Remaining planned expenses this month ─────────────────────────────────
   // Uncleared DB rows from bank accounts only (CC account transactions are
-  // either individual charges — cash-flow neutral for checking — or statement
+  // either individual charges - cash-flow neutral for checking - or statement
   // payments mis-tagged as income).
   const [unclearedTxns, recurringRules, materialisedLinks] = await Promise.all([
     prisma.transaction.findMany({

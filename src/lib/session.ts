@@ -24,7 +24,7 @@ export interface HouseholdContext {
 /**
  * Require a signed-in user who belongs to a household. When AUTH_BYPASS=true,
  * unauthenticated requests redirect to the auto-signin route which transparently
- * creates the local user + household and signs in — no login screen shown.
+ * creates the local user + household and signs in - no login screen shown.
  */
 export async function requireHousehold(): Promise<HouseholdContext> {
   const session = await auth();
