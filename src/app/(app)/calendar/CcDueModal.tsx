@@ -1,7 +1,7 @@
 import { Modal } from "@/components/Modal";
 import { formatUSD } from "@/lib/money";
 import type { CcDueEvent } from "@/lib/calendar";
-import { daysUntilDate, formatDayLabel } from "./calendar-utils";
+import { daysUntilDate, formatMonthDay } from "@/lib/dates";
 
 export function CcDueModal({ due, onClose }: { due: CcDueEvent; onClose: () => void }) {
   const daysUntil = daysUntilDate(due.dueDate);
@@ -11,7 +11,7 @@ export function CcDueModal({ due, onClose }: { due: CcDueEvent; onClose: () => v
       <div className="space-y-3 text-sm">
         <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
           <p className="text-xs text-muted">Due date</p>
-          <p className="font-semibold">{formatDayLabel(due.dueDate)}</p>
+          <p className="font-semibold">{formatMonthDay(due.dueDate)}</p>
           <p className={`text-xs ${pastDue ? "text-expense font-semibold" : daysUntil <= 3 && daysUntil >= 0 ? "text-expense" : "text-muted"}`}>
             {pastDue ? "Past due" : daysUntil < 0 ? "Paid" : daysUntil === 0 ? "Due today" : `${daysUntil} day${daysUntil === 1 ? "" : "s"} away`}
           </p>

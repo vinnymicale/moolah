@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { formatUSD } from "@/lib/money";
 import { describeFrequency } from "@/lib/recurrence";
+import { categoryColor } from "@/lib/colors";
+import { useIsHydrated, usePersistentState } from "@/lib/usePersistentState";
+import { Amount } from "@/components/Amount";
 import type { AccountDTO, CategoryDTO, RecurringDTO, RecurringSuggestion } from "@/lib/queries";
 import {
   createRecurringAction, updateRecurringAction, deleteRecurringAction, type RecurringInput,
@@ -13,6 +15,7 @@ import {
 import type { Frequency, TxnType } from "@/generated/prisma/enums";
 
 const DISMISSED_KEY = "dismissedRecurringSuggestions";
+const NONE: string[] = [];
 
 const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: "WEEKLY", label: "Weekly" },
@@ -37,36 +40,15 @@ export function RecurringManager({
   const [adding, setAdding] = useState(false);
   const [prefill, setPrefill] = useState<RecurringSuggestion | null>(null);
   // Dismissed suggestions persist in localStorage so they don't reappear on
-  // reload. `mounted` keeps SSR output (no stored data) matching the first
+  // reload. `hydrated` keeps SSR output (no stored data) matching the first
   // client render, avoiding a hydration mismatch.
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [mounted, setMounted] = useState(false);
+  const [dismissed, setDismissed] = usePersistentState<string[]>(DISMISSED_KEY, NONE);
+  const hydrated = useIsHydrated();
   const catById = new Map(categories.map((c) => [c.id, c]));
 
-  useEffect(() => {
-    let stored = new Set<string>();
-    try {
-      const raw = localStorage.getItem(DISMISSED_KEY);
-      if (raw) stored = new Set(JSON.parse(raw) as string[]);
-    } catch {
-      // ignore unavailable/corrupt storage
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted UI state
-    setMounted(true);
-    if (stored.size) setDismissed(stored);
-  }, []);
+  const dismiss = (key: string) => setDismissed([...dismissed, key]);
 
-  const dismiss = (key: string) => {
-    const next = new Set(dismissed).add(key);
-    setDismissed(next);
-    try {
-      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]));
-    } catch {
-      // ignore unavailable storage
-    }
-  };
-
-  const visibleSuggestions = mounted ? suggestions.filter((s) => !dismissed.has(s.key)) : [];
+  const visibleSuggestions = hydrated ? suggestions.filter((s) => !dismissed.includes(s.key)) : [];
   const closeForm = () => { setAdding(false); setEditing(null); setPrefill(null); };
 
   return (
@@ -98,7 +80,7 @@ export function RecurringManager({
             const cat = r.categoryId ? catById.get(r.categoryId) : undefined;
             return (
               <button key={r.id} onClick={() => setEditing(r)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface2">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
                   <CategoryIcon name={cat?.icon ?? "tag"} size={16} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -109,10 +91,7 @@ export function RecurringManager({
                     {r.endDate ? ` · until ${r.endDate}` : ""}
                   </p>
                 </div>
-                <span className={`shrink-0 tabular-nums font-semibold ${r.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                  {r.type === "INCOME" ? "+" : "-"}
-                  {formatUSD(r.amount)}
-                </span>
+                <Amount type={r.type} amount={r.amount} className="shrink-0 font-semibold" />
               </button>
             );
           })}
@@ -188,7 +167,7 @@ function SuggestionRow({
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
         <CategoryIcon name={cat?.icon ?? "repeat"} size={16} />
       </span>
       <button onClick={() => onReview(s)} className="min-w-0 flex-1 text-left" title="Review & edit before adding">
@@ -199,10 +178,7 @@ function SuggestionRow({
         </p>
         {error && <p className="text-xs text-expense">{error}</p>}
       </button>
-      <span className={`shrink-0 tabular-nums font-semibold ${s.type === "INCOME" ? "text-income" : "text-expense"}`}>
-        {s.type === "INCOME" ? "+" : "-"}
-        {formatUSD(s.amount)}
-      </span>
+      <Amount type={s.type} amount={s.amount} className="shrink-0 font-semibold" />
       <div className="flex shrink-0 items-center gap-1">
         <button onClick={quickAdd} disabled={pending} className="btn-primary h-8 text-xs" title="Add as recurring">
           {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Add

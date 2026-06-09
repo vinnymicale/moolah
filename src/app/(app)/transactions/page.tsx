@@ -1,6 +1,6 @@
 import { requireHousehold } from "@/lib/session";
 import { getAccounts, getCategories, getTransactionsBetween } from "@/lib/queries";
-import { addUTCMonths, endOfUTCMonth, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
+import { addUTCMonths, endOfUTCMonth, formatMonthDayYear, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { PageHeader } from "@/components/ui-bits";
 import { TransactionsList } from "./TransactionsList";
 
@@ -58,7 +58,7 @@ export default async function TransactionsPage({
     case "custom":
       startISO = from as string;
       endISO = to as string;
-      rangeLabel = `${customLabel(startISO)} – ${customLabel(endISO)}`;
+      rangeLabel = `${formatMonthDayYear(startISO)} – ${formatMonthDayYear(endISO)}`;
       break;
     default:
       startISO = monthISO;
@@ -107,8 +107,4 @@ export default async function TransactionsPage({
       />
     </div>
   );
-}
-
-function customLabel(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }

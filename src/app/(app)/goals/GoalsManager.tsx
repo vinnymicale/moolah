@@ -6,12 +6,13 @@ import { Modal } from "@/components/Modal";
 import { CategoryIcon, CATEGORY_ICON_NAMES } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
+import { formatMonthDayYear } from "@/lib/dates";
 import type { SavingsGoalDTO } from "@/lib/queries";
 import {
   createGoalAction, updateGoalAction, deleteGoalAction, contributeGoalAction, type GoalInput,
 } from "@/actions/goals";
 
-const COLORS = ["#16a34a", "#0d9488", "#0891b2", "#2563eb", "#4f46e5", "#7c3aed", "#9333ea", "#db2777", "#dc2626", "#d97706"];
+import { COLOR_PALETTE, INCOME_COLOR } from "@/lib/colors";
 
 export function GoalsManager({ goals }: { goals: SavingsGoalDTO[] }) {
   const [editing, setEditing] = useState<SavingsGoalDTO | null>(null);
@@ -71,7 +72,7 @@ function GoalCard({ goal, onEdit, onContribute }: { goal: SavingsGoalDTO; onEdit
             <p className="truncate font-medium">{goal.name}</p>
             <p className="text-xs text-muted">
               {complete ? "Goal reached 🎉" : `${formatUSD(remaining)} to go`}
-              {goal.targetDate ? ` · by ${formatDay(goal.targetDate)}` : ""}
+              {goal.targetDate ? ` · by ${formatMonthDayYear(goal.targetDate)}` : ""}
             </p>
           </div>
         </button>
@@ -85,7 +86,7 @@ function GoalCard({ goal, onEdit, onContribute }: { goal: SavingsGoalDTO; onEdit
         <span className="text-xs text-muted">of {formatUSD(goal.targetAmount)} · {Math.round(pct)}%</span>
       </div>
       <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface2">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: complete ? "#16a34a" : goal.color }} />
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: complete ? INCOME_COLOR : goal.color }} />
       </div>
     </div>
   );
@@ -144,7 +145,7 @@ function GoalForm({ goal, onClose }: { goal: SavingsGoalDTO | null; onClose: () 
   const [target, setTarget] = useState(goal ? String(goal.targetAmount) : "");
   const [current, setCurrent] = useState(goal ? String(goal.currentAmount) : "");
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? "");
-  const [color, setColor] = useState(goal?.color ?? COLORS[0]);
+  const [color, setColor] = useState(goal?.color ?? INCOME_COLOR);
   const [icon, setIcon] = useState(goal?.icon ?? "piggy-bank");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -205,7 +206,7 @@ function GoalForm({ goal, onClose }: { goal: SavingsGoalDTO | null; onClose: () 
         <div>
           <label className="label">Color</label>
           <div className="flex flex-wrap gap-2">
-            {COLORS.map((c) => (
+            {COLOR_PALETTE.map((c) => (
               <button key={c} onClick={() => setColor(c)} className={`h-7 w-7 rounded-full ring-2 ring-offset-2 ring-offset-surface ${color === c ? "ring-brand" : "ring-transparent"}`} style={{ backgroundColor: c }} />
             ))}
           </div>
@@ -242,8 +243,4 @@ function GoalForm({ goal, onClose }: { goal: SavingsGoalDTO | null; onClose: () 
       </div>
     </Modal>
   );
-}
-
-function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }

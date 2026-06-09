@@ -5,16 +5,18 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, CornerDownLeft } from "lucide-react";
 import { searchTransactionsAction, type SearchHit } from "@/actions/transactions";
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { formatUSD } from "@/lib/money";
+import { formatWeekdayMonthDayYear } from "@/lib/dates";
+import { Amount } from "@/components/Amount";
+import { categoryColor } from "@/lib/colors";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
+// Rendered only while open (mounted/unmounted by the parent), so state starts
+// fresh each time and there's no open/close reset effect.
 export function CommandPalette({
-  open,
   onClose,
   categories,
   accounts,
 }: {
-  open: boolean;
   onClose: () => void;
   categories: CategoryDTO[];
   accounts: AccountDTO[];
@@ -29,28 +31,18 @@ export function CommandPalette({
 
   const catById = new Map(categories.map((c) => [c.id, c]));
   const acctById = new Map(accounts.map((a) => [a.id, a]));
+  const queryLongEnough = query.trim().length >= 2;
 
-  // Focus the input and reset state whenever the palette opens.
+  // Focus the input once the palette has mounted.
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setHits([]);
-      setActive(0);
-      setSearched(false);
-      // Defer focus until the element is mounted/visible.
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
-  // Debounced server search.
+  // Debounced server search. Short queries simply don't search; the render gates
+  // on the query length, so no state needs clearing synchronously here.
   useEffect(() => {
-    if (!open) return;
     const q = query.trim();
-    if (q.length < 2) {
-      setHits([]);
-      setSearched(false);
-      return;
-    }
+    if (q.length < 2) return;
     const handle = setTimeout(() => {
       startTransition(async () => {
         const results = await searchTransactionsAction(q);
@@ -60,9 +52,7 @@ export function CommandPalette({
       });
     }, 200);
     return () => clearTimeout(handle);
-  }, [query, open]);
-
-  if (!open) return null;
+  }, [query]);
 
   const go = (hit: SearchHit) => {
     onClose();
@@ -113,7 +103,7 @@ export function CommandPalette({
 
         {/* Results */}
         <div className="max-h-[50vh] overflow-y-auto">
-          {query.trim().length < 2 ? (
+          {!queryLongEnough ? (
             <p className="px-4 py-8 text-center text-sm text-muted">
               Type at least 2 characters to search your entire history.
             </p>
@@ -137,22 +127,19 @@ export function CommandPalette({
                     >
                       <span
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                        style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}
+                        style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}
                       >
                         <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{hit.description}</p>
                         <p className="truncate text-xs text-muted">
-                          {formatDay(hit.date)}
+                          {formatWeekdayMonthDayYear(hit.date)}
                           {cat ? ` · ${cat.name}` : ""}
                           {acct ? ` · ${acct.name}` : ""}
                         </p>
                       </div>
-                      <span className={`shrink-0 tabular-nums text-sm font-semibold ${hit.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                        {hit.type === "INCOME" ? "+" : "-"}
-                        {formatUSD(hit.amount)}
-                      </span>
+                      <Amount type={hit.type} amount={hit.amount} className="shrink-0 text-sm font-semibold" />
                       {i === active && <CornerDownLeft size={13} className="shrink-0 text-muted" />}
                     </button>
                   </li>
@@ -162,7 +149,7 @@ export function CommandPalette({
           )}
         </div>
 
-        {hits.length > 0 && (
+        {queryLongEnough && hits.length > 0 && (
           <div className="flex items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-muted">
             <span className="flex items-center gap-1"><kbd className="rounded border border-line bg-surface2 px-1 font-mono">↑↓</kbd> navigate</span>
             <span className="flex items-center gap-1"><kbd className="rounded border border-line bg-surface2 px-1 font-mono">↵</kbd> open</span>
@@ -172,8 +159,4 @@ export function CommandPalette({
       </div>
     </div>
   );
-}
-
-function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }

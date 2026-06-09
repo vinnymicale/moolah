@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Sparkles, ChevronDown, CheckCircle2, Loader2, Info, ArrowRight } from "lucide-react";
 import { contributeGoalAction } from "@/actions/goals";
 import { formatUSD } from "@/lib/money";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { usePersistentState } from "@/lib/usePersistentState";
 import type { SafeTransferDTO, SavingsGoalDTO } from "@/lib/queries";
+import { toneTextClass, type Tone } from "@/components/ui-bits";
 
 // localStorage key remembering whether the user collapsed the card.
 const COLLAPSE_KEY = "safe-transfer-collapsed";
@@ -17,7 +19,7 @@ export function SafeTransferCard({
   data: SafeTransferDTO;
   goals: SavingsGoalDTO[];
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = usePersistentState(COLLAPSE_KEY, false);
   const [amount, setAmount] = useState(String(data.safeAmount));
   const [goalId, setGoalId] = useState(goals[0]?.id ?? "");
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -25,20 +27,7 @@ export function SafeTransferCard({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Hydrate the collapsed preference from localStorage after mount (avoids SSR mismatch).
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
-    } catch { /* ignore */ }
-  }, []);
-
-  const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try { localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0"); } catch { /* ignore */ }
-      return next;
-    });
-  };
+  const toggleCollapsed = () => setCollapsed(!collapsed);
 
   const allocate = () => {
     const parsed = parseFloat(amount);
@@ -327,19 +316,18 @@ function monthEndLabel(): string {
 function Row({
   label,
   value,
-  tone,
+  tone = "default",
   bold,
 }: {
   label: string;
   value: string;
-  tone?: "income" | "expense";
+  tone?: Tone;
   bold?: boolean;
 }) {
-  const cls = tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "text-text";
   return (
     <div className="flex items-center justify-between gap-4">
       <span>{label}</span>
-      <span className={`tabular-nums ${cls} ${bold ? "font-semibold" : ""}`}>{value}</span>
+      <span className={`tabular-nums ${toneTextClass(tone)} ${bold ? "font-semibold" : ""}`}>{value}</span>
     </div>
   );
 }

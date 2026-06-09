@@ -1,9 +1,11 @@
 import { CalendarCheck, Clock, CreditCard, Repeat } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { formatUSD } from "@/lib/money";
+import { categoryColor } from "@/lib/colors";
+import { Amount } from "@/components/Amount";
 import type { CategoryDTO } from "@/lib/queries";
 import type { CalendarEvent, CcDueEvent } from "@/lib/calendar";
-import { daysUntilDate, formatDayLabel } from "./calendar-utils";
+import { daysUntilDate, formatMonthDay } from "@/lib/dates";
 
 export function DayEventsModal({
   iso,
@@ -27,7 +29,7 @@ export function DayEventsModal({
   const expense = events.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + e.amount, 0);
 
   return (
-    <Modal open onClose={onClose} title={formatDayLabel(iso)} widthClass="max-w-sm">
+    <Modal open onClose={onClose} title={formatMonthDay(iso)} widthClass="max-w-sm">
       <div className="space-y-1">
         {ccDues.map((due) => {
           const daysUntil = daysUntilDate(due.dueDate);
@@ -65,7 +67,7 @@ export function DayEventsModal({
             >
               <span
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs"
-                style={{ backgroundColor: `${cat?.color ?? (e.type === "INCOME" ? "#16a34a" : "#64748b")}22`, color: cat?.color ?? (e.type === "INCOME" ? "#16a34a" : "#64748b") }}
+                style={{ backgroundColor: `${categoryColor(cat, e.type)}22`, color: categoryColor(cat, e.type) }}
               >
                 {e.isVirtual ? <Repeat size={13} /> : <CalendarCheck size={13} />}
               </span>
@@ -82,11 +84,7 @@ export function DayEventsModal({
                   {cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
                 </p>
               </div>
-              <span className={`shrink-0 tabular-nums text-sm font-semibold ${
-                e.isTransfer ? "text-muted" : e.type === "INCOME" ? "text-income" : "text-expense"
-              }`}>
-                {e.isTransfer ? "" : e.type === "INCOME" ? "+" : "-"}{formatUSD(e.amount)}
-              </span>
+              <Amount type={e.type} amount={e.amount} isTransfer={e.isTransfer} className="shrink-0 text-sm font-semibold" />
             </button>
           );
         })}

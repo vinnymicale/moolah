@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { GripVertical, LayoutGrid, Check, RotateCcw } from "lucide-react";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 const STORAGE_KEY = "dashboardOrder";
 
@@ -16,42 +17,20 @@ export interface DashboardSection {
  * "Arrange" to drag cards into a new order; the order persists per browser.
  */
 export function DashboardSections({ sections }: { sections: DashboardSection[] }) {
-  const defaultOrder = sections.map((s) => s.id);
+  const defaultOrder = useMemo(() => sections.map((s) => s.id), [sections]);
   const byId = new Map(sections.map((s) => [s.id, s.node]));
 
-  const [order, setOrder] = useState<string[]>(defaultOrder);
-  const [mounted, setMounted] = useState(false);
+  const [order, persist] = usePersistentState<string[]>(STORAGE_KEY, defaultOrder);
   const [editing, setEditing] = useState(false);
   const [overId, setOverId] = useState<string | null>(null);
   const dragId = useRef<string | null>(null);
 
-  useEffect(() => {
-    let stored: unknown = null;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) stored = JSON.parse(raw);
-    } catch {
-      // ignore unavailable/corrupt storage
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted layout
-    setMounted(true);
-    if (Array.isArray(stored)) setOrder(stored as string[]);
-  }, []);
-
-  const persist = (next: string[]) => {
-    setOrder(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore unavailable storage
-    }
-  };
-
   // Stored order, minus sections that no longer exist, plus any new ones appended.
-  const effective = mounted
-    ? [...order.filter((id) => byId.has(id)), ...defaultOrder.filter((id) => !order.includes(id))]
-    : defaultOrder;
-  const customized = mounted && effective.join() !== defaultOrder.join();
+  const effective = [
+    ...order.filter((id) => byId.has(id)),
+    ...defaultOrder.filter((id) => !order.includes(id)),
+  ];
+  const customized = effective.join() !== defaultOrder.join();
 
   const handleDrop = (targetId: string) => {
     const src = dragId.current;

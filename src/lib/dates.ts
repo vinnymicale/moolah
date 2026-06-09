@@ -61,10 +61,17 @@ export function sameUTCDay(a: Date, b: Date): boolean {
     a.getUTCDate() === b.getUTCDate();
 }
 
+export const MS_PER_DAY = 86_400_000;
+
 /** Whole days from a to b (b - a). Both are normalised to UTC day first. */
 export function daysBetween(a: Date, b: Date): number {
   const ms = toUTCDay(b).getTime() - toUTCDay(a).getTime();
-  return Math.round(ms / 86_400_000);
+  return Math.round(ms / MS_PER_DAY);
+}
+
+/** Whole days from now until an ISO calendar day, negative once it's in the past. */
+export function daysUntilDate(iso: string): number {
+  return Math.ceil((new Date(`${iso}T00:00:00Z`).getTime() - Date.now()) / MS_PER_DAY);
 }
 
 export function isBefore(a: Date, b: Date): boolean {
@@ -87,6 +94,33 @@ const MONTHS = [
 
 export function monthLabel(d: Date): string {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// Human-readable formatters for "YYYY-MM-DD" calendar days. All render in UTC
+// so the displayed day matches the stored day regardless of the viewer's zone.
+function formatISODay(iso: string, options: Intl.DateTimeFormatOptions): string {
+  if (!iso) return "";
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", ...options });
+}
+
+/** "Jun 9" */
+export function formatMonthDay(iso: string): string {
+  return formatISODay(iso, { month: "short", day: "numeric" });
+}
+
+/** "Mon, Jun 9" */
+export function formatWeekdayMonthDay(iso: string): string {
+  return formatISODay(iso, { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** "Jun 9, 2026" */
+export function formatMonthDayYear(iso: string): string {
+  return formatISODay(iso, { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** "Mon, Jun 9, 2026" */
+export function formatWeekdayMonthDayYear(iso: string): string {
+  return formatISODay(iso, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 }
 
 /**

@@ -9,7 +9,8 @@ import {
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import type { Reports } from "@/lib/reports";
 
-const AXIS = "#94a3b8";
+import { BRAND_COLOR, CHART_AXIS_COLOR, INCOME_COLOR, NEGATIVE_COLOR, categoryColor } from "@/lib/colors";
+const AXIS = CHART_AXIS_COLOR;
 const GRID = "rgba(148,163,184,0.2)";
 
 import type { CategorySlice } from "@/lib/reports";
@@ -28,7 +29,7 @@ function CategoryMoMTable({ current, last }: { current: CategorySlice[]; last: C
       const thisVal = cur?.value ?? 0;
       const diff = thisVal - lastVal;
       const pct = lastVal > 0 ? (diff / lastVal) * 100 : null;
-      return { name, color: cur?.color ?? "#94a3b8", id: cur?.id ?? null, thisVal, lastVal, diff, pct };
+      return { name, color: categoryColor(cur), id: cur?.id ?? null, thisVal, lastVal, diff, pct };
     })
     .sort((a, b) => b.thisVal - a.thisVal);
 
@@ -126,7 +127,7 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
               <YAxis tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} width={70}
                 tickFormatter={(v) => formatUSDWhole(v)} />
               <Tooltip content={<MoneyTooltip />} />
-              <Line type="monotone" dataKey="value" name="Net worth" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="value" name="Net worth" stroke={BRAND_COLOR} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -139,8 +140,8 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
             <XAxis dataKey="label" tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
             <Tooltip content={<MoneyTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
-            <Bar dataKey="income" name="Income" fill="#16a34a" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expense" name="Expenses" fill="#dc2626" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="income" name="Income" fill={INCOME_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="expense" name="Expenses" fill={NEGATIVE_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -202,7 +203,7 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-surface2">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "#dc2626" : b.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? NEGATIVE_COLOR : b.color }} />
                   </div>
                 </div>
               );

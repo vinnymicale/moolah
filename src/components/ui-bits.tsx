@@ -1,5 +1,15 @@
 import Link from "next/link";
 
+export type Tone = "default" | "income" | "expense" | "brand";
+
+/** The text-color class for a semantic tone. */
+export function toneTextClass(tone: Tone): string {
+  return tone === "income" ? "text-income"
+    : tone === "expense" ? "text-expense"
+    : tone === "brand" ? "text-brand"
+    : "text-text";
+}
+
 export function PageHeader({
   title,
   subtitle,
@@ -25,18 +35,19 @@ export function StatCard({
   value,
   hint,
   tone = "default",
+  size = "md",
 }: {
   label: string;
   value: React.ReactNode;
   hint?: React.ReactNode;
-  tone?: "default" | "income" | "expense" | "brand";
+  tone?: Tone;
+  size?: "sm" | "md";
 }) {
-  const toneClass =
-    tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : tone === "brand" ? "text-brand" : "text-text";
+  const sm = size === "sm";
   return (
-    <div className="card p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
+    <div className={`card ${sm ? "px-3 py-2" : "p-4"}`}>
+      <p className={`font-medium uppercase tracking-wide text-muted ${sm ? "text-[11px]" : "text-xs"}`}>{label}</p>
+      <p className={`font-semibold tabular-nums ${sm ? "text-lg" : "mt-1 text-2xl"} ${toneTextClass(tone)}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
   );

@@ -4,10 +4,10 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { CalendarCheck, Repeat } from "lucide-react";
 import { Modal } from "@/components/Modal";
-import { formatUSD } from "@/lib/money";
+import { Amount } from "@/components/Amount";
 import { materializeOccurrenceAction } from "@/actions/transactions";
 import type { CalendarEvent } from "@/lib/calendar";
-import { formatDayLabel } from "./calendar-utils";
+import { formatMonthDay } from "@/lib/dates";
 
 export function OccurrenceModal({ event, onClose }: { event: CalendarEvent; onClose: () => void }) {
   const [pending, start] = useTransition();
@@ -25,13 +25,10 @@ export function OccurrenceModal({ event, onClose }: { event: CalendarEvent; onCl
         <div className="rounded-lg border border-line p-3">
           <div className="flex items-center justify-between">
             <span className="font-medium">{event.description}</span>
-            <span className={`tabular-nums font-semibold ${event.type === "INCOME" ? "text-income" : "text-expense"}`}>
-              {event.type === "INCOME" ? "+" : "-"}
-              {formatUSD(event.amount)}
-            </span>
+            <Amount type={event.type} amount={event.amount} className="font-semibold" />
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
-            <Repeat size={12} /> Recurring · {formatDayLabel(event.date)}
+            <Repeat size={12} /> Recurring · {formatMonthDay(event.date)}
           </p>
         </div>
         <p className="text-sm text-muted">

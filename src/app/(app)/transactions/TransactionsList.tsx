@@ -16,6 +16,10 @@ import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
 } from "@/actions/transactions";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
+import { categoryColor } from "@/lib/colors";
+import { toggleInSet } from "@/lib/collections";
+import { usePersistentState } from "@/lib/usePersistentState";
+import { Amount } from "@/components/Amount";
 import { ManageFilters } from "./ManageFilters";
 import {
   csvField, endOfMonthDay, toSet,
@@ -23,6 +27,7 @@ import {
 } from "./transactions-utils";
 
 const SAVED_FILTERS_KEY = "txnSavedFilters";
+const NO_FILTERS: SavedFilter[] = [];
 
 export function TransactionsList({
   transactions,
@@ -55,12 +60,13 @@ export function TransactionsList({
 }) {
   const router = useRouter();
   const focusRef = useRef<HTMLDivElement>(null);
-  // Briefly highlight a transaction navigated to from global search.
+  // Briefly highlight a transaction navigated to from global search: scroll it
+  // into view and fade the highlight out after a moment. Initialised from the
+  // prop so no synchronous state set is needed on mount.
   const [highlightId, setHighlightId] = useState(focusId);
 
   useEffect(() => {
     if (!focusId) return;
-    setHighlightId(focusId);
     focusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     const t = setTimeout(() => setHighlightId(""), 2600);
     return () => clearTimeout(t);
@@ -77,17 +83,7 @@ export function TransactionsList({
   const [pending, start] = useTransition();
 
   // Saved filters (client-side filter combos), persisted in localStorage.
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SAVED_FILTERS_KEY);
-      if (raw) setSavedFilters(JSON.parse(raw));
-    } catch { /* ignore */ }
-  }, []);
-  const persistFilters = (next: SavedFilter[]) => {
-    setSavedFilters(next);
-    try { localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-  };
+  const [savedFilters, persistFilters] = usePersistentState<SavedFilter[]>(SAVED_FILTERS_KEY, NO_FILTERS);
   const applyFilter = (f: SavedFilter) => {
     setSearch(f.search);
     setTypeFilter(new Set(f.types));
@@ -174,13 +170,7 @@ export function TransactionsList({
   };
 
   const allSelected = filtered.length > 0 && filtered.every((t) => selected.has(t.id));
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggle = (id: string) => setSelected((prev) => toggleInSet(prev, id));
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(filtered.map((t) => t.id)));
   const clearSelection = () => setSelected(new Set());
@@ -461,7 +451,7 @@ export function TransactionsList({
                 >
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}
+                    style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}
                   >
                     <CategoryIcon name={cat?.icon ?? "tag"} size={16} />
                   </span>
@@ -484,10 +474,7 @@ export function TransactionsList({
                       {t.note ? ` · ${t.note}` : ""}
                     </p>
                   </div>
-                  <span className={`shrink-0 tabular-nums font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                    {t.type === "INCOME" ? "+" : "-"}
-                    {formatUSD(t.amount)}
-                  </span>
+                  <Amount type={t.type} amount={t.amount} className="shrink-0 font-semibold" />
                 </button>
               </div>
             );

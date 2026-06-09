@@ -10,10 +10,9 @@ import {
   createAccountAction, updateAccountAction, archiveAccountAction,
   deleteAccountAction, type AccountInput,
 } from "@/actions/accounts";
+import { COLOR_PALETTE } from "@/lib/colors";
 import type { AccountDTO } from "@/lib/queries";
 import type { AccountType } from "@/generated/prisma/enums";
-
-const COLORS = ["#2563eb", "#0891b2", "#16a34a", "#7c3aed", "#9333ea", "#dc2626", "#d97706", "#0d9488", "#db2777", "#64748b"];
 
 export function AccountForm({ account, onClose }: { account: AccountDTO | null; onClose: () => void }) {
   const editing = !!account;
@@ -23,7 +22,7 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
   const [balance, setBalance] = useState(account ? String(account.currentBalance) : "");
   const [includeInCash, setIncludeInCash] = useState(account?.includeInCash ?? defaultIncludeInCash("CHECKING"));
   const [includeInNetWorth, setIncludeInNetWorth] = useState(account?.includeInNetWorth ?? true);
-  const [color, setColor] = useState(account?.color ?? COLORS[0]);
+  const [color, setColor] = useState(account?.color ?? "#2563eb");
   const [touchedCash, setTouchedCash] = useState(false);
   const [interestRate, setInterestRate] = useState(account?.interestRate !== null && account?.interestRate !== undefined ? String(account.interestRate) : "");
   const [minimumPayment, setMinimumPayment] = useState(account?.minimumPayment !== null && account?.minimumPayment !== undefined ? String(account.minimumPayment) : "");
@@ -111,7 +110,7 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
         <div>
           <label className="label">Color</label>
           <div className="flex flex-wrap gap-2">
-            {COLORS.map((c) => (
+            {COLOR_PALETTE.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}

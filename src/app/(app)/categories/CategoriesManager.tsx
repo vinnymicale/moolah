@@ -10,10 +10,7 @@ import {
 } from "@/actions/categories";
 import type { CategoryKind } from "@/generated/prisma/enums";
 
-const COLORS = [
-  "#dc2626", "#ea580c", "#d97706", "#65a30d", "#16a34a", "#0d9488",
-  "#0891b2", "#2563eb", "#4f46e5", "#7c3aed", "#9333ea", "#db2777", "#64748b",
-];
+import { COLOR_PALETTE } from "@/lib/colors";
 
 export function CategoriesManager({ categories }: { categories: CategoryDTO[] }) {
   const [editing, setEditing] = useState<CategoryDTO | null>(null);
@@ -71,7 +68,7 @@ function CategoryForm({ category, onClose }: { category: CategoryDTO | null; onC
   const editing = !!category;
   const [name, setName] = useState(category?.name ?? "");
   const [kind, setKind] = useState<CategoryKind>(category?.kind ?? "EXPENSE");
-  const [color, setColor] = useState(category?.color ?? COLORS[0]);
+  const [color, setColor] = useState(category?.color ?? COLOR_PALETTE[0]);
   const [icon, setIcon] = useState(category?.icon ?? "tag");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -109,7 +106,7 @@ function CategoryForm({ category, onClose }: { category: CategoryDTO | null; onC
         <div>
           <label className="label">Color</label>
           <div className="flex flex-wrap gap-2">
-            {COLORS.map((c) => (
+            {COLOR_PALETTE.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
