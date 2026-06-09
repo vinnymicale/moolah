@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { PartyPopper, Trophy, Target, TrendingUp, X } from "lucide-react";
 import type { Milestone } from "@/lib/milestones";
+import { useIsHydrated, usePersistentState } from "@/lib/usePersistentState";
 
 const DISMISS_KEY = "dismissedMilestones";
-
-function loadDismissed(): Set<string> {
-  try {
-    const raw = localStorage.getItem(DISMISS_KEY);
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
-  } catch {
-    return new Set();
-  }
-}
+const NONE: string[] = [];
 
 const ICONS = {
   networth: Trophy,
@@ -22,27 +14,15 @@ const ICONS = {
 } as const;
 
 export function MilestonesBanner({ milestones }: { milestones: Milestone[] }) {
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [hydrated, setHydrated] = useState(false);
+  const [dismissed, setDismissed] = usePersistentState<string[]>(DISMISS_KEY, NONE);
+  const hydrated = useIsHydrated();
 
-  useEffect(() => {
-    setDismissed(loadDismissed());
-    setHydrated(true);
-  }, []);
-
-  const dismiss = (id: string) => {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      try { localStorage.setItem(DISMISS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
-      return next;
-    });
-  };
+  const dismiss = (id: string) => setDismissed([...dismissed, id]);
 
   // Avoid SSR mismatch - render nothing until localStorage is read.
   if (!hydrated) return null;
 
-  const visible = milestones.filter((m) => !dismissed.has(m.id));
+  const visible = milestones.filter((m) => !dismissed.includes(m.id));
   if (visible.length === 0) return null;
 
   // Show one at a time to keep the dashboard calm.

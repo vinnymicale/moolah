@@ -5,15 +5,17 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Plus, TrendingUp, TrendingDown } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
 import { formatUSD } from "@/lib/money";
-import { monthLabel } from "@/lib/dates";
+import { formatMonthDay, monthLabel } from "@/lib/dates";
+import { DEFAULT_CATEGORY_COLOR, INCOME_COLOR, TRANSFER_COLOR, categoryColor } from "@/lib/colors";
+import { toggleInSet } from "@/lib/collections";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import type { CalendarEvent, CalendarMonth, CcDueEvent } from "@/lib/calendar";
-import { WEEKDAYS, eventToTxn, formatDayLabel } from "./calendar-utils";
+import { WEEKDAYS, eventToTxn } from "./calendar-utils";
 import { DayCell } from "./DayCell";
 import { DayEventsModal } from "./DayEventsModal";
 import { OccurrenceModal } from "./OccurrenceModal";
 import { CcDueModal } from "./CcDueModal";
-import { Summary } from "./Summary";
+import { StatCard } from "@/components/ui-bits";
 
 type ModalState =
   | { kind: "add"; date: string }
@@ -52,14 +54,7 @@ export function CalendarView({
 
   const allEnabled = enabledAccountIds.size === accounts.length;
 
-  const toggleAccount = (id: string) => {
-    setEnabledAccountIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const toggleAccount = (id: string) => setEnabledAccountIds((prev) => toggleInSet(prev, id));
 
   const toggleAllAccounts = () => {
     if (allEnabled) {
@@ -104,9 +99,9 @@ export function CalendarView({
   const hasCash = accounts.some((a) => a.includeInCash);
 
   const colorFor = (e: CalendarEvent) =>
-    e.isTransfer ? "#94a3b8"
-    : e.categoryId ? catById.get(e.categoryId)?.color ?? "#64748b"
-    : e.type === "INCOME" ? "#16a34a" : "#64748b";
+    e.isTransfer ? TRANSFER_COLOR
+    : e.categoryId ? categoryColor(catById.get(e.categoryId))
+    : e.type === "INCOME" ? INCOME_COLOR : DEFAULT_CATEGORY_COLOR;
 
   return (
     <div>
@@ -131,10 +126,10 @@ export function CalendarView({
 
       {/* Summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Summary label="Income" value={formatUSD(filteredMonthIncome)} tone="income" />
-        <Summary label="Expenses" value={formatUSD(filteredMonthExpense)} tone="expense" />
-        <Summary label="Net" value={formatUSD(net)} tone={net >= 0 ? "income" : "expense"} />
-        {hasCash && <Summary label="Projected end-of-month" value={formatUSD(endOfMonthBalance)} tone={endOfMonthBalance >= 0 ? "default" : "expense"} />}
+        <StatCard size="sm" label="Income" value={formatUSD(filteredMonthIncome)} tone="income" />
+        <StatCard size="sm" label="Expenses" value={formatUSD(filteredMonthExpense)} tone="expense" />
+        <StatCard size="sm" label="Net" value={formatUSD(net)} tone={net >= 0 ? "income" : "expense"} />
+        {hasCash && <StatCard size="sm" label="Projected end-of-month" value={formatUSD(endOfMonthBalance)} tone={endOfMonthBalance >= 0 ? "default" : "expense"} />}
       </div>
 
       {/* Account + type filters */}
@@ -200,7 +195,7 @@ export function CalendarView({
 
       {hasCash && lowest.balance < 0 && (
         <div className="mb-4 rounded-lg border border-expense/40 bg-expense/10 px-4 py-2 text-sm text-expense">
-          Heads up - projected cash dips to {formatUSD(lowest.balance)} on {formatDayLabel(lowest.iso)}.
+          Heads up - projected cash dips to {formatUSD(lowest.balance)} on {formatMonthDay(lowest.iso)}.
         </div>
       )}
 

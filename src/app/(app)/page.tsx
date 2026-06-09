@@ -3,11 +3,14 @@ import { ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDo
 import { requireHousehold } from "@/lib/session";
 import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSafeToTransfer, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
-import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
+import { addUTCMonths, endOfUTCMonth, formatWeekdayMonthDay, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { formatUSD } from "@/lib/money";
+import { INCOME_COLOR, NEGATIVE_COLOR, categoryColor } from "@/lib/colors";
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { PageHeader, StatCard } from "@/components/ui-bits";
+import { Amount } from "@/components/Amount";
+import { PageHeader, StatCard, toneTextClass, type Tone } from "@/components/ui-bits";
 import { computeMilestones } from "@/lib/milestones";
+import { summarizeDashboard } from "@/lib/dashboard";
 import { DashboardSections, type DashboardSection } from "./DashboardSections";
 import { SafeTransferCard } from "./SafeTransferCard";
 import { SpendingAlertsCard } from "./SpendingAlertsCard";
@@ -39,23 +42,21 @@ export default async function DashboardPage() {
     getTopMerchants(householdId, monthISO),
   ]);
 
-  const topGoals = goals.slice(0, 3);
-  const goalsSaved = goals.reduce((s, g) => s + g.currentAmount, 0);
-  const goalsTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
-
-  const lastMonthExpense = lastMonthTxns.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
-  const spendDeltaPct = lastMonthExpense > 0 ? Math.round(((calendar.monthExpense - lastMonthExpense) / lastMonthExpense) * 100) : null;
+  const {
+    topGoals, goalsSaved, goalsTarget, spendDeltaPct, net, savingsRate,
+    projectedEnd, recent, budgeted, totalBudget, budgetSpent,
+  } = summarizeDashboard({
+    goals,
+    monthTxns,
+    lastMonthTxns,
+    budgetLines,
+    monthIncome: calendar.monthIncome,
+    monthExpense: calendar.monthExpense,
+    projection: calendar.projection,
+    anchorBalance: calendar.anchorBalance,
+  });
 
   const catById = new Map(categories.map((c) => [c.id, c]));
-  const net = calendar.monthIncome - calendar.monthExpense;
-  const savingsRate = calendar.monthIncome > 0 ? Math.round((net / calendar.monthIncome) * 100) : null;
-  const projectedEnd = calendar.projection.at(-1)?.balance ?? calendar.anchorBalance;
-  const recent = monthTxns.slice(0, 6);
-
-  const budgeted = budgetLines.filter((b) => b.limit > 0).sort((a, b) => b.limit - a.limit);
-  const totalBudget = budgeted.reduce((s, b) => s + b.limit, 0);
-  const budgetSpent = budgeted.reduce((s, b) => s + b.actual, 0);
-
   const milestones = computeMilestones({ netWorth: netWorth.net, goals, savingsRate, net });
 
   const sections: DashboardSection[] = [
@@ -79,7 +80,7 @@ export default async function DashboardPage() {
                 const cat = u.categoryId ? catById.get(u.categoryId) : undefined;
                 return (
                   <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
                       <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -87,12 +88,9 @@ export default async function DashboardPage() {
                         {u.description}
                         {u.recurring && <Repeat size={11} className="ml-1.5 inline text-muted" />}
                       </p>
-                      <p className="text-xs text-muted">{formatDay(u.date)}</p>
+                      <p className="text-xs text-muted">{formatWeekdayMonthDay(u.date)}</p>
                     </div>
-                    <span className={`shrink-0 tabular-nums text-sm font-semibold ${u.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                      {u.type === "INCOME" ? "+" : "-"}
-                      {formatUSD(u.amount)}
-                    </span>
+                    <Amount type={u.type} amount={u.amount} className="shrink-0 text-sm font-semibold" />
                   </li>
                 );
               })}
@@ -160,7 +158,7 @@ export default async function DashboardPage() {
                         </span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "#dc2626" : b.color }} />
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? NEGATIVE_COLOR : b.color }} />
                       </div>
                     </li>
                   );
@@ -195,7 +193,7 @@ export default async function DashboardPage() {
                     <li key={i} className="flex items-center gap-3 px-4 py-2.5">
                       <span
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold tabular-nums"
-                        style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}
+                        style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}
                       >
                         {i + 1}
                       </span>
@@ -251,7 +249,7 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                         <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? "#16a34a" : g.color }} />
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? INCOME_COLOR : g.color }} />
                         </div>
                       </li>
                     );
@@ -278,7 +276,7 @@ export default async function DashboardPage() {
                 const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
                 return (
                   <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${cat?.color ?? "#64748b"}22`, color: cat?.color ?? "#64748b" }}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
                       <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -290,12 +288,9 @@ export default async function DashboardPage() {
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-muted">{formatDay(t.date)}{cat ? ` · ${cat.name}` : ""}</p>
+                      <p className="text-xs text-muted">{formatWeekdayMonthDay(t.date)}{cat ? ` · ${cat.name}` : ""}</p>
                     </div>
-                    <span className={`shrink-0 tabular-nums text-sm font-semibold ${t.type === "INCOME" ? "text-income" : "text-expense"}`}>
-                      {t.type === "INCOME" ? "+" : "-"}
-                      {formatUSD(t.amount)}
-                    </span>
+                    <Amount type={t.type} amount={t.amount} className="shrink-0 text-sm font-semibold" />
                   </li>
                 );
               })}
@@ -345,20 +340,15 @@ export default async function DashboardPage() {
   );
 }
 
-function Row({ label, value, tone, icon }: { label: string; value: string; tone?: "income" | "expense"; icon?: React.ReactNode }) {
-  const c = tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "text-text";
+function Row({ label, value, tone = "default", icon }: { label: string; value: string; tone?: Tone; icon?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`flex items-center gap-1.5 tabular-nums font-semibold ${c}`}>{icon}{value}</span>
+      <span className={`flex items-center gap-1.5 tabular-nums font-semibold ${toneTextClass(tone)}`}>{icon}{value}</span>
     </div>
   );
 }
 
 function sumUpcoming(items: { type: string; amount: number }[], type: string): number {
   return items.filter((i) => i.type === type).reduce((s, i) => s + i.amount, 0);
-}
-
-function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }

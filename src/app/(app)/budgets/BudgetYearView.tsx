@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { StatCard } from "@/components/ui-bits";
+import { INCOME_COLOR, NEGATIVE_COLOR } from "@/lib/colors";
 import { formatUSD } from "@/lib/money";
 import type { BudgetMonthSummaryDTO } from "@/lib/queries";
 
@@ -64,7 +65,7 @@ export function BudgetYearView({
                   </div>
                   {m.budget > 0 && (
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface2">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "#dc2626" : "#16a34a" }} />
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? NEGATIVE_COLOR : INCOME_COLOR }} />
                     </div>
                   )}
                 </Link>

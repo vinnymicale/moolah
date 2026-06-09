@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { TrendingDown, Snowflake, Mountain, AlertTriangle, ArrowRight } from "lucide-react";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import { simulatePayoff, monthsToLabel, type Strategy, type DebtInput } from "@/lib/debt-payoff";
+import { BRAND_COLOR, CHART_AXIS_COLOR } from "@/lib/colors";
+import { toggleInSet } from "@/lib/collections";
 import type { AccountDTO } from "@/lib/queries";
 import { StrategyButton } from "./StrategyButton";
-import { StatBox } from "./StatBox";
+import { StatCard } from "@/components/ui-bits";
 import { TermsRow } from "./TermsRow";
+import { PayoffOrderList } from "./PayoffOrderList";
 import { payoffDateLabel } from "./debt-utils";
 
 export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
@@ -20,29 +23,26 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
   // Per-account inclusion - all enabled by default.
   const [included, setIncluded] = useState<Set<string>>(() => new Set(debts.map((d) => d.id)));
 
-  const toggleIncluded = (id: string) =>
-    setIncluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleIncluded = (id: string) => setIncluded((prev) => toggleInSet(prev, id));
 
   // Debts missing the APR / minimum payment can't be simulated yet.
-  const ready = debts.filter((d) => d.interestRate !== null && d.minimumPayment !== null);
-  const needsTerms = debts.filter((d) => d.interestRate === null || d.minimumPayment === null);
+  const ready = useMemo(() => debts.filter((d) => d.interestRate !== null && d.minimumPayment !== null), [debts]);
+  const needsTerms = useMemo(() => debts.filter((d) => d.interestRate === null || d.minimumPayment === null), [debts]);
 
   // Only include accounts the user has checked.
-  const activeReady = ready.filter((d) => included.has(d.id));
+  const activeReady = useMemo(() => ready.filter((d) => included.has(d.id)), [ready, included]);
 
-  const inputs: DebtInput[] = activeReady.map((d) => ({
-    id: d.id,
-    name: d.name,
-    color: d.color,
-    balance: d.currentBalance,
-    apr: d.interestRate ?? 0,
-    minPayment: d.minimumPayment ?? 0,
-  }));
+  const inputs = useMemo<DebtInput[]>(
+    () => activeReady.map((d) => ({
+      id: d.id,
+      name: d.name,
+      color: d.color,
+      balance: d.currentBalance,
+      apr: d.interestRate ?? 0,
+      minPayment: d.minimumPayment ?? 0,
+    })),
+    [activeReady],
+  );
 
   const extraNum = Math.max(0, Number(extra.replace(/[^0-9.]/g, "")) || 0);
 
@@ -164,9 +164,9 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
             <>
               {/* Summary stats */}
               <div className="grid gap-3 sm:grid-cols-3">
-                <StatBox label="Debt-free in" value={monthsToLabel(plan.totalMonths)} tone="brand" hint={payoffDateLabel(plan.totalMonths)} />
-                <StatBox label="Total interest" value={formatUSD(plan.totalInterest)} tone="expense" hint={`on ${formatUSD(totalBalance)} of debt`} />
-                <StatBox
+                <StatCard label="Debt-free in" value={monthsToLabel(plan.totalMonths)} tone="brand" hint={payoffDateLabel(plan.totalMonths)} />
+                <StatCard label="Total interest" value={formatUSD(plan.totalInterest)} tone="expense" hint={`on ${formatUSD(totalBalance)} of debt`} />
+                <StatCard
                   label="Saved vs. minimums"
                   value={interestSaved > 0.5 ? formatUSD(interestSaved) : "-"}
                   tone="income"
@@ -184,87 +184,30 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                     <CartesianGrid stroke="rgba(148,163,184,0.2)" vertical={false} />
                     <XAxis
                       dataKey="month"
-                      tick={{ fill: "#94a3b8", fontSize: 12 }}
+                      tick={{ fill: CHART_AXIS_COLOR, fontSize: 12 }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(m) => (m % 12 === 0 ? `${m / 12}y` : "")}
                     />
-                    <YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
+                    <YAxis tick={{ fill: CHART_AXIS_COLOR, fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
                     <Tooltip
                       contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12 }}
                       labelFormatter={(m) => `Month ${m}`}
                       formatter={(v) => [formatUSD(Number(v)), "Balance"]}
                     />
-                    <Line type="monotone" dataKey="balance" stroke="#4f46e5" strokeWidth={2.5} dot={false} />
+                    <Line type="monotone" dataKey="balance" stroke={BRAND_COLOR} strokeWidth={2.5} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
 
               {/* Per-debt payoff order */}
-              <div className="card overflow-hidden">
-                <div className="border-b border-line px-4 py-3">
-                  <h2 className="text-sm font-semibold">Payoff order ({strategy === "avalanche" ? "highest rate first" : "smallest balance first"})</h2>
-                </div>
-                <ul className="divide-y divide-line">
-                  {(() => {
-                    const sorted = [...plan.perDebt].sort((a, b) => a.monthsToPayoff - b.monthsToPayoff);
-                    // Running total of freed minimums available to cascade onto each subsequent debt.
-                    let freedSoFar = 0;
-                    return sorted.map((d, i) => {
-                      const acct = activeReady.find((r) => r.id === d.id);
-                      const minPayment = acct?.minimumPayment ?? 0;
-                      const rolledIn = cascade ? freedSoFar : 0;
-                      const isLast = i === sorted.length - 1;
-                      // Total recommended monthly payment for this debt during its focus phase:
-                      // minimum + extra (which includes any cascade from paid-off debts).
-                      const focusPayment = minPayment + extraNum + rolledIn;
-                      const extraAllocated = extraNum + rolledIn;
-                      freedSoFar += minPayment;
-                      return (
-                        <li key={d.id}>
-                          <div className="flex items-center gap-3 px-4 py-3">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums" style={{ backgroundColor: `${d.color}22`, color: d.color }}>
-                              {i + 1}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{d.name}</p>
-                              <p className="text-xs text-muted">
-                                {formatUSD(acct?.currentBalance ?? 0)} · {acct?.interestRate}% APR · {formatUSD(d.totalInterest)} interest
-                              </p>
-                              {/* Recommended payment breakdown for this debt's focus phase */}
-                              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]">
-                                <span className="font-medium text-text">
-                                  {i === 0 ? "Pay now:" : `Pay when focus:`}
-                                </span>
-                                <span className="font-semibold text-brand">{formatUSD(focusPayment)}/mo</span>
-                                <span className="text-muted">
-                                  ({formatUSD(minPayment)} min
-                                  {extraAllocated > 0 && (
-                                    <> + <span className="text-income">{formatUSD(extraAllocated)} extra{rolledIn > 0 ? ` (incl. ${formatUSD(rolledIn)} freed)` : ""}</span></>
-                                  )}
-                                  )
-                                </span>
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-sm font-semibold text-brand">{monthsToLabel(d.monthsToPayoff)}</span>
-                          </div>
-                          {!isLast && (
-                            <div className="flex items-center gap-1.5 border-t border-dashed border-line/60 px-4 py-1.5 text-[11px] text-muted">
-                              <ArrowRight size={10} className="text-brand" />
-                              <span>
-                                {cascade
-                                  ? <><span className="font-medium text-brand">{formatUSD(minPayment)}/mo</span> freed - rolls onto next debt</>
-                                  : <><span className="font-medium text-muted">{formatUSD(minPayment)}/mo</span> freed - rollover is off, leaves the pool</>
-                                }
-                              </span>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    });
-                  })()}
-                </ul>
-              </div>
+              <PayoffOrderList
+                perDebt={plan.perDebt}
+                accounts={activeReady}
+                cascade={cascade}
+                extraNum={extraNum}
+                strategy={strategy}
+              />
             </>
           )}
           </>
