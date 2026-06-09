@@ -7,7 +7,25 @@ import { PageHeader } from "@/components/ui-bits";
 import { SetupPanel } from "@/app/(auth)/signin/SetupPanel";
 import { HouseholdNameForm, InviteCode, ExportData, BackupData, AiConfigForm } from "./SettingsForm";
 
+const DEMO_MODE = process.env.DEMO_MODE === "true";
+
 export default async function SettingsPage() {
+  if (DEMO_MODE) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-5">
+        <PageHeader title="Settings" subtitle="Demo mode — settings are read-only." />
+        <section className="card p-5">
+          <h2 className="mb-1 font-semibold">Demo mode</h2>
+          <p className="text-sm text-muted">
+            This is a live demo of Moolah. Settings, bank connections, and the AI assistant are
+            disabled. Any changes you make to transactions, budgets, or goals are local to your
+            browser session and reset on refresh.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   const { householdId } = await requireHousehold();
   const host = (await headers()).get("host");
   const status = getSetupStatus();

@@ -7,6 +7,7 @@ import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { toNumber } from "@/lib/money";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 
 const goalSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
@@ -20,6 +21,7 @@ const goalSchema = z.object({
 export type GoalInput = z.input<typeof goalSchema>;
 
 export async function createGoalAction(input: GoalInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const data = goalSchema.parse(input);
@@ -39,6 +41,7 @@ export async function createGoalAction(input: GoalInput): Promise<ActionResult> 
 }
 
 export async function updateGoalAction(id: string, input: GoalInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
@@ -61,6 +64,7 @@ export async function updateGoalAction(id: string, input: GoalInput): Promise<Ac
 
 /** Add (or, with a negative delta, withdraw) money toward a goal. Clamped ≥ 0. */
 export async function contributeGoalAction(id: string, delta: number): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const goal = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
@@ -73,6 +77,7 @@ export async function contributeGoalAction(id: string, delta: number): Promise<A
 }
 
 export async function deleteGoalAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });

@@ -9,6 +9,7 @@ import { toCents } from "@/lib/money";
 import { expandOccurrences } from "@/lib/recurrence";
 import { guessCategoryName, type ImportType } from "@/lib/csv-import";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 import { TxnType } from "@/generated/prisma/enums";
 
 const parsedRowSchema = z.object({
@@ -138,6 +139,7 @@ export type CommitImportInput = z.input<typeof commitSchema>;
 
 /** Create concrete (cleared) transactions for the approved rows. */
 export async function commitImportAction(input: CommitImportInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId, userId } = await requireHousehold();
     const { rows, accountId } = commitSchema.parse(input);

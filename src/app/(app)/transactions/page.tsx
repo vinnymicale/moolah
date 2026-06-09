@@ -3,6 +3,9 @@ import { getAccounts, getCategories, getTransactionsBetween } from "@/lib/querie
 import { addUTCMonths, endOfUTCMonth, formatMonthDayYear, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { PageHeader } from "@/components/ui-bits";
 import { TransactionsList } from "./TransactionsList";
+import { DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TRANSACTIONS } from "@/lib/demo-data";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 const RANGES = new Set(["month", "3m", "12m", "ytd", "all", "custom"]);
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,8 +20,8 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<{ m?: string; account?: string; range?: string; category?: string; focus?: string; from?: string; to?: string }>;
 }) {
-  const { householdId } = await requireHousehold();
   const { m, account, range: rangeParam, category, focus, from, to } = await searchParams;
+  const householdId = DEMO_MODE ? "" : (await requireHousehold()).householdId;
   let range = RANGES.has(rangeParam ?? "") ? (rangeParam as string) : "month";
   // A valid from/to pair forces custom mode regardless of the range param.
   const hasCustom = ISO_DAY.test(from ?? "") && ISO_DAY.test(to ?? "") && (from as string) <= (to as string);
@@ -66,11 +69,17 @@ export default async function TransactionsPage({
       rangeLabel = monthLabel(monthFirst);
   }
 
-  const [accounts, categories, transactions] = await Promise.all([
-    getAccounts(householdId),
-    getCategories(householdId),
-    getTransactionsBetween(householdId, startISO, endISO),
-  ]);
+  const [accounts, categories, transactions] = DEMO_MODE
+    ? [
+        DEMO_ACCOUNTS,
+        DEMO_CATEGORIES,
+        DEMO_TRANSACTIONS.filter((t) => t.date >= startISO && t.date <= endISO),
+      ]
+    : await Promise.all([
+        getAccounts(householdId),
+        getCategories(householdId),
+        getTransactionsBetween(householdId, startISO, endISO),
+      ]);
 
   // Validate comma-separated category/account filters from the URL, keeping
   // only ids that exist (plus the sentinel "uncategorized" / "no account").

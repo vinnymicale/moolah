@@ -3,6 +3,10 @@ import { getAccounts, getCategories } from "@/lib/queries";
 import { getCalendarMonth } from "@/lib/calendar";
 import { addUTCMonths, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { CalendarView } from "./CalendarView";
+import { getDemoHouseholdId } from "@/lib/demo-session";
+import { DEMO_ACCOUNTS, DEMO_CATEGORIES } from "@/lib/demo-data";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 function localTodayISO(): string {
   const d = new Date();
@@ -14,17 +18,19 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ m?: string }>;
 }) {
-  const { householdId } = await requireHousehold();
   const { m } = await searchParams;
-
   const todayISO = localTodayISO();
   const monthParam = /^\d{4}-\d{2}$/.test(m ?? "") ? `${m}-01` : `${todayISO.slice(0, 7)}-01`;
   const monthFirst = startOfUTCMonth(parseISODay(monthParam));
   const monthISO = isoDay(monthFirst);
 
+  const householdId = DEMO_MODE
+    ? (await getDemoHouseholdId() ?? "")
+    : (await requireHousehold()).householdId;
+
   const [accounts, categories, data] = await Promise.all([
-    getAccounts(householdId),
-    getCategories(householdId),
+    DEMO_MODE ? DEMO_ACCOUNTS : getAccounts(householdId),
+    DEMO_MODE ? DEMO_CATEGORIES : getCategories(householdId),
     getCalendarMonth(householdId, monthISO, todayISO),
   ]);
 

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 import { CategoryKind } from "@/generated/prisma/enums";
 
 const categorySchema = z.object({
@@ -18,6 +19,7 @@ const categorySchema = z.object({
 export type CategoryInput = z.input<typeof categorySchema>;
 
 export async function createCategoryAction(input: CategoryInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const data = categorySchema.parse(input);
@@ -36,6 +38,7 @@ export async function createCategoryAction(input: CategoryInput): Promise<Action
 }
 
 export async function updateCategoryAction(id: string, input: CategoryInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.category.findFirst({ where: { id, householdId } });
@@ -56,6 +59,7 @@ export async function updateCategoryAction(id: string, input: CategoryInput): Pr
 }
 
 export async function deleteCategoryAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.category.findFirst({ where: { id, householdId } });

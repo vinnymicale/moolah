@@ -3,6 +3,12 @@ import { ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDo
 import { requireHousehold } from "@/lib/session";
 import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSafeToTransfer, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
+import { getDemoHouseholdId } from "@/lib/demo-session";
+import {
+  DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TRANSACTIONS, DEMO_BUDGETS, DEMO_GOALS,
+} from "@/lib/demo-data";
+
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 import { addUTCMonths, endOfUTCMonth, formatWeekdayMonthDay, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { formatUSD } from "@/lib/money";
 import { INCOME_COLOR, NEGATIVE_COLOR, categoryColor } from "@/lib/colors";
@@ -22,21 +28,35 @@ function localTodayISO(): string {
 }
 
 export default async function DashboardPage() {
-  const { householdId } = await requireHousehold();
   const todayISO = localTodayISO();
   const monthFirst = startOfUTCMonth(parseISODay(todayISO));
   const monthISO = isoDay(monthFirst);
-
   const lastMonthFirst = addUTCMonths(monthFirst, -1);
+
+  const householdId = DEMO_MODE
+    ? (await getDemoHouseholdId() ?? "")
+    : (await requireHousehold()).householdId;
+
   const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals, safeTransfer, anomalies, topMerchants] = await Promise.all([
-    getNetWorth(householdId),
+    DEMO_MODE
+      ? Promise.resolve({
+          assets: DEMO_ACCOUNTS.filter((a) => a.isAsset && a.includeInNetWorth).reduce((s, a) => s + a.currentBalance, 0),
+          liabilities: DEMO_ACCOUNTS.filter((a) => !a.isAsset && a.includeInNetWorth).reduce((s, a) => s + a.currentBalance, 0),
+          net: DEMO_ACCOUNTS.filter((a) => a.includeInNetWorth).reduce((s, a) => s + (a.isAsset ? a.currentBalance : -a.currentBalance), 0),
+          accounts: DEMO_ACCOUNTS,
+        })
+      : getNetWorth(householdId),
     getCalendarMonth(householdId, monthISO, todayISO),
     getUpcoming(householdId, todayISO, 14),
-    getCategories(householdId),
-    getTransactionsBetween(householdId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
-    getBudgetMonth(householdId, monthISO),
-    getTransactionsBetween(householdId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
-    getSavingsGoals(householdId),
+    DEMO_MODE ? Promise.resolve(DEMO_CATEGORIES) : getCategories(householdId),
+    DEMO_MODE
+      ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= monthISO && t.date <= isoDay(endOfUTCMonth(monthFirst))))
+      : getTransactionsBetween(householdId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
+    DEMO_MODE ? Promise.resolve(DEMO_BUDGETS) : getBudgetMonth(householdId, monthISO),
+    DEMO_MODE
+      ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= isoDay(lastMonthFirst) && t.date <= isoDay(endOfUTCMonth(lastMonthFirst))))
+      : getTransactionsBetween(householdId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
+    DEMO_MODE ? Promise.resolve(DEMO_GOALS) : getSavingsGoals(householdId),
     getSafeToTransfer(householdId, todayISO),
     getSpendingAnomalies(householdId, monthISO),
     getTopMerchants(householdId, monthISO),

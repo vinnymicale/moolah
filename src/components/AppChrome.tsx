@@ -23,6 +23,7 @@ export function AppChrome({
   accounts,
   categories,
   authBypass = false,
+  demoMode = false,
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -30,6 +31,7 @@ export function AppChrome({
   accounts: AccountDTO[];
   categories: CategoryDTO[];
   authBypass?: boolean;
+  demoMode?: boolean;
 }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
@@ -151,6 +153,7 @@ export function AppChrome({
     user,
     householdName,
     authBypass,
+    demoMode,
     nav: orderedNav,
     isActive,
     customized,
@@ -229,10 +232,10 @@ export function AppChrome({
       />
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+      {!demoMode && <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />}
 
-      {/* Floating chat button */}
-      {!chatOpen && (
+      {/* Floating chat button — hidden in demo mode */}
+      {!demoMode && !chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-lg transition-transform hover:scale-105 active:scale-95"

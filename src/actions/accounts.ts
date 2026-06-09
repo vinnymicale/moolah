@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 import { AccountType } from "@/generated/prisma/enums";
 
 const LIABILITY_TYPES: AccountType[] = ["CREDIT_CARD", "LOAN", "OTHER_LIABILITY"];
@@ -47,6 +48,7 @@ async function ownedAccount(id: string, householdId: string) {
 }
 
 export async function createAccountAction(input: AccountInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const data = accountSchema.parse(input);
@@ -70,6 +72,7 @@ export async function createAccountAction(input: AccountInput): Promise<ActionRe
 }
 
 export async function updateAccountAction(id: string, input: AccountInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     await ownedAccount(id, householdId);
@@ -102,6 +105,7 @@ export type DebtTermsInput = z.input<typeof debtTermsSchema>;
 
 /** Update only the payoff-planner terms (APR + minimum) for a liability. */
 export async function updateDebtTermsAction(id: string, input: DebtTermsInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const acct = await ownedAccount(id, householdId);
@@ -117,6 +121,7 @@ export async function updateDebtTermsAction(id: string, input: DebtTermsInput): 
 }
 
 export async function archiveAccountAction(id: string, archived = true): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     await ownedAccount(id, householdId);
@@ -126,6 +131,7 @@ export async function archiveAccountAction(id: string, archived = true): Promise
 }
 
 export async function deleteAccountAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     await ownedAccount(id, householdId);
@@ -146,6 +152,7 @@ const snapshotSchema = z.object({
 export type SnapshotInput = z.input<typeof snapshotSchema>;
 
 export async function addSnapshotAction(input: SnapshotInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const data = snapshotSchema.parse(input);
@@ -171,6 +178,7 @@ export async function addSnapshotAction(input: SnapshotInput): Promise<ActionRes
 }
 
 export async function deleteSnapshotAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const snap = await prisma.accountSnapshot.findFirst({ where: { id, account: { householdId } } });

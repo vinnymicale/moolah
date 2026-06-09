@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 import { normalizeDescription } from "@/lib/recurring-suggestions";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
 
@@ -45,6 +46,7 @@ function toData(data: z.infer<typeof ruleSchema>, householdId: string) {
 }
 
 export async function createRecurringAction(input: RecurringInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const data = ruleSchema.parse(input);
@@ -54,6 +56,7 @@ export async function createRecurringAction(input: RecurringInput): Promise<Acti
 }
 
 export async function updateRecurringAction(id: string, input: RecurringInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.recurringRule.findFirst({ where: { id, householdId } });
@@ -67,6 +70,7 @@ export async function updateRecurringAction(id: string, input: RecurringInput): 
 }
 
 export async function deleteRecurringAction(id: string, deleteOccurrences = false): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.recurringRule.findFirst({ where: { id, householdId } });
@@ -89,6 +93,7 @@ export async function deleteRecurringAction(id: string, deleteOccurrences = fals
  * `suggestionKey` is the detector's group key, "TYPE|normalized description".
  */
 export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
 

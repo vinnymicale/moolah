@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, type ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/demo-guard";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
 
 const recurringSchema = z.object({
@@ -42,6 +43,7 @@ async function assertOwnership(householdId: string, accountId?: string | null, c
 }
 
 export async function createTransactionAction(input: TransactionInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId, userId } = await requireHousehold();
     const data = txnSchema.parse(input);
@@ -89,6 +91,7 @@ export async function createTransactionAction(input: TransactionInput): Promise<
 }
 
 export async function updateTransactionAction(id: string, input: TransactionInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
@@ -114,6 +117,7 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
 }
 
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
@@ -124,6 +128,7 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
 }
 
 export async function setClearedAction(id: string, cleared: boolean): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
@@ -142,6 +147,7 @@ export async function setClearedAction(id: string, cleared: boolean): Promise<Ac
 const idsSchema = z.array(z.string().min(1)).min(1, "Select at least one transaction").max(1000);
 
 export async function bulkSetCategoryAction(ids: string[], categoryId: string | null): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const list = idsSchema.parse(ids);
@@ -155,6 +161,7 @@ export async function bulkSetCategoryAction(ids: string[], categoryId: string | 
 }
 
 export async function bulkSetAccountAction(ids: string[], accountId: string | null): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const list = idsSchema.parse(ids);
@@ -168,6 +175,7 @@ export async function bulkSetAccountAction(ids: string[], accountId: string | nu
 }
 
 export async function bulkSetClearedAction(ids: string[], cleared: boolean): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const list = idsSchema.parse(ids);
@@ -177,6 +185,7 @@ export async function bulkSetClearedAction(ids: string[], cleared: boolean): Pro
 }
 
 export async function bulkDeleteTransactionsAction(ids: string[]): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const list = idsSchema.parse(ids);
@@ -194,6 +203,7 @@ export type ConvertToRecurringInput = z.input<typeof convertSchema>;
  * source transaction to it so the start-date occurrence isn't double-counted.
  */
 export async function convertToRecurringAction(id: string, input: ConvertToRecurringInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId } = await requireHousehold();
     const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
@@ -230,6 +240,7 @@ export async function convertToRecurringAction(id: string, input: ConvertToRecur
  * a bill is actually paid). Idempotent per (rule, date).
  */
 export async function materializeOccurrenceAction(ruleId: string, dateISO: string, cleared = true): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { householdId, userId } = await requireHousehold();
     const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, householdId } });
@@ -280,6 +291,7 @@ export interface SearchHit {
 }
 
 export async function searchTransactionsAction(query: string): Promise<SearchHit[]> {
+  if (isDemoMode()) return [];
   const { householdId } = await requireHousehold();
   const q = query.trim();
   if (q.length < 2) return [];
