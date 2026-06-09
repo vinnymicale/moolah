@@ -4,7 +4,6 @@ import { getCalendarMonth } from "@/lib/calendar";
 import { addUTCMonths, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { CalendarView } from "./CalendarView";
 import { getDemoHouseholdId } from "@/lib/demo-session";
-import { DEMO_ACCOUNTS, DEMO_CATEGORIES } from "@/lib/demo-data";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -29,8 +28,8 @@ export default async function CalendarPage({
     : (await requireHousehold()).householdId;
 
   const [accounts, categories, data] = await Promise.all([
-    DEMO_MODE ? DEMO_ACCOUNTS : getAccounts(householdId),
-    DEMO_MODE ? DEMO_CATEGORIES : getCategories(householdId),
+    getAccounts(householdId),
+    getCategories(householdId),
     getCalendarMonth(householdId, monthISO, todayISO),
   ]);
 
