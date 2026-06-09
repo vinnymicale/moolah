@@ -5,7 +5,7 @@ import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, get
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
 import { getDemoHouseholdId } from "@/lib/demo-session";
 import {
-  DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TRANSACTIONS, DEMO_BUDGETS, DEMO_GOALS,
+  DEMO_TRANSACTIONS, DEMO_BUDGETS, DEMO_GOALS,
 } from "@/lib/demo-data";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -38,17 +38,10 @@ export default async function DashboardPage() {
     : (await requireHousehold()).householdId;
 
   const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals, safeTransfer, anomalies, topMerchants] = await Promise.all([
-    DEMO_MODE
-      ? Promise.resolve({
-          assets: DEMO_ACCOUNTS.filter((a) => a.isAsset && a.includeInNetWorth).reduce((s, a) => s + a.currentBalance, 0),
-          liabilities: DEMO_ACCOUNTS.filter((a) => !a.isAsset && a.includeInNetWorth).reduce((s, a) => s + a.currentBalance, 0),
-          net: DEMO_ACCOUNTS.filter((a) => a.includeInNetWorth).reduce((s, a) => s + (a.isAsset ? a.currentBalance : -a.currentBalance), 0),
-          accounts: DEMO_ACCOUNTS,
-        })
-      : getNetWorth(householdId),
+    getNetWorth(householdId),
     getCalendarMonth(householdId, monthISO, todayISO),
     getUpcoming(householdId, todayISO, 14),
-    DEMO_MODE ? Promise.resolve(DEMO_CATEGORIES) : getCategories(householdId),
+    getCategories(householdId),
     DEMO_MODE
       ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= monthISO && t.date <= isoDay(endOfUTCMonth(monthFirst))))
       : getTransactionsBetween(householdId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
