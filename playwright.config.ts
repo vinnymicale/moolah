@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E tests run against the production build in demo mode, which serves seeded
-// in-memory data and needs no database or credentials.
+// E2E tests run against the production build in demo mode. Demo mode reads
+// from a seeded database (run `npm run db:seed` first) and blocks all writes,
+// so tests are repeatable without touching real data.
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -23,6 +24,7 @@ export default defineConfig({
     env: {
       DEMO_MODE: "true",
       AUTH_BYPASS: "true",
+      DATABASE_URL: process.env.DATABASE_URL ?? "",
     },
   },
 });

@@ -42,6 +42,22 @@ jobs:
     name: E2E tests (demo mode)
     runs-on: ubuntu-latest
     needs: checks
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: finance
+          POSTGRES_DB: finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://finance:finance@localhost:5432/finance
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +74,11 @@ jobs:
         with:
           name: next-build
           path: .next/
+
+      - name: Migrate and seed demo data
+        run: |
+          npx prisma migrate deploy
+          npm run db:seed
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
