@@ -327,6 +327,7 @@ function txn(
     accountId,
     categoryId,
     cleared,
+    isTransfer: false,
     recurringRuleId,
     plaidTransactionId: null,
     createdBy: null,

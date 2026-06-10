@@ -8,6 +8,7 @@ import { parseISODay, isoDay } from "@/lib/dates";
 import { toCents } from "@/lib/money";
 import { expandOccurrences } from "@/lib/recurrence";
 import { guessCategoryName, type ImportType } from "@/lib/csv-import";
+import { matchCategoryRule } from "@/lib/category-rules";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { TxnType } from "@/generated/prisma/enums";
@@ -95,6 +96,9 @@ export async function analyzeImportAction(
     });
     const catByName = new Map(categories.map((c) => [`${c.kind}|${c.name.toLowerCase()}`, c.id]));
 
+    // User-defined rules beat the built-in keyword guesser.
+    const categoryRules = await prisma.categoryRule.findMany({ where: { householdId } });
+
     const analyzed: AnalyzedRow[] = rows.map((r) => {
       const cents = toCents(r.amount);
       const k = key(r.type, r.date, cents);
@@ -112,9 +116,9 @@ export async function analyzeImportAction(
       }
 
       const guessedName = guessCategoryName(r.description, r.type);
-      const suggestedCategoryId = guessedName
-        ? catByName.get(`${r.type}|${guessedName.toLowerCase()}`) ?? null
-        : null;
+      const suggestedCategoryId =
+        matchCategoryRule(r.description, categoryRules) ??
+        (guessedName ? catByName.get(`${r.type}|${guessedName.toLowerCase()}`) ?? null : null);
 
       return { ...r, duplicate, duplicateReason, suggestedCategoryId };
     });

@@ -3,19 +3,15 @@ import { computeReports } from "@/lib/reports";
 import { PageHeader, StatCard } from "@/components/ui-bits";
 import { TrendsCharts } from "./TrendsCharts";
 import { getDemoHouseholdId } from "@/lib/demo-session";
+import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
-
-function localTodayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export default async function TrendsPage() {
   const householdId = DEMO_MODE
     ? (await getDemoHouseholdId() ?? "")
     : (await requireHousehold()).householdId;
-  const reports = await computeReports(householdId, localTodayISO());
+  const reports = await computeReports(householdId, await userTodayISO());
 
   const latestNet = reports.netWorthSeries.at(-1)?.value ?? 0;
   const firstNet = reports.netWorthSeries[0]?.value ?? 0;

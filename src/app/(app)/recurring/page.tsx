@@ -3,13 +3,9 @@ import { getAccounts, getCategories, getRecurringRules, getRecurringSuggestions 
 import { PageHeader } from "@/components/ui-bits";
 import { RecurringManager } from "./RecurringManager";
 import { DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_RECURRING, DEMO_SUGGESTIONS } from "@/lib/demo-data";
+import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
-
-function localTodayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export default async function RecurringPage() {
   if (DEMO_MODE) {
@@ -26,7 +22,7 @@ export default async function RecurringPage() {
     getRecurringRules(householdId),
     getAccounts(householdId),
     getCategories(householdId),
-    getRecurringSuggestions(householdId, localTodayISO()),
+    getRecurringSuggestions(householdId, await userTodayISO()),
   ]);
 
   return (

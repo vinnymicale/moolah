@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Search, Plus, Download, Clock,
-  CheckSquare, Square, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus,
+  CheckSquare, Square, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight,
 } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -14,6 +14,7 @@ import { formatUSD } from "@/lib/money";
 import { monthLabel } from "@/lib/dates";
 import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
+  pairTransfersAction, unpairTransferAction,
 } from "@/actions/transactions";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import { categoryColor } from "@/lib/colors";
@@ -145,8 +146,8 @@ export function TransactionsList({
     return true;
   });
 
-  const income = filtered.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
-  const expense = filtered.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+  const income = filtered.filter((t) => t.type === "INCOME" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
+  const expense = filtered.filter((t) => t.type === "EXPENSE" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
 
   // Preserve the account & category filters across range/month navigation by
   // serialising the selected sets as comma-separated query params.
@@ -390,6 +391,26 @@ export function TransactionsList({
           <button onClick={() => runBulk((ids) => bulkSetClearedAction(ids, false))} disabled={pending} className="btn-ghost h-8 text-xs" title="Mark as expected/pending">
             <Clock size={14} /> Expected
           </button>
+          {selected.size === 2 && (
+            <button
+              onClick={() => { const [a, b] = [...selected]; runBulk(() => pairTransfersAction(a, b)); }}
+              disabled={pending}
+              className="btn-ghost h-8 text-xs"
+              title="Link these two as the two sides of a transfer (excluded from totals)"
+            >
+              <ArrowLeftRight size={14} /> Link as transfer
+            </button>
+          )}
+          {selected.size === 1 && filtered.find((t) => selected.has(t.id))?.isTransfer && (
+            <button
+              onClick={() => { const [id] = [...selected]; runBulk(() => unpairTransferAction(id)); }}
+              disabled={pending}
+              className="btn-ghost h-8 text-xs"
+              title="Unlink this transfer pair"
+            >
+              <ArrowLeftRight size={14} /> Unlink transfer
+            </button>
+          )}
           <button onClick={bulkDelete} disabled={pending} className="btn-danger h-8 text-xs">
             <Trash2 size={14} /> Delete
           </button>
@@ -466,6 +487,11 @@ export function TransactionsList({
                           <Clock size={11} /> {t.plaidTransactionId ? "pending" : "expected"}
                         </span>
                       )}
+                      {t.isTransfer && (
+                        <span className="ml-2 inline-flex items-center gap-1 align-middle text-[11px] text-muted" title="Transfer pair - excluded from totals">
+                          <ArrowLeftRight size={11} /> transfer
+                        </span>
+                      )}
                     </p>
                     <p className="truncate text-xs text-muted">
                       {t.date}
@@ -474,7 +500,7 @@ export function TransactionsList({
                       {t.note ? ` · ${t.note}` : ""}
                     </p>
                   </div>
-                  <Amount type={t.type} amount={t.amount} className="shrink-0 font-semibold" />
+                  <Amount type={t.type} amount={t.amount} isTransfer={t.isTransfer} className="shrink-0 font-semibold" />
                 </button>
               </div>
             );

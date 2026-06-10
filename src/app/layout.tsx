@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { TimezoneSync } from "@/components/TimezoneSync";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body className="min-h-full" suppressHydrationWarning>
         <Providers>{children}</Providers>
+        <TimezoneSync />
         <Analytics />
         <SpeedInsights />
       </body>

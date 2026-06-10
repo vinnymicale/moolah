@@ -73,7 +73,7 @@ export async function computeReports(householdId: string, todayISO: string): Pro
   // ── Income vs expense, last 6 months (concrete transactions) ─────────────
   const sixMonthsAgo = startOfUTCMonth(addUTCMonths(monthStart, -5));
   const txns = await prisma.transaction.findMany({
-    where: { householdId, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
+    where: { householdId, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
     select: { type: true, amount: true, date: true, categoryId: true },
   });
 

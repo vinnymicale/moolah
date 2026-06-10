@@ -278,6 +278,52 @@ export async function materializeOccurrenceAction(ruleId: string, dateISO: strin
 }
 
 // ---------------------------------------------------------------------------
+// Transfer pairing - links the two sides of a money movement (e.g. the CC
+// payment leaving checking and the credit landing on the card) so neither
+// counts as income or spending.
+// ---------------------------------------------------------------------------
+
+export async function pairTransfersAction(idA: string, idB: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { householdId } = await requireHousehold();
+    const txns = await prisma.transaction.findMany({ where: { id: { in: [idA, idB] }, householdId } });
+    if (txns.length !== 2) throw new UserError("Transaction not found");
+    const [a, b] = txns;
+    if (a.type === b.type) throw new UserError("A transfer pair needs one expense and one income.");
+    if (a.isTransfer || b.isTransfer) throw new UserError("One of these is already part of a transfer pair.");
+    const expense = a.type === "EXPENSE" ? a : b;
+    const income = a.type === "EXPENSE" ? b : a;
+    await prisma.$transaction([
+      prisma.transaction.update({ where: { id: expense.id }, data: { isTransfer: true, transferPeerId: income.id } }),
+      prisma.transaction.update({ where: { id: income.id }, data: { isTransfer: true } }),
+    ]);
+    revalidateAll();
+  });
+}
+
+export async function unpairTransferAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { householdId } = await requireHousehold();
+    const txn = await prisma.transaction.findFirst({
+      where: { id, householdId },
+      include: { transferPeer: true, transferPeerOf: true },
+    });
+    if (!txn) throw new UserError("Transaction not found");
+    if (!txn.isTransfer) throw new UserError("This transaction is not part of a transfer pair.");
+    const peer = txn.transferPeer ?? txn.transferPeerOf;
+    await prisma.$transaction([
+      prisma.transaction.update({ where: { id: txn.id }, data: { isTransfer: false, transferPeerId: null } }),
+      ...(peer
+        ? [prisma.transaction.update({ where: { id: peer.id }, data: { isTransfer: false, transferPeerId: null } })]
+        : []),
+    ]);
+    revalidateAll();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Global search - queries the entire transaction history (all accounts, all
 // time) by description/note text, with an optional amount match. Drives the
 // ⌘K command palette.

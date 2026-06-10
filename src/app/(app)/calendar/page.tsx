@@ -4,13 +4,9 @@ import { getCalendarMonth } from "@/lib/calendar";
 import { addUTCMonths, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { CalendarView } from "./CalendarView";
 import { getDemoHouseholdId } from "@/lib/demo-session";
+import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
-
-function localTodayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export default async function CalendarPage({
   searchParams,
@@ -18,7 +14,7 @@ export default async function CalendarPage({
   searchParams: Promise<{ m?: string }>;
 }) {
   const { m } = await searchParams;
-  const todayISO = localTodayISO();
+  const todayISO = await userTodayISO();
   const monthParam = /^\d{4}-\d{2}$/.test(m ?? "") ? `${m}-01` : `${todayISO.slice(0, 7)}-01`;
   const monthFirst = startOfUTCMonth(parseISODay(monthParam));
   const monthISO = isoDay(monthFirst);

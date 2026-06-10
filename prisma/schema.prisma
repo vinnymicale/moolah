@@ -25,14 +25,15 @@ model Household {
   aiProvider   String?  // "anthropic" | "openai" | "gemini"
   aiApiKey     String?  // user-supplied key, never sent to the browser
 
-  users        User[]
-  accounts     FinancialAccount[]
-  categories   Category[]
-  transactions Transaction[]
-  recurring    RecurringRule[]
-  budgets      Budget[]
-  savingsGoals SavingsGoal[]
-  plaidItems   PlaidItem[]
+  users         User[]
+  accounts      FinancialAccount[]
+  categories    Category[]
+  transactions  Transaction[]
+  recurring     RecurringRule[]
+  budgets       Budget[]
+  savingsGoals  SavingsGoal[]
+  plaidItems    PlaidItem[]
+  categoryRules CategoryRule[]
 }
 
 model User {
@@ -199,6 +200,24 @@ model Category {
   transactions Transaction[]
   recurring    RecurringRule[]
   budgets      Budget[]
+  rules        CategoryRule[]
+
+  @@index([householdId])
+}
+
+// User-defined auto-categorization: when a transaction description contains
+// `pattern` (case-insensitive), assign `categoryId`. Applied on Plaid sync and
+// CSV import; rules take precedence over Plaid's generic category mapping.
+model CategoryRule {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  pattern     String
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
 
   @@index([householdId])
 }
@@ -232,6 +251,13 @@ model Transaction {
   plaidTransactionId    String?  @unique
   plaidPrimaryCategory  String?
   plaidDetailedCategory String?
+
+  // Transfer pairing: a CC payment leaving checking linked to the matching
+  // credit on the card. Both sides are excluded from income/expense totals.
+  isTransfer      Boolean       @default(false)
+  transferPeerId  String?       @unique
+  transferPeer    Transaction?  @relation("TransferPair", fields: [transferPeerId], references: [id], onDelete: SetNull)
+  transferPeerOf  Transaction?  @relation("TransferPair")
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
