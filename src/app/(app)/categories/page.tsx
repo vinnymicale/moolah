@@ -24,7 +24,7 @@ export default async function CategoriesPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Categories" subtitle="Organize how you classify income and spending." />
       <CategoriesManager categories={categories} />
-      <CategoryRulesCard rules={rules} categories={categories} />
+      {!DEMO_MODE && <CategoryRulesCard rules={rules} categories={categories} />}
     </div>
   );
 }

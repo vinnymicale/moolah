@@ -9,6 +9,7 @@ import { toCents } from "@/lib/money";
 import { expandOccurrences } from "@/lib/recurrence";
 import { guessCategoryName, type ImportType } from "@/lib/csv-import";
 import { matchCategoryRule } from "@/lib/category-rules";
+import { matchTransfers } from "@/lib/plaid-sync";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { TxnType } from "@/generated/prisma/enums";
@@ -174,6 +175,9 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
         cleared: true,
       })),
     });
+
+    // Imported CC payments pair up the same way Plaid-synced ones do.
+    await matchTransfers(householdId);
 
     revalidatePath("/");
     revalidatePath("/calendar");
