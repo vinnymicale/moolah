@@ -81,6 +81,66 @@ export interface UpcomingItem {
 }
 
 /**
+ * A virtual recurring occurrence is suppressed when a real transaction for the
+ * same rule landed within this many days of it - bank processing delays mean a
+ * payment scheduled for the 7th can post on the 8th, and we don't want to show
+ * both the projected and the materialised event.
+ */
+export const MATCH_WINDOW_MS = 4 * 86_400_000;
+
+/** True if any of `materialisedTs` falls within the match window of `occ`. */
+export function occurrenceIsMatched(occ: Date, materialisedTs: number[] | undefined): boolean {
+  if (!materialisedTs) return false;
+  const ts = occ.getTime();
+  return materialisedTs.some((d) => Math.abs(d - ts) <= MATCH_WINDOW_MS);
+}
+
+/**
+ * Group events onto their calendar days (restricted to `gridIso`), sum the
+ * visible month's real income/expense, and sort each day income-first then by
+ * amount descending. Transfers (CC payment credits) are excluded from totals.
+ */
+export function groupEventsByDay(
+  events: CalendarEvent[],
+  gridIso: Set<string>,
+  visibleMonth: number,
+): { eventsByDay: Record<string, CalendarEvent[]>; monthIncome: number; monthExpense: number } {
+  const eventsByDay: Record<string, CalendarEvent[]> = {};
+  let monthIncome = 0;
+  let monthExpense = 0;
+
+  for (const e of events) {
+    if (!gridIso.has(e.date)) continue;
+    (eventsByDay[e.date] ??= []).push(e);
+    if (toUTCDay(e.date).getUTCMonth() === visibleMonth) {
+      if (e.type === "INCOME" && !e.isTransfer) monthIncome += e.amount;
+      else if (e.type === "EXPENSE" && !e.isTransfer) monthExpense += e.amount;
+    }
+  }
+  for (const list of Object.values(eventsByDay)) {
+    list.sort((a, b) => (a.type === b.type ? b.amount - a.amount : a.type === "INCOME" ? -1 : 1));
+  }
+  return { eventsByDay, monthIncome, monthExpense };
+}
+
+/**
+ * Whether a credit-card payment-due chip should show. Hidden for past due dates
+ * unless the account is explicitly flagged overdue: a past due date with
+ * isOverdue !== true usually means the payment was made and Plaid hasn't rolled
+ * nextPaymentDueDate forward yet.
+ */
+export function ccDueIsVisible(
+  dueDateISO: string,
+  isOverdue: boolean | null,
+  todayISO: string,
+): boolean {
+  if (parseISODay(dueDateISO).getTime() < parseISODay(todayISO).getTime() && isOverdue !== true) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Expected income/expenses in the next `days` days: not-yet-cleared concrete
  * transactions plus projected recurring occurrences. Drives the dashboard's
  * "upcoming" panel.
@@ -200,14 +260,6 @@ export async function getCalendarMonth(
       materialisedByRule.set(t.recurringRuleId, arr);
     }
   }
-  const MATCH_WINDOW_MS = 4 * 86_400_000;
-  function occurrenceIsMatched(ruleId: string, occ: Date): boolean {
-    const dates = materialisedByRule.get(ruleId);
-    if (!dates) return false;
-    const ts = occ.getTime();
-    return dates.some((d) => Math.abs(d - ts) <= MATCH_WINDOW_MS);
-  }
-
   // Project recurring rules across the range.
   const rules = await prisma.recurringRule.findMany({
     where: { householdId, archived: false },
@@ -227,7 +279,7 @@ export async function getCalendarMonth(
     );
     const ruleAcct = rule.accountId ? accountById.get(rule.accountId) : null;
     for (const occ of occurrences) {
-      if (occurrenceIsMatched(rule.id, occ)) continue;
+      if (occurrenceIsMatched(occ, materialisedByRule.get(rule.id))) continue;
       const iso = isoDay(occ);
       events.push({
         id: `rule:${rule.id}:${iso}`,
@@ -271,36 +323,18 @@ export async function getCalendarMonth(
 
   // Group events for the visible grid days.
   const gridIso = new Set(grid.map(isoDay));
-  const eventsByDay: Record<string, CalendarEvent[]> = {};
-  let monthIncome = 0;
-  let monthExpense = 0;
-  const visibleMonth = monthDate.getUTCMonth();
-
-  for (const e of events) {
-    if (!gridIso.has(e.date)) continue;
-    (eventsByDay[e.date] ??= []).push(e);
-    if (toUTCDay(e.date).getUTCMonth() === visibleMonth) {
-      // Credit-card payment credits (isTransfer) are not real income - skip them.
-      if (e.type === "INCOME" && !e.isTransfer) monthIncome += e.amount;
-      else if (e.type === "EXPENSE" && !e.isTransfer) monthExpense += e.amount;
-    }
-  }
-  // Stable ordering within a day: income first, then by amount desc.
-  for (const list of Object.values(eventsByDay)) {
-    list.sort((a, b) => (a.type === b.type ? b.amount - a.amount : a.type === "INCOME" ? -1 : 1));
-  }
+  const { eventsByDay, monthIncome, monthExpense } = groupEventsByDay(
+    events,
+    gridIso,
+    monthDate.getUTCMonth(),
+  );
 
   // Credit card payment due dates - show on the calendar for any account whose
   // nextPaymentDueDate falls within the visible grid.
   const ccDueByDay: Record<string, CcDueEvent[]> = {};
   for (const acct of accounts) {
     if (!acct.nextPaymentDueDate || !gridIso.has(acct.nextPaymentDueDate)) continue;
-    // Suppress the due chip for dates that have already passed unless the
-    // account is explicitly flagged overdue. If the due date is past and
-    // isOverdue !== true, the payment was likely made and Plaid just hasn't
-    // rolled nextPaymentDueDate forward yet.
-    const dueTs = parseISODay(acct.nextPaymentDueDate).getTime();
-    if (dueTs < today.getTime() && acct.isOverdue !== true) continue;
+    if (!ccDueIsVisible(acct.nextPaymentDueDate, acct.isOverdue, todayISO)) continue;
     (ccDueByDay[acct.nextPaymentDueDate] ??= []).push({
       accountId: acct.id,
       accountName: acct.name,

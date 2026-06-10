@@ -69,6 +69,83 @@ export function plaidCategoryToName(primaryCategory: string, detailCategory?: st
   return CATEGORY_MAP[primaryCategory] ?? null;
 }
 
+// ── Recurring-rule matching (pure) ───────────────────────────────────────────
+
+const TOKEN_NOISE = new Set(["ach", "the", "and", "from", "purchase", "payment", "withdrawal", "autopay", "early", "pay"]);
+
+/** Tokenise a description to meaningful lowercase words (length >= 3). */
+export function tokens(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !TOKEN_NOISE.has(t)),
+  );
+}
+
+/** True if the two descriptions share a meaningful token or a >=5-char substring. */
+export function descriptionMatches(txnDesc: string, ruleDesc: string): boolean {
+  const ta = tokens(txnDesc);
+  const tb = tokens(ruleDesc);
+  for (const t of tb) if (ta.has(t)) return true;
+  // Also check substring: "sunrun" inside "SUNRUN PURCHASE".
+  const la = txnDesc.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const lb = ruleDesc.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const t of tb) if (t.length >= 5 && la.includes(t)) return true;
+  for (const t of ta) if (t.length >= 5 && lb.includes(t)) return true;
+  return false;
+}
+
+/** The recurring-rule fields needed to match a transaction against a rule. */
+export interface MatchableRule {
+  id: string;
+  type: TxnType;
+  /** number, or a Prisma Decimal - coerced with Number() before comparison. */
+  amount: number | { toString(): string };
+  description: string;
+  frequency: Parameters<typeof expandOccurrences>[0]["frequency"];
+  interval: number;
+  startDate: Date;
+  endDate: Date | null;
+  dayOfMonth: number | null;
+  weekday: number | null;
+}
+
+/**
+ * Return the best-matching rule id for a transaction, or null.
+ *
+ * Matching criteria:
+ * - Amount within 15% of the rule amount
+ * - A scheduled occurrence falls within +/-2 days of the transaction date
+ * - EXPENSE: description must share a token with the rule name
+ *   (prevents coincidental amount matches, e.g. Shell ~ YouTube)
+ * - INCOME: no description check (bank ACH descriptions never match
+ *   human-readable names like "Vinny's Paycheck")
+ */
+export function matchRecurringRule(
+  rules: MatchableRule[],
+  type: TxnType,
+  date: Date,
+  amount: number,
+  description: string,
+): string | null {
+  const tolerance = amount * 0.15;
+  const windowMs = 2 * 86_400_000;
+  const windowStart = new Date(date.getTime() - windowMs);
+  const windowEnd = new Date(date.getTime() + windowMs);
+
+  for (const rule of rules) {
+    if (rule.type !== type) continue;
+    if (Math.abs(Number(rule.amount) - amount) > tolerance) continue;
+    if (type === "EXPENSE" && !descriptionMatches(description, rule.description)) continue;
+
+    const occs = expandOccurrences(
+      { frequency: rule.frequency, interval: rule.interval, startDate: rule.startDate, endDate: rule.endDate, dayOfMonth: rule.dayOfMonth, weekday: rule.weekday },
+      windowStart,
+      windowEnd,
+    );
+    if (occs.length > 0) return rule.id;
+  }
+  return null;
+}
+
 // ── Main sync function ────────────────────────────────────────────────────────
 
 export interface SyncResult {
@@ -113,58 +190,8 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
     where: { householdId: item.householdId, archived: false },
   });
 
-  /** Tokenise a description to meaningful lowercase words (length ≥ 3). */
-  function tokens(s: string): Set<string> {
-    const NOISE = new Set(["ach", "the", "and", "from", "purchase", "payment", "withdrawal", "autopay", "early", "pay"]);
-    return new Set(
-      s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !NOISE.has(t))
-    );
-  }
-
-  /** True if the two descriptions share at least one meaningful token. */
-  function descriptionMatches(txnDesc: string, ruleDesc: string): boolean {
-    const ta = tokens(txnDesc);
-    const tb = tokens(ruleDesc);
-    for (const t of tb) if (ta.has(t)) return true;
-    // Also check substring: "sunrun" inside "SUNRUN PURCHASE"
-    const la = txnDesc.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const lb = ruleDesc.toLowerCase().replace(/[^a-z0-9]/g, "");
-    for (const t of tb) if (t.length >= 5 && la.includes(t)) return true;
-    for (const t of ta) if (t.length >= 5 && lb.includes(t)) return true;
-    return false;
-  }
-
-  /**
-   * Return the best-matching rule id for a transaction, or null.
-   *
-   * Matching criteria:
-   * - Amount within 15% of the rule amount
-   * - A scheduled occurrence falls within ±2 days of the transaction date
-   * - EXPENSE: description must share a token with the rule name
-   *   (prevents coincidental amount matches, e.g. Shell ≈ YouTube)
-   * - INCOME: no description check (bank ACH descriptions never match
-   *   human-readable names like "Vinny's Paycheck")
-   */
-  function matchRule(type: TxnType, date: Date, amount: number, description: string): string | null {
-    const tolerance = amount * 0.15;
-    const windowMs = 2 * 86_400_000;
-    const windowStart = new Date(date.getTime() - windowMs);
-    const windowEnd = new Date(date.getTime() + windowMs);
-
-    for (const rule of rules) {
-      if (rule.type !== type) continue;
-      if (Math.abs(Number(rule.amount) - amount) > tolerance) continue;
-      if (type === "EXPENSE" && !descriptionMatches(description, rule.description)) continue;
-
-      const occs = expandOccurrences(
-        { frequency: rule.frequency, interval: rule.interval, startDate: rule.startDate, endDate: rule.endDate, dayOfMonth: rule.dayOfMonth, weekday: rule.weekday },
-        windowStart,
-        windowEnd,
-      );
-      if (occs.length > 0) return rule.id;
-    }
-    return null;
-  }
+  const matchRule = (type: TxnType, date: Date, amount: number, description: string) =>
+    matchRecurringRule(rules, type, date, amount, description);
 
   const result: SyncResult = { added: 0, modified: 0, removed: 0, balancesUpdated: 0 };
 

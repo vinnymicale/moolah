@@ -5,7 +5,7 @@ import { toNumber } from "@/lib/money";
 import {
   addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth,
 } from "@/lib/dates";
-import { getAccounts, getSnapshots } from "@/lib/queries";
+import { getAccounts, getSnapshots, type AccountDTO, type SnapshotDTO } from "@/lib/queries";
 
 export interface NetWorthPoint { label: string; value: number; }
 export interface IncomeExpensePoint { label: string; income: number; expense: number; net: number; }
@@ -26,15 +26,62 @@ export interface Reports {
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthShort = (d: Date) => `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`;
 
+/** A transaction reduced to the fields the reports need. */
+export interface ReportTxn {
+  type: "INCOME" | "EXPENSE";
+  amount: number;
+  date: string; // ISO day
+  categoryId: string | null;
+}
+
+/** A budget reduced to the fields the reports need. */
+export interface ReportBudget {
+  categoryId: string;
+  limit: number;
+}
+
+export interface ReportInput {
+  todayISO: string;
+  accounts: AccountDTO[];
+  snapshots: SnapshotDTO[];
+  categories: { id: string; name: string; color: string }[];
+  /** Concrete, non-transfer transactions in the trailing six-month window. */
+  txns: ReportTxn[];
+  /** Budgets for the current month. */
+  budgets: ReportBudget[];
+}
+
 export async function computeReports(householdId: string, todayISO: string): Promise<Reports> {
   const today = parseISODay(todayISO);
   const monthStart = startOfUTCMonth(today);
+  const sixMonthsAgo = startOfUTCMonth(addUTCMonths(monthStart, -5));
 
-  const [accounts, snapshots, categories] = await Promise.all([
+  const [accounts, snapshots, categories, txnRows, budgetRows] = await Promise.all([
     getAccounts(householdId),
     getSnapshots(householdId),
     prisma.category.findMany({ where: { householdId } }),
+    prisma.transaction.findMany({
+      where: { householdId, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
+      select: { type: true, amount: true, date: true, categoryId: true },
+    }),
+    prisma.budget.findMany({ where: { householdId, month: monthStart } }),
   ]);
+
+  return aggregateReports({
+    todayISO,
+    accounts,
+    snapshots,
+    categories,
+    txns: txnRows.map((t) => ({ type: t.type, amount: toNumber(t.amount), date: isoDay(t.date), categoryId: t.categoryId })),
+    budgets: budgetRows.map((b) => ({ categoryId: b.categoryId, limit: toNumber(b.limit) })),
+  });
+}
+
+/** Pure aggregation over already-fetched data. Drives the Trends page. */
+export function aggregateReports({ todayISO, accounts, snapshots, categories, txns, budgets }: ReportInput): Reports {
+  const today = parseISODay(todayISO);
+  const monthStart = startOfUTCMonth(today);
+
   const catById = new Map(categories.map((c) => [c.id, c]));
 
   // ── Net worth over the last 12 months ────────────────────────────────────
@@ -71,24 +118,17 @@ export async function computeReports(householdId: string, todayISO: string): Pro
   }
 
   // ── Income vs expense, last 6 months (concrete transactions) ─────────────
-  const sixMonthsAgo = startOfUTCMonth(addUTCMonths(monthStart, -5));
-  const txns = await prisma.transaction.findMany({
-    where: { householdId, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
-    select: { type: true, amount: true, date: true, categoryId: true },
-  });
-
   const ieByMonth = new Map<string, IncomeExpensePoint>();
   for (let i = 5; i >= 0; i--) {
     const m = addUTCMonths(monthStart, -i);
     ieByMonth.set(isoDay(m).slice(0, 7), { label: monthShort(m), income: 0, expense: 0, net: 0 });
   }
   for (const t of txns) {
-    const key = isoDay(t.date).slice(0, 7);
+    const key = t.date.slice(0, 7);
     const row = ieByMonth.get(key);
     if (!row) continue;
-    const amt = toNumber(t.amount);
-    if (t.type === "INCOME") row.income += amt;
-    else row.expense += amt;
+    if (t.type === "INCOME") row.income += t.amount;
+    else row.expense += t.amount;
   }
   const incomeExpenseSeries = Array.from(ieByMonth.values()).map((r) => ({
     ...r,
@@ -106,8 +146,8 @@ export async function computeReports(householdId: string, todayISO: string): Pro
   const lastMonthKey = isoDay(addUTCMonths(monthStart, -1)).slice(0, 7);
 
   for (const t of txns) {
-    const key = isoDay(t.date).slice(0, 7);
-    const amt = toNumber(t.amount);
+    const key = t.date.slice(0, 7);
+    const amt = t.amount;
     if (key === currentMonthKey) {
       if (t.type === "INCOME") { monthIncome += amt; continue; }
       monthExpense += amt;
@@ -133,14 +173,13 @@ export async function computeReports(householdId: string, todayISO: string): Pro
   const categoryLastMonth = sliceFrom(catTotalsLastMonth);
 
   // ── Budget vs actual, current month ──────────────────────────────────────
-  const budgets = await prisma.budget.findMany({ where: { householdId, month: monthStart } });
   const budgetVsActual: BudgetRow[] = budgets
     .map((b) => {
       const cat = catById.get(b.categoryId);
       return {
         name: cat?.name ?? "-",
         color: cat?.color ?? "#94a3b8",
-        budget: toNumber(b.limit),
+        budget: b.limit,
         actual: round(catTotals.get(b.categoryId) ?? 0),
       };
     })
