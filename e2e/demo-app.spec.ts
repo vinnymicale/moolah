@@ -24,12 +24,41 @@ test.describe("navigation", () => {
     { path: "/budgets", marker: "Budgets" },
     { path: "/accounts", marker: "Accounts" },
     { path: "/recurring", marker: "Recurring" },
+    { path: "/trends", marker: "Trends" },
+    { path: "/debt", marker: "Debt" },
+    { path: "/goals", marker: "Goals" },
+    { path: "/categories", marker: "Groceries" },
   ]) {
     test(`${path} renders demo content`, async ({ page }) => {
       await page.goto(path);
       await expect(page.getByText(marker).first()).toBeVisible();
     });
   }
+});
+
+test.describe("chrome interactions", () => {
+  test("command palette opens with the keyboard shortcut", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByPlaceholder(/Search all transactions/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByPlaceholder(/Search all transactions/)).not.toBeVisible();
+  });
+
+  test("theme toggle flips dark mode", async ({ page }) => {
+    await page.goto("/");
+    const wasDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    await page.getByRole("button", { name: "Toggle theme" }).click();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.classList.contains("dark")))
+      .toBe(!wasDark);
+  });
+
+  test("keyboard shortcuts modal opens from the sidebar", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+  });
 });
 
 test.describe("demo-mode guards", () => {
