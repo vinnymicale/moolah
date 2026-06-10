@@ -116,17 +116,16 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
     }
   }, [itemId]);
 
-  const onSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken) => {
+  // In update mode the existing access token stays valid and the public token
+  // must NOT be exchanged (that would error and never clear the item's error
+  // state). A successful re-auth just needs a fresh sync.
+  const onSuccess: PlaidLinkOnSuccess = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/plaid/exchange-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ public_token: publicToken }),
-      });
+      const res = await fetch(`/api/plaid/sync/${itemId}`, { method: "POST" });
       const json = await res.json() as { ok?: boolean; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Reconnect failed");
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Sync after reconnect failed");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reconnect failed");
@@ -134,7 +133,7 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
       setLoading(false);
       setLinkToken(null);
     }
-  }, [router]);
+  }, [router, itemId]);
 
   const onExit = useCallback(() => setLinkToken(null), []);
 

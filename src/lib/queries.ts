@@ -57,6 +57,8 @@ export interface TransactionDTO {
   accountId: string | null;
   categoryId: string | null;
   cleared: boolean;
+  /** Part of a transfer pair (e.g. CC payment) - excluded from income/expense totals. */
+  isTransfer: boolean;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
   createdBy: { id: string; name: string | null; image: string | null } | null;
@@ -144,6 +146,20 @@ export async function getRecurringRules(householdId: string, includeArchived = f
   }));
 }
 
+export interface CategoryRuleDTO {
+  id: string;
+  pattern: string;
+  categoryId: string;
+}
+
+export async function getCategoryRules(householdId: string): Promise<CategoryRuleDTO[]> {
+  const rows = await prisma.categoryRule.findMany({
+    where: { householdId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => ({ id: r.id, pattern: r.pattern, categoryId: r.categoryId }));
+}
+
 export interface NetWorth {
   assets: number;
   liabilities: number;
@@ -183,6 +199,7 @@ export async function getTransactionsBetween(
     accountId: t.accountId,
     categoryId: t.categoryId,
     cleared: t.cleared,
+    isTransfer: t.isTransfer,
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
     createdBy: t.createdBy,
@@ -213,7 +230,7 @@ export async function getBudgetMonth(householdId: string, monthISO: string): Pro
     prisma.category.findMany({ where: { householdId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
     prisma.budget.findMany({ where: { householdId, month: monthStart } }),
     prisma.transaction.findMany({
-      where: { householdId, type: "EXPENSE", date: { gte: monthStart, lte: monthEnd } },
+      where: { householdId, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
       select: { categoryId: true, amount: true },
     }),
   ]);
@@ -293,7 +310,7 @@ export async function getBudgetYear(householdId: string, year: number): Promise<
   const [budgets, txns] = await Promise.all([
     prisma.budget.findMany({ where: { householdId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
     prisma.transaction.findMany({
-      where: { householdId, type: "EXPENSE", date: { gte: yearStart, lte: yearEnd } },
+      where: { householdId, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
       select: { date: true, amount: true },
     }),
   ]);
@@ -598,6 +615,7 @@ export async function getSpendingAnomalies(
       householdId,
       type: "EXPENSE",
       cleared: true,
+      isTransfer: false,
       categoryId: { not: null },
       date: { gte: monthStart, lte: monthEnd },
     },
@@ -621,6 +639,7 @@ export async function getSpendingAnomalies(
         householdId,
         type: "EXPENSE",
         cleared: true,
+        isTransfer: false,
         categoryId: { in: [...currentByCat.keys()] },
         date: { gte: ms, lte: me },
       },
@@ -698,6 +717,7 @@ export async function getTopMerchants(
       householdId,
       type: "EXPENSE",
       cleared: true,
+      isTransfer: false,
       date: { gte: monthStart, lte: monthEnd },
     },
     select: { description: true, amount: true, categoryId: true },

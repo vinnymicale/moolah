@@ -4,16 +4,12 @@ import { addUTCMonths, endOfUTCMonth, formatMonthDayYear, isoDay, monthLabel, pa
 import { PageHeader } from "@/components/ui-bits";
 import { TransactionsList } from "./TransactionsList";
 import { DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TRANSACTIONS } from "@/lib/demo-data";
+import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 const RANGES = new Set(["month", "3m", "12m", "ytd", "all", "custom"]);
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-function localTodayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export default async function TransactionsPage({
   searchParams,
@@ -28,7 +24,7 @@ export default async function TransactionsPage({
   if (range === "custom" && !hasCustom) range = "month";
   if (hasCustom) range = "custom";
 
-  const todayISO = localTodayISO();
+  const todayISO = await userTodayISO();
   const today = parseISODay(todayISO);
   const monthStr = /^\d{4}-\d{2}$/.test(m ?? "") ? (m as string) : todayISO.slice(0, 7);
   const monthFirst = startOfUTCMonth(parseISODay(`${monthStr}-01`));

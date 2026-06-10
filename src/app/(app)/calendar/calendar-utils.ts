@@ -19,6 +19,7 @@ export function eventToTxn(e: CalendarEvent): TransactionDTO {
     accountId: e.accountId,
     categoryId: e.categoryId,
     cleared: e.cleared,
+    isTransfer: e.isTransfer,
     recurringRuleId: e.recurringRuleId,
     plaidTransactionId: e.plaidTransactionId,
     createdBy: e.createdBy,

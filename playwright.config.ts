@@ -24,7 +24,9 @@ export default defineConfig({
     env: {
       DEMO_MODE: "true",
       AUTH_BYPASS: "true",
-      DATABASE_URL: process.env.DATABASE_URL ?? "",
+      // In CI the DB comes from the service container; locally next start
+      // reads .env itself, so only forward an explicitly-set value.
+      ...(process.env.DATABASE_URL ? { DATABASE_URL: process.env.DATABASE_URL } : {}),
     },
   },
 });

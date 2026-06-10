@@ -7,8 +7,11 @@
 
 import { plaidClient } from "./plaid";
 import { prisma } from "./prisma";
-import { parseISODay } from "./dates";
+import { parseISODay, isoDay } from "./dates";
 import { expandOccurrences } from "./recurrence";
+import { findTransferPairs, type MatchableTxn } from "./transfer-match";
+import { matchCategoryRule } from "./category-rules";
+import { toCents } from "./money";
 import type { TxnType } from "@/generated/prisma/enums";
 
 // ── Plaid account type → our AccountType ─────────────────────────────────────
@@ -98,6 +101,9 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
   // Load the household's categories once so we can resolve names → ids.
   const categories = await prisma.category.findMany({ where: { householdId: item.householdId } });
   const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
+
+  // User-defined rules beat Plaid's generic category mapping.
+  const categoryRules = await prisma.categoryRule.findMany({ where: { householdId: item.householdId } });
 
   // Load recurring rules for matching. When a Plaid transaction lands on (or
   // within 2 days of) a rule's scheduled occurrence, we link the transaction
@@ -191,7 +197,9 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
       const primaryCat = txn.personal_finance_category?.primary ?? "";
       const detailCat = txn.personal_finance_category?.detailed ?? "";
       const catName = plaidCategoryToName(primaryCat, detailCat);
-      const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
+      const description0 = txn.merchant_name ?? txn.name;
+      const categoryId = matchCategoryRule(description0, categoryRules)
+        ?? (catName ? catByName.get(catName.toLowerCase())?.id ?? null : null);
 
       // Use authorized_date when available - it's when the user actually made
       // the purchase, vs. date which is the posting date for settled txns.
@@ -242,10 +250,10 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
       const primaryCat = txn.personal_finance_category?.primary ?? "";
       const detailCat = txn.personal_finance_category?.detailed ?? "";
       const catName = plaidCategoryToName(primaryCat, detailCat);
-      const categoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
-
       const modDate = parseISODay(txn.authorized_date ?? txn.date);
       const modDesc = txn.merchant_name ?? txn.name;
+      const categoryId = matchCategoryRule(modDesc, categoryRules)
+        ?? (catName ? catByName.get(catName.toLowerCase())?.id ?? null : null);
       const modRuleId = matchRule(type, modDate, amount, modDesc);
 
       await prisma.transaction.updateMany({
@@ -339,6 +347,7 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
   // Persist the cursor and last-synced time (skipped in recategorize mode so
   // the real sync position is not disturbed).
   if (!opts?.recategorizeOnly) {
+    await matchTransfers(item.householdId);
     await prisma.plaidItem.update({
       where: { id: plaidItemId },
       data: { cursor, lastSyncedAt: new Date(), error: null },
@@ -346,4 +355,48 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
   }
 
   return result;
+}
+
+/**
+ * Pair credit-card payment credits with the bank expense that funded them
+ * across the last 90 days, so neither side counts as income/spending.
+ */
+export async function matchTransfers(householdId: string): Promise<number> {
+  const since = new Date(Date.now() - 90 * 86_400_000);
+  const [accounts, txns] = await Promise.all([
+    prisma.financialAccount.findMany({
+      where: { householdId },
+      select: { id: true, type: true },
+    }),
+    prisma.transaction.findMany({
+      where: { householdId, date: { gte: since } },
+      select: { id: true, type: true, amount: true, date: true, accountId: true, isTransfer: true, transferPeerId: true },
+    }),
+  ]);
+
+  const ccIds = new Set(accounts.filter((a) => a.type === "CREDIT_CARD").map((a) => a.id));
+  const matchable: MatchableTxn[] = txns.map((t) => ({
+    id: t.id,
+    type: t.type,
+    amountCents: toCents(t.amount),
+    dateISO: isoDay(t.date),
+    accountId: t.accountId,
+    isTransfer: t.isTransfer,
+    transferPeerId: t.transferPeerId,
+  }));
+
+  const pairs = findTransferPairs(matchable, (id) => ccIds.has(id));
+  for (const pair of pairs) {
+    await prisma.$transaction([
+      prisma.transaction.update({
+        where: { id: pair.expenseId },
+        data: { isTransfer: true, transferPeerId: pair.incomeId },
+      }),
+      prisma.transaction.update({
+        where: { id: pair.incomeId },
+        data: { isTransfer: true },
+      }),
+    ]);
+  }
+  return pairs.length;
 }

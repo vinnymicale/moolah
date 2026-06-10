@@ -4,13 +4,9 @@ import { addUTCMonths, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "
 import { BudgetsManager } from "./BudgetsManager";
 import { BudgetYearView } from "./BudgetYearView";
 import { DEMO_BUDGETS } from "@/lib/demo-data";
+import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
-
-function localTodayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export default async function BudgetsPage({
   searchParams,
@@ -18,7 +14,7 @@ export default async function BudgetsPage({
   searchParams: Promise<{ m?: string; view?: string; y?: string }>;
 }) {
   const { m, view, y } = await searchParams;
-  const todayISO = localTodayISO();
+  const todayISO = await userTodayISO();
 
   if (!DEMO_MODE && view === "year") {
     const { householdId } = await requireHousehold();

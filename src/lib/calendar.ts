@@ -179,9 +179,10 @@ export async function getCalendarMonth(
       accountId: t.accountId,
       cleared: t.cleared,
       isVirtual: false,
-      // Credit-card payment credits are not real income - they reduce the CC
+      // Explicitly paired transfers, plus the CC-payment-credit heuristic for
+      // unpaired rows: those credits are not real income - they reduce the CC
       // balance. The corresponding checking debit is the true cash outflow.
-      isTransfer: acct?.type === "CREDIT_CARD" && t.type === "INCOME",
+      isTransfer: t.isTransfer || (acct?.type === "CREDIT_CARD" && t.type === "INCOME"),
       recurringRuleId: t.recurringRuleId,
       plaidTransactionId: t.plaidTransactionId,
       createdBy: t.createdBy,
@@ -281,7 +282,7 @@ export async function getCalendarMonth(
     if (toUTCDay(e.date).getUTCMonth() === visibleMonth) {
       // Credit-card payment credits (isTransfer) are not real income - skip them.
       if (e.type === "INCOME" && !e.isTransfer) monthIncome += e.amount;
-      else if (e.type === "EXPENSE") monthExpense += e.amount;
+      else if (e.type === "EXPENSE" && !e.isTransfer) monthExpense += e.amount;
     }
   }
   // Stable ordering within a day: income first, then by amount desc.

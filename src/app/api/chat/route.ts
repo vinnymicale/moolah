@@ -215,8 +215,8 @@ async function executeTool(
         const now = new Date();
         const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
         const txns = await getTransactionsBetween(householdId, monthStart, today);
-        const income = txns.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
-        const expenses = txns.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+        const income = txns.filter((t) => t.type === "INCOME" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
+        const expenses = txns.filter((t) => t.type === "EXPENSE" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
         return JSON.stringify({
           net_worth: netWorth.net,
           assets: netWorth.assets,

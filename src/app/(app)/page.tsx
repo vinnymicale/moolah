@@ -21,14 +21,10 @@ import { DashboardSections, type DashboardSection } from "./DashboardSections";
 import { SafeTransferCard } from "./SafeTransferCard";
 import { SpendingAlertsCard } from "./SpendingAlertsCard";
 import { MilestonesBanner } from "./MilestonesBanner";
-
-function localTodayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+import { userTodayISO } from "@/lib/user-tz";
 
 export default async function DashboardPage() {
-  const todayISO = localTodayISO();
+  const todayISO = await userTodayISO();
   const monthFirst = startOfUTCMonth(parseISODay(todayISO));
   const monthISO = isoDay(monthFirst);
   const lastMonthFirst = addUTCMonths(monthFirst, -1);
