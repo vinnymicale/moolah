@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 
 const budgetSchema = z.object({
@@ -23,7 +23,7 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
     const { householdId } = await requireHousehold();
     const data = budgetSchema.parse(input);
     const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId } });
-    if (!category) throw new Error("Category not found");
+    if (!category) throw new UserError("Category not found");
     const month = parseISODay(data.month);
 
     if (data.limit <= 0) {
@@ -58,7 +58,7 @@ export async function copyBudgetsAction(input: CopyBudgetsInput): Promise<Action
     const to = parseISODay(toMonth);
 
     const prior = await prisma.budget.findMany({ where: { householdId, month: from } });
-    if (prior.length === 0) throw new Error("No budgets in that month to copy.");
+    if (prior.length === 0) throw new UserError("No budgets in that month to copy.");
 
     await prisma.$transaction(
       prior.map((b) =>

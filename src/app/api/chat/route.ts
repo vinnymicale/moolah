@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { decryptSecret } from "@/lib/crypto";
+import { checkRateLimit } from "@/lib/rate-limit";
 import {
   getAccounts,
   getCategories,
@@ -25,13 +28,6 @@ export interface ChatMessage {
 
 interface ChatRequest {
   messages: ChatMessage[];
-}
-
-// Tool call result sent back to the model
-interface ToolResult {
-  tool_call_id?: string; // OpenAI / Gemini
-  name?: string;
-  content: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +166,38 @@ const TOOLS = [
 // Tool execution
 // ---------------------------------------------------------------------------
 
+// Model-supplied arguments are untrusted input - validate before any DB write.
+const isoDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+
+const createTransactionArgs = z.object({
+  type: z.enum(["INCOME", "EXPENSE"]),
+  amount: z.number().positive().finite(),
+  date: isoDaySchema,
+  description: z.string().min(1).max(120),
+  note: z.string().max(500).optional(),
+  category_name: z.string().optional(),
+  account_name: z.string().optional(),
+  cleared: z.boolean().optional(),
+});
+
+const createRecurringArgs = z.object({
+  type: z.enum(["INCOME", "EXPENSE"]),
+  amount: z.number().positive().finite(),
+  description: z.string().min(1).max(120),
+  frequency: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "YEARLY"]),
+  interval: z.number().int().min(1).max(366).optional(),
+  start_date: isoDaySchema,
+  day_of_month: z.number().int().min(1).max(31).optional(),
+  category_name: z.string().optional(),
+  account_name: z.string().optional(),
+});
+
+const setBudgetArgs = z.object({
+  category_name: z.string().min(1),
+  limit: z.number().min(0).finite(),
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+});
+
 async function executeTool(
   name: string,
   args: Record<string, unknown>,
@@ -291,90 +319,85 @@ async function executeTool(
       }
 
       case "create_transaction": {
+        const input = createTransactionArgs.parse(args);
         const [categories, accounts] = await Promise.all([
           getCategories(householdId),
           getAccounts(householdId),
         ]);
-        const category = args.category_name
-          ? categories.find((c) =>
-              c.name.toLowerCase().includes((args.category_name as string).toLowerCase()),
-            )
+        const category = input.category_name
+          ? categories.find((c) => c.name.toLowerCase().includes(input.category_name!.toLowerCase()))
           : null;
-        const account = args.account_name
-          ? accounts.find((a) =>
-              a.name.toLowerCase().includes((args.account_name as string).toLowerCase()),
-            )
+        const account = input.account_name
+          ? accounts.find((a) => a.name.toLowerCase().includes(input.account_name!.toLowerCase()))
           : null;
 
         await prisma.transaction.create({
           data: {
             householdId,
-            type: args.type as "INCOME" | "EXPENSE",
-            amount: args.amount as number,
-            date: new Date(`${args.date as string}T00:00:00.000Z`),
-            description: args.description as string,
-            note: (args.note as string) || null,
+            type: input.type,
+            amount: input.amount,
+            date: new Date(`${input.date}T00:00:00.000Z`),
+            description: input.description,
+            note: input.note || null,
             categoryId: category?.id || null,
             accountId: account?.id || null,
-            cleared: (args.cleared as boolean) ?? true,
+            cleared: input.cleared ?? true,
           },
         });
         return JSON.stringify({
           success: true,
-          message: `Created ${args.type} transaction: ${args.description} for $${args.amount}`,
+          message: `Created ${input.type} transaction: ${input.description} for $${input.amount}`,
         });
       }
 
       case "create_recurring_rule": {
+        const input = createRecurringArgs.parse(args);
         const [categories, accounts] = await Promise.all([
           getCategories(householdId),
           getAccounts(householdId),
         ]);
-        const category = args.category_name
-          ? categories.find((c) =>
-              c.name.toLowerCase().includes((args.category_name as string).toLowerCase()),
-            )
+        const category = input.category_name
+          ? categories.find((c) => c.name.toLowerCase().includes(input.category_name!.toLowerCase()))
           : null;
-        const account = args.account_name
-          ? accounts.find((a) =>
-              a.name.toLowerCase().includes((args.account_name as string).toLowerCase()),
-            )
+        const account = input.account_name
+          ? accounts.find((a) => a.name.toLowerCase().includes(input.account_name!.toLowerCase()))
           : null;
 
         await prisma.recurringRule.create({
           data: {
             householdId,
-            type: args.type as "INCOME" | "EXPENSE",
-            amount: args.amount as number,
-            description: args.description as string,
-            frequency: args.frequency as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "YEARLY",
-            interval: (args.interval as number) || 1,
-            startDate: new Date(`${args.start_date as string}T00:00:00.000Z`),
-            dayOfMonth: (args.day_of_month as number) || null,
+            type: input.type,
+            amount: input.amount,
+            description: input.description,
+            frequency: input.frequency,
+            interval: input.interval || 1,
+            startDate: new Date(`${input.start_date}T00:00:00.000Z`),
+            dayOfMonth: input.day_of_month || null,
             categoryId: category?.id || null,
             accountId: account?.id || null,
           },
         });
         return JSON.stringify({
           success: true,
-          message: `Created recurring ${args.type}: ${args.description} — $${args.amount} ${args.frequency}`,
+          message: `Created recurring ${input.type}: ${input.description} — $${input.amount} ${input.frequency}`,
         });
       }
 
       case "set_budget": {
+        const input = setBudgetArgs.parse(args);
         const categories = await getCategories(householdId);
         const category = categories.find((c) =>
-          c.name.toLowerCase().includes((args.category_name as string).toLowerCase()),
+          c.name.toLowerCase().includes(input.category_name.toLowerCase()),
         );
         if (!category) {
           return JSON.stringify({
             success: false,
-            error: `No category found matching "${args.category_name}"`,
+            error: `No category found matching "${input.category_name}"`,
           });
         }
 
         const now = new Date();
-        const monthStr = (args.month as string) ||
+        const monthStr = input.month ||
           `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
         const monthDate = new Date(`${monthStr}-01T00:00:00.000Z`);
 
@@ -390,13 +413,13 @@ async function executeTool(
             householdId,
             categoryId: category.id,
             month: monthDate,
-            limit: args.limit as number,
+            limit: input.limit,
           },
-          update: { limit: args.limit as number },
+          update: { limit: input.limit },
         });
         return JSON.stringify({
           success: true,
-          message: `Set budget for ${category.name} to $${args.limit}/month`,
+          message: `Set budget for ${category.name} to $${input.limit}/month`,
         });
       }
 
@@ -515,8 +538,10 @@ async function callOpenAI(
     function: { name: t.name, description: t.description, parameters: t.parameters },
   }));
 
+  type OpenAIToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
   type OpenAIMsg =
-    | { role: "system" | "user" | "assistant"; content: string }
+    | { role: "system" | "user"; content: string }
+    | { role: "assistant"; content: string; tool_calls?: OpenAIToolCall[] }
     | { role: "tool"; tool_call_id: string; content: string };
 
   const convMessages: OpenAIMsg[] = [
@@ -566,9 +591,16 @@ async function callOpenAI(
     }
 
     if (choice.finish_reason === "tool_calls" && choice.message.tool_calls) {
+      // The assistant message must be replayed with its tool_calls intact, or
+      // OpenAI rejects the tool results that follow.
       convMessages.push({
         role: "assistant",
         content: choice.message.content ?? "",
+        tool_calls: choice.message.tool_calls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: tc.function,
+        })),
       });
 
       const results = await Promise.all(
@@ -685,6 +717,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Each request can fan out into many paid model calls - keep a per-user lid on it.
+  const limit = checkRateLimit(`chat:${session.user.id}`, 20, 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again shortly." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
+
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user?.householdId) {
     return NextResponse.json({ error: "No household" }, { status: 403 });
@@ -702,9 +743,15 @@ export async function POST(request: Request) {
     );
   }
 
+  const bodySchema = z.object({
+    messages: z.array(z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string().max(8000),
+    })).min(1).max(50),
+  });
   let body: ChatRequest;
   try {
-    body = (await request.json()) as ChatRequest;
+    body = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -723,17 +770,18 @@ Guidelines:
 
   try {
     let reply: string;
-    const { householdId } = { householdId: user.householdId };
+    const householdId = user.householdId;
+    const apiKey = decryptSecret(household.aiApiKey);
 
     switch (household.aiProvider) {
       case "anthropic":
-        reply = await callAnthropic(household.aiApiKey, systemPrompt, body.messages, householdId);
+        reply = await callAnthropic(apiKey, systemPrompt, body.messages, householdId);
         break;
       case "openai":
-        reply = await callOpenAI(household.aiApiKey, systemPrompt, body.messages, householdId);
+        reply = await callOpenAI(apiKey, systemPrompt, body.messages, householdId);
         break;
       case "gemini":
-        reply = await callGemini(household.aiApiKey, systemPrompt, body.messages, householdId);
+        reply = await callGemini(apiKey, systemPrompt, body.messages, householdId);
         break;
       default:
         return NextResponse.json({ error: "Unknown AI provider" }, { status: 422 });

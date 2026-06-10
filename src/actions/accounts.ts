@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { AccountType } from "@/generated/prisma/enums";
 
@@ -43,7 +43,7 @@ function debtFields(type: AccountType, data: z.infer<typeof accountSchema>) {
 
 async function ownedAccount(id: string, householdId: string) {
   const acct = await prisma.financialAccount.findFirst({ where: { id, householdId } });
-  if (!acct) throw new Error("Account not found");
+  if (!acct) throw new UserError("Account not found");
   return acct;
 }
 
@@ -109,7 +109,7 @@ export async function updateDebtTermsAction(id: string, input: DebtTermsInput): 
   return run(async () => {
     const { householdId } = await requireHousehold();
     const acct = await ownedAccount(id, householdId);
-    if (isAssetType(acct.type)) throw new Error("Only debt accounts have payoff terms.");
+    if (isAssetType(acct.type)) throw new UserError("Only debt accounts have payoff terms.");
     const data = debtTermsSchema.parse(input);
     await prisma.financialAccount.update({
       where: { id },
@@ -182,7 +182,7 @@ export async function deleteSnapshotAction(id: string): Promise<ActionResult> {
   return run(async () => {
     const { householdId } = await requireHousehold();
     const snap = await prisma.accountSnapshot.findFirst({ where: { id, account: { householdId } } });
-    if (!snap) throw new Error("Snapshot not found");
+    if (!snap) throw new UserError("Snapshot not found");
     await prisma.accountSnapshot.delete({ where: { id } });
     revalidatePath("/accounts");
     revalidatePath("/trends");

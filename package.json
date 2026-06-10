@@ -22,7 +22,8 @@
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/export-data.ts",
-    "db:restore": "tsx scripts/import-data.ts"
+    "db:restore": "tsx scripts/import-data.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
@@ -45,6 +46,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",

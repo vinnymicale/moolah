@@ -73,6 +73,9 @@ export async function GET(req: NextRequest) {
 }
 
 function csv(s: string): string {
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  // Neutralise spreadsheet formula injection (=, +, @, tab at cell start).
+  let v = s;
+  if (/^[=+@\t\r]/.test(v)) v = `'${v}`;
+  if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
 }

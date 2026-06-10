@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { toNumber } from "@/lib/money";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 
 const goalSchema = z.object({
@@ -45,7 +45,7 @@ export async function updateGoalAction(id: string, input: GoalInput): Promise<Ac
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Goal not found");
+    if (!existing) throw new UserError("Goal not found");
     const data = goalSchema.parse(input);
     await prisma.savingsGoal.update({
       where: { id },
@@ -68,7 +68,7 @@ export async function contributeGoalAction(id: string, delta: number): Promise<A
   return run(async () => {
     const { householdId } = await requireHousehold();
     const goal = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
-    if (!goal) throw new Error("Goal not found");
+    if (!goal) throw new UserError("Goal not found");
     const amount = z.coerce.number().finite().parse(delta);
     const next = Math.max(0, toNumber(goal.currentAmount) + amount);
     await prisma.savingsGoal.update({ where: { id }, data: { currentAmount: next } });
@@ -81,7 +81,7 @@ export async function deleteGoalAction(id: string): Promise<ActionResult> {
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Goal not found");
+    if (!existing) throw new UserError("Goal not found");
     await prisma.savingsGoal.delete({ where: { id } });
     revalidatePaths();
   });

@@ -5,6 +5,15 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/demo-guard";
 import { createHouseholdForUser, joinHouseholdByCode } from "@/lib/household";
+import { encryptSecret } from "@/lib/crypto";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { UserError } from "@/lib/action-result";
+
+function safeMessage(e: unknown, fallback: string): string {
+  if (e instanceof UserError) return e.message;
+  console.error("Household action failed:", e);
+  return fallback;
+}
 
 export async function createHouseholdAction(name: string) {
   const session = await auth();
@@ -14,19 +23,24 @@ export async function createHouseholdAction(name: string) {
     revalidatePath("/");
     return { ok: true as const };
   } catch (e) {
-    return { ok: false as const, error: (e as Error).message };
+    return { ok: false as const, error: safeMessage(e, "Could not create the household. Please try again.") };
   }
 }
 
 export async function joinHouseholdAction(code: string) {
   const session = await auth();
   if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  // Invite codes are short; don't let a script grind through the keyspace.
+  const limit = checkRateLimit(`join:${session.user.id}`, 10, 15 * 60_000);
+  if (!limit.allowed) {
+    return { ok: false as const, error: "Too many attempts. Try again in a few minutes." };
+  }
   try {
     await joinHouseholdByCode(session.user.id, code);
     revalidatePath("/");
     return { ok: true as const };
   } catch (e) {
-    return { ok: false as const, error: (e as Error).message };
+    return { ok: false as const, error: safeMessage(e, "Could not join the household. Please try again.") };
   }
 }
 
@@ -53,7 +67,7 @@ export async function updateAiConfigAction(provider: string, apiKey: string) {
     data: {
       aiProvider: provider,
       // Only update the key if a non-empty value was supplied (allow updating provider without clearing key).
-      ...(apiKey.trim() ? { aiApiKey: apiKey.trim() } : {}),
+      ...(apiKey.trim() ? { aiApiKey: encryptSecret(apiKey.trim()) } : {}),
     },
   });
   revalidatePath("/settings");

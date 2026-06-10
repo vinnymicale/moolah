@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { UserError } from "@/lib/action-result";
 import { DEFAULT_CATEGORIES } from "./default-categories";
 
 // Unambiguous alphabet (no 0/O/1/I/L) for human-friendly invite codes.
@@ -38,7 +39,7 @@ export async function createHouseholdForUser(userId: string, name: string) {
 export async function joinHouseholdByCode(userId: string, code: string) {
   const inviteCode = code.trim().toUpperCase();
   const household = await prisma.household.findUnique({ where: { inviteCode } });
-  if (!household) throw new Error("That invite code didn't match any household.");
+  if (!household) throw new UserError("That invite code didn't match any household.");
   await prisma.user.update({ where: { id: userId }, data: { householdId: household.id } });
   return household;
 }

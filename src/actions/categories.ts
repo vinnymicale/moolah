@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { CategoryKind } from "@/generated/prisma/enums";
 
@@ -42,7 +42,7 @@ export async function updateCategoryAction(id: string, input: CategoryInput): Pr
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.category.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Category not found");
+    if (!existing) throw new UserError("Category not found");
     const data = categorySchema.parse(input);
     await prisma.category.update({
       where: { id },
@@ -63,7 +63,7 @@ export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.category.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Category not found");
+    if (!existing) throw new UserError("Category not found");
     await prisma.category.delete({ where: { id } });
     revalidatePath("/categories");
     revalidatePath("/transactions");

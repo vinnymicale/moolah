@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { isLocalHost, writeEnvConfig, type SetupValues } from "@/lib/setup-config";
 
 // Writes credentials to .env from the in-app setup screen. Localhost-only: this
-// writes secrets to disk, so it must never be reachable on a deployment.
+// writes secrets to disk, so it must never be reachable on a deployment. The
+// Host header alone is spoofable, so hosted platforms are also blocked outright.
 export async function POST(req: NextRequest) {
-  if (!isLocalHost(req.headers.get("host"))) {
+  if (process.env.VERCEL || process.env.DEMO_MODE === "true" || !isLocalHost(req.headers.get("host"))) {
     return NextResponse.json(
       { error: "Setup is only available when running Moolah locally." },
       { status: 403 },
