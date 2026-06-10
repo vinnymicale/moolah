@@ -7,7 +7,11 @@ category, set **savings goals**, plan your **debt payoff**, and watch your **net
 
 Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · Auth.js v5 · Plaid · Tailwind v4 · Recharts**.
 
+[![CI](https://github.com/vinnymicale/moolah/actions/workflows/ci.yml/badge.svg)](https://github.com/vinnymicale/moolah/actions/workflows/ci.yml)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=flat&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/vinnymicale)
+
+**[Try the live demo →](https://moolah-five.vercel.app)** - no sign-up; it serves a seeded sample
+household, and anything you change stays in your browser only.
 
 > **AI disclaimer:** Moolah was built with help from AI (Anthropic's Claude). Treat it
 > accordingly - review the code yourself before trusting it with sensitive financial data, and note
@@ -31,7 +35,14 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
   rules so projections don't double-count.
 - **Plaid bank integration** - securely link checking, savings, and credit-card accounts; balances
   and posted transactions sync automatically and are auto-categorised using the bank's own
-  category data (with a one-click "fix categories" re-run).
+  category data (with a one-click "fix categories" re-run). If a bank connection breaks, a
+  **Reconnect** button re-authenticates it in place - same Plaid item, so no new billed connection.
+- **Auto-categorization rules** - "description contains *costco* → Groceries". Your rules run on
+  every bank sync and CSV import (beating the generic mappers), and a one-click backfill
+  categorizes existing uncategorized history. Managed on the Categories page.
+- **Transfer matching** - credit-card payments are detected automatically (the checking debit and
+  the card credit are linked as a pair) and excluded from income/spending totals, so paying your
+  card never counts as "spending" twice. Pairs can also be linked/unlinked by hand.
 - **CSV import** - drag-and-drop a bank CSV anywhere to review and import transactions.
 
 ### Planning
@@ -55,6 +66,10 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 - **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
   spending alerts (categories trending over their 3-month average), top payees, and net-worth
   milestone celebrations. Cards are drag-to-reorder.
+- **AI assistant (optional)** - bring your own Anthropic, OpenAI, or Gemini API key (Settings) and
+  chat with your finances: "how much did I spend on dining out last month?", "add a $15.99/month
+  Netflix expense", "set a $500 grocery budget". The key is encrypted at rest and never sent to
+  the browser.
 
 ### Finding & exporting
 - **Global search (⌘K)** - a command palette to search your entire transaction history by name,
@@ -67,8 +82,9 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 ### Shared & polished
 - **Shared household** - invite your partner with a code; everything shows on one calendar with
   "who entered it" attribution.
-- **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and
-  unit-tested recurrence / projection / debt-payoff math.
+- **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and dates that
+  follow **your timezone** (not the server's). Recurrence / projection / debt-payoff / matching
+  math is unit-tested, with a Playwright e2e suite and CI on every push and PR.
 
 ---
 
@@ -174,7 +190,8 @@ Useful scripts:
 | `npm run db:push` | Sync the Prisma schema to the database |
 | `npm run db:seed` | Load/refresh the isolated demo household |
 | `npm run db:studio` | Browse the database in Prisma Studio |
-| `npm run test` | Run the unit tests (recurrence, projection & debt-payoff math) |
+| `npm run test` | Run the unit tests (recurrence, projection, debt-payoff, matching) |
+| `npm run test:e2e` | Run the Playwright end-to-end suite against a production build |
 | `npm run build` | Production build |
 
 ---
@@ -346,11 +363,11 @@ For a full cold copy you can also just back up the database folder itself:
    PLAID_SECRET=...
    PLAID_ENV=production
    ```
-4. **Sync the schema** against the hosted DB once (from your machine, with `DATABASE_URL` pointed
-   at it): `npx prisma db push`. Optionally `npm run db:seed` if you want demo data.
-5. Add the production redirect URI to your Google OAuth client (step 4 above) and deploy.
+4. Add the production redirect URI to your Google OAuth client (step 4 above) and deploy.
+   Optionally run `npm run db:seed` against the hosted DB if you want demo data.
 
-`npm run build` runs `prisma generate` automatically, so Vercel builds work out of the box.
+Production builds run `prisma migrate deploy` automatically (see `vercel.json`), so the schema is
+created and kept up to date on every deploy - no manual sync step.
 
 ---
 
