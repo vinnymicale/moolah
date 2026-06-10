@@ -12,7 +12,7 @@ const DEMO_BLOCKED = [
   "/welcome",
 ];
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   if (!DEMO_MODE) return NextResponse.next();
 
   const { pathname } = req.nextUrl;

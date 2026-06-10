@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { normalizeDescription } from "@/lib/recurring-suggestions";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
@@ -60,7 +60,7 @@ export async function updateRecurringAction(id: string, input: RecurringInput): 
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.recurringRule.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Recurring rule not found");
+    if (!existing) throw new UserError("Recurring rule not found");
     const data = ruleSchema.parse(input);
     const { householdId: _hid, ...rest } = toData(data, householdId);
     void _hid;
@@ -74,7 +74,7 @@ export async function deleteRecurringAction(id: string, deleteOccurrences = fals
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.recurringRule.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Recurring rule not found");
+    if (!existing) throw new UserError("Recurring rule not found");
     if (deleteOccurrences) {
       await prisma.transaction.deleteMany({ where: { householdId, recurringRuleId: id } });
     }
@@ -98,13 +98,13 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
     const { householdId } = await requireHousehold();
 
     const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, householdId } });
-    if (!rule) throw new Error("Recurring rule not found");
+    if (!rule) throw new UserError("Recurring rule not found");
 
     const sep = suggestionKey.indexOf("|");
     const type = suggestionKey.slice(0, sep);
     const normalized = suggestionKey.slice(sep + 1);
     if (sep < 0 || (type !== "INCOME" && type !== "EXPENSE") || !normalized) {
-      throw new Error("Invalid suggestion");
+      throw new UserError("Invalid suggestion");
     }
 
     // The normalized grouping isn't expressible in SQL, so match in memory.

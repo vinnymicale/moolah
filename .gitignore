@@ -52,3 +52,7 @@ next-env.d.ts
 
 # database backups (contain Plaid access tokens — never commit)
 /backups
+
+# playwright
+/test-results/
+/playwright-report/

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X, Send, Bot, Loader2, TriangleAlert, RotateCcw } from "lucide-react";
 import type { ChatMessage } from "@/app/api/chat/route";
 
@@ -203,24 +203,34 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
-// Render message content with basic markdown-like formatting
+// Render message content with basic markdown-like formatting (**bold**,
+// `code`). Built as React nodes - model output is never injected as HTML.
 function MessageContent({ content }: { content: string }) {
-  // Split on code blocks first, then handle inline formatting
   const lines = content.split("\n");
   return (
     <>
-      {lines.map((line, i) => {
-        // Bold: **text**
-        const formatted = line
-          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-          .replace(/`(.*?)`/g, '<code class="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 font-mono text-xs">$1</code>');
-        return (
-          <span key={i}>
-            {i > 0 && <br />}
-            <span dangerouslySetInnerHTML={{ __html: formatted }} />
-          </span>
-        );
-      })}
+      {lines.map((line, i) => (
+        <span key={i}>
+          {i > 0 && <br />}
+          {formatLine(line)}
+        </span>
+      ))}
     </>
   );
+}
+
+function formatLine(line: string): ReactNode[] {
+  return line.split(/(\*\*.*?\*\*|`.*?`)/g).map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      return (
+        <code key={i} className="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 font-mono text-xs">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
 }

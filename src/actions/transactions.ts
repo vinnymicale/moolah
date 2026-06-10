@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireHousehold } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
 
@@ -34,11 +34,11 @@ export type TransactionInput = z.input<typeof txnSchema>;
 async function assertOwnership(householdId: string, accountId?: string | null, categoryId?: string | null) {
   if (accountId) {
     const a = await prisma.financialAccount.findFirst({ where: { id: accountId, householdId } });
-    if (!a) throw new Error("Account not found");
+    if (!a) throw new UserError("Account not found");
   }
   if (categoryId) {
     const c = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
-    if (!c) throw new Error("Category not found");
+    if (!c) throw new UserError("Category not found");
   }
 }
 
@@ -49,42 +49,44 @@ export async function createTransactionAction(input: TransactionInput): Promise<
     const data = txnSchema.parse(input);
     await assertOwnership(householdId, data.accountId, data.categoryId);
 
-    let recurringRuleId: string | undefined;
-    if (data.recurring) {
-      const rule = await prisma.recurringRule.create({
+    await prisma.$transaction(async (tx) => {
+      let recurringRuleId: string | undefined;
+      if (data.recurring) {
+        const rule = await tx.recurringRule.create({
+          data: {
+            householdId,
+            accountId: data.accountId || null,
+            categoryId: data.categoryId || null,
+            type: data.type,
+            amount: data.amount,
+            description: data.description,
+            note: data.note || null,
+            frequency: data.recurring.frequency,
+            interval: data.recurring.interval ?? 1,
+            dayOfMonth: data.recurring.dayOfMonth ?? null,
+            weekday: data.recurring.weekday ?? null,
+            startDate: parseISODay(data.date),
+            endDate: data.recurring.endDate ? parseISODay(data.recurring.endDate) : null,
+          },
+        });
+        recurringRuleId = rule.id;
+      }
+
+      await tx.transaction.create({
         data: {
           householdId,
           accountId: data.accountId || null,
           categoryId: data.categoryId || null,
+          createdById: userId,
           type: data.type,
           amount: data.amount,
+          date: parseISODay(data.date),
           description: data.description,
           note: data.note || null,
-          frequency: data.recurring.frequency,
-          interval: data.recurring.interval ?? 1,
-          dayOfMonth: data.recurring.dayOfMonth ?? null,
-          weekday: data.recurring.weekday ?? null,
-          startDate: parseISODay(data.date),
-          endDate: data.recurring.endDate ? parseISODay(data.recurring.endDate) : null,
+          cleared: data.cleared ?? true,
+          recurringRuleId,
         },
       });
-      recurringRuleId = rule.id;
-    }
-
-    await prisma.transaction.create({
-      data: {
-        householdId,
-        accountId: data.accountId || null,
-        categoryId: data.categoryId || null,
-        createdById: userId,
-        type: data.type,
-        amount: data.amount,
-        date: parseISODay(data.date),
-        description: data.description,
-        note: data.note || null,
-        cleared: data.cleared ?? true,
-        recurringRuleId,
-      },
     });
     revalidateAll();
   });
@@ -95,7 +97,7 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Transaction not found");
+    if (!existing) throw new UserError("Transaction not found");
     const data = txnSchema.parse(input);
     await assertOwnership(householdId, data.accountId, data.categoryId);
 
@@ -121,7 +123,7 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Transaction not found");
+    if (!existing) throw new UserError("Transaction not found");
     await prisma.transaction.delete({ where: { id } });
     revalidateAll();
   });
@@ -132,7 +134,7 @@ export async function setClearedAction(id: string, cleared: boolean): Promise<Ac
   return run(async () => {
     const { householdId } = await requireHousehold();
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
-    if (!existing) throw new Error("Transaction not found");
+    if (!existing) throw new UserError("Transaction not found");
     await prisma.transaction.update({ where: { id }, data: { cleared } });
     revalidateAll();
   });
@@ -153,7 +155,7 @@ export async function bulkSetCategoryAction(ids: string[], categoryId: string | 
     const list = idsSchema.parse(ids);
     if (categoryId) {
       const c = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
-      if (!c) throw new Error("Category not found");
+      if (!c) throw new UserError("Category not found");
     }
     await prisma.transaction.updateMany({ where: { householdId, id: { in: list } }, data: { categoryId } });
     revalidateAll();
@@ -167,7 +169,7 @@ export async function bulkSetAccountAction(ids: string[], accountId: string | nu
     const list = idsSchema.parse(ids);
     if (accountId) {
       const a = await prisma.financialAccount.findFirst({ where: { id: accountId, householdId } });
-      if (!a) throw new Error("Account not found");
+      if (!a) throw new UserError("Account not found");
     }
     await prisma.transaction.updateMany({ where: { householdId, id: { in: list } }, data: { accountId } });
     revalidateAll();
@@ -207,28 +209,30 @@ export async function convertToRecurringAction(id: string, input: ConvertToRecur
   return run(async () => {
     const { householdId } = await requireHousehold();
     const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
-    if (!txn) throw new Error("Transaction not found");
-    if (txn.recurringRuleId) throw new Error("This transaction is already part of a recurring series.");
+    if (!txn) throw new UserError("Transaction not found");
+    if (txn.recurringRuleId) throw new UserError("This transaction is already part of a recurring series.");
     const data = convertSchema.parse(input);
 
-    const rule = await prisma.recurringRule.create({
-      data: {
-        householdId,
-        accountId: txn.accountId,
-        categoryId: txn.categoryId,
-        type: txn.type,
-        amount: txn.amount,
-        description: txn.description,
-        note: txn.note,
-        frequency: data.frequency,
-        interval: data.interval ?? 1,
-        dayOfMonth: data.dayOfMonth ?? null,
-        weekday: data.weekday ?? null,
-        startDate: txn.date,
-        endDate: data.endDate ? parseISODay(data.endDate) : null,
-      },
+    await prisma.$transaction(async (tx) => {
+      const rule = await tx.recurringRule.create({
+        data: {
+          householdId,
+          accountId: txn.accountId,
+          categoryId: txn.categoryId,
+          type: txn.type,
+          amount: txn.amount,
+          description: txn.description,
+          note: txn.note,
+          frequency: data.frequency,
+          interval: data.interval ?? 1,
+          dayOfMonth: data.dayOfMonth ?? null,
+          weekday: data.weekday ?? null,
+          startDate: txn.date,
+          endDate: data.endDate ? parseISODay(data.endDate) : null,
+        },
+      });
+      await tx.transaction.update({ where: { id }, data: { recurringRuleId: rule.id } });
     });
-    await prisma.transaction.update({ where: { id }, data: { recurringRuleId: rule.id } });
 
     revalidatePath("/recurring");
     revalidateAll();
@@ -244,7 +248,7 @@ export async function materializeOccurrenceAction(ruleId: string, dateISO: strin
   return run(async () => {
     const { householdId, userId } = await requireHousehold();
     const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, householdId } });
-    if (!rule) throw new Error("Recurring rule not found");
+    if (!rule) throw new UserError("Recurring rule not found");
     const date = parseISODay(dateISO);
 
     const existing = await prisma.transaction.findFirst({

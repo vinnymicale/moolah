@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, ChevronDown, Check, X, Loader2, ExternalLink, Copy } from "lucide-react";
+import { Settings, ChevronDown, Check, X, Loader2, ExternalLink } from "lucide-react";
 import type { SetupStatus } from "@/lib/setup-config";
 
 export function SetupPanel({
@@ -142,21 +142,3 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-function CopyRow({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch { /* ignore */ }
-  };
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-surface2 px-3 py-2">
-      <code className="flex-1 truncate text-xs text-text">{text}</code>
-      <button onClick={copy} type="button" className="btn-ghost h-7 shrink-0 text-xs" title="Copy">
-        {copied ? <Check size={13} /> : <Copy size={13} />}
-      </button>
-    </div>
-  );
-}

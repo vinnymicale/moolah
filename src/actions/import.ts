@@ -8,7 +8,7 @@ import { parseISODay, isoDay } from "@/lib/dates";
 import { toCents } from "@/lib/money";
 import { expandOccurrences } from "@/lib/recurrence";
 import { guessCategoryName, type ImportType } from "@/lib/csv-import";
-import { run, type ActionResult } from "@/lib/action-result";
+import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { TxnType } from "@/generated/prisma/enums";
 
@@ -146,7 +146,7 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
 
     if (accountId) {
       const acct = await prisma.financialAccount.findFirst({ where: { id: accountId, householdId } });
-      if (!acct) throw new Error("Account not found");
+      if (!acct) throw new UserError("Account not found");
     }
 
     // Resolve which provided category ids actually belong to the household.

@@ -96,12 +96,19 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function MoneyTooltip({ active, payload, label }: any) {
+interface TooltipEntry {
+  name?: string;
+  value?: number | string;
+  color?: string;
+  fill?: string;
+}
+
+function MoneyTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-md">
       {label && <p className="mb-1 font-medium">{label}</p>}
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <p key={p.name} className="flex items-center gap-2">
           <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color || p.fill }} />
           <span className="text-muted">{p.name}:</span>
