@@ -255,6 +255,20 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
         },
       });
 
+      // When a pending charge posts, Plaid delivers the settled version as a
+      // new transaction (with its own id) that points back at the pending one
+      // via pending_transaction_id. Plaid is supposed to also send the pending
+      // id in `removed`, but that event is frequently missing, so reconcile
+      // here to avoid a duplicate pending + posted pair for the same charge.
+      if (txn.pending_transaction_id) {
+        await prisma.transaction.deleteMany({
+          where: {
+            plaidTransactionId: txn.pending_transaction_id,
+            householdId: item.householdId,
+          },
+        });
+      }
+
       // In recategorize mode, fill in the category only if the row has none.
       if (opts?.recategorizeOnly && categoryId) {
         await prisma.transaction.updateMany({
@@ -289,6 +303,17 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
           ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
           : { amount, description: modDesc, date: modDate, type, categoryId, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
       });
+
+      // Same pending→posted reconciliation as in the added loop: drop the
+      // pending row this settled transaction superseded.
+      if (txn.pending_transaction_id) {
+        await prisma.transaction.deleteMany({
+          where: {
+            plaidTransactionId: txn.pending_transaction_id,
+            householdId: item.householdId,
+          },
+        });
+      }
 
       // In recategorize mode, fill in the category only if the row has none.
       if (opts?.recategorizeOnly && categoryId) {
