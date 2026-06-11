@@ -82,7 +82,7 @@ export function CalendarView({
       if (day.startsWith(monthNum)) {
         for (const e of filtered) {
           if (e.type === "INCOME" && !e.isTransfer) income += e.amount;
-          else if (e.type === "EXPENSE") expense += e.amount;
+          else if (e.type === "EXPENSE" && !e.isTransfer) expense += e.amount;
         }
       }
     }
