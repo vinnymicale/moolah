@@ -30,8 +30,12 @@ Planned improvements, roughly in priority order:
 
 - **Docker support** - an official Docker image and a docker-compose example (app + Postgres) so
   Moolah can be deployed like any other self-hosted service.
-- **Household / multi-user support** - share one dataset with a partner: invite codes, per-member
-  attribution on transactions, and a shared calendar.
+- **Read-only data API** - versioned `/api/v1` endpoints (net worth, budget status, upcoming
+  bills) behind per-user bearer tokens, so external tools like Home Assistant can pull data
+  for dashboards.
+- **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
+  codes, per-member attribution on transactions, and a shared calendar. Local name+password
+  accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
 
 Have a request? Open an issue on GitHub.
 
