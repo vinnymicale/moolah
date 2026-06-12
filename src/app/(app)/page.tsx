@@ -318,17 +318,25 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
-        <StatCard label="Income this month" value={formatUSD(calendar.monthIncome)} tone="income" />
+        <StatCard
+          label="Income this month"
+          value={formatUSD(calendar.monthIncomeActual)}
+          tone="income"
+          hint={`${formatUSD(calendar.monthIncome)} projected by month end`}
+        />
         <StatCard
           label="Spent this month"
-          value={formatUSD(calendar.monthExpense)}
+          value={formatUSD(calendar.monthExpenseActual)}
           tone="expense"
           hint={
-            spendDeltaPct === null ? undefined : (
-              <span className={spendDeltaPct > 0 ? "text-expense" : spendDeltaPct < 0 ? "text-income" : "text-muted"}>
-                {spendDeltaPct > 0 ? "▲" : spendDeltaPct < 0 ? "▼" : "■"} {Math.abs(spendDeltaPct)}% vs last month
-              </span>
-            )
+            <>
+              <span>{formatUSD(calendar.monthExpense)} projected by month end</span>
+              {spendDeltaPct !== null && (
+                <span className={`ml-1 ${spendDeltaPct > 0 ? "text-expense" : spendDeltaPct < 0 ? "text-income" : "text-muted"}`}>
+                  · {spendDeltaPct > 0 ? "▲" : spendDeltaPct < 0 ? "▼" : "■"} {Math.abs(spendDeltaPct)}% vs last month
+                </span>
+              )}
+            </>
           }
         />
         <StatCard
