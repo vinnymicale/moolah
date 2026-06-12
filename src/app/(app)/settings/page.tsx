@@ -1,11 +1,11 @@
 import { headers } from "next/headers";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { getSetupStatus, isLocalHost } from "@/lib/setup-config";
 import { PageHeader } from "@/components/ui-bits";
 import { SetupPanel } from "@/app/(auth)/signin/SetupPanel";
-import { HouseholdNameForm, InviteCode, ExportData, BackupData, AiConfigForm } from "./SettingsForm";
+import { ExportData, BackupData, AiConfigForm } from "./SettingsForm";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -26,47 +26,33 @@ export default async function SettingsPage() {
     );
   }
 
-  const { householdId } = await requireHousehold();
+  const { userId } = await requireUser();
   const host = (await headers()).get("host");
   const status = getSetupStatus();
   const showPlaidSetup = isLocalHost(host);
 
-  const [household, accounts, categories] = await Promise.all([
-    prisma.household.findUnique({
-      where: { id: householdId },
+  const [user, accounts, categories] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
       select: {
-        id: true, name: true, inviteCode: true,
+        id: true,
         aiProvider: true,
         // Avoid leaking the actual key to the browser; just signal whether one is set.
         aiApiKey: true,
-        users: { select: { id: true, name: true, email: true, image: true } },
       },
     }),
-    getAccounts(householdId),
-    getCategories(householdId),
+    getAccounts(userId),
+    getCategories(userId),
   ]);
-  if (!household) return null;
+  if (!user) return null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <PageHeader title="Settings" subtitle="Manage your household and members." />
+      <PageHeader title="Settings" subtitle="Manage your data, exports, and integrations." />
 
       {showPlaidSetup && (
         <SetupPanel status={status} plaidOnly={process.env.AUTH_BYPASS === "true"} />
       )}
-
-      <section className="card p-5">
-        <h2 className="mb-3 font-semibold">Household</h2>
-        <HouseholdNameForm initialName={household.name} />
-      </section>
-
-      <section className="card p-5">
-        <h2 className="mb-1 font-semibold">Invite your partner</h2>
-        <p className="mb-3 text-sm text-muted">
-          Share this code so they can join from the welcome screen. Everyone in the household sees the same data.
-        </p>
-        <InviteCode code={household.inviteCode} />
-      </section>
 
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Export your data</h2>
@@ -97,34 +83,13 @@ export default async function SettingsPage() {
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Finance assistant</h2>
         <p className="mb-3 text-sm text-muted">
-          Connect your own AI account to enable the chat assistant. Your key is stored only in this household&apos;s database and never shared.
+          Connect your own AI account to enable the chat assistant. Your key is stored only in your
+          own database and never shared.
         </p>
         <AiConfigForm
-          currentProvider={household.aiProvider}
-          hasKey={!!household.aiApiKey}
+          currentProvider={user.aiProvider}
+          hasKey={!!user.aiApiKey}
         />
-      </section>
-
-      <section className="card p-5">
-        <h2 className="mb-3 font-semibold">Members ({household.users.length})</h2>
-        <ul className="divide-y divide-line">
-          {household.users.map((u) => (
-            <li key={u.id} className="flex items-center gap-3 py-2.5">
-              {u.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={u.image} alt="" className="h-9 w-9 rounded-full" />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 font-semibold text-brand">
-                  {(u.name ?? u.email ?? "?").charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{u.name ?? "-"}</p>
-                <p className="truncate text-xs text-muted">{u.email}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
       </section>
     </div>
   );

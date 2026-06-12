@@ -17,7 +17,7 @@ export function SignInForm({
   return (
     <div className="card p-6">
       <h1 className="mb-1 text-xl font-semibold">Welcome back</h1>
-      <p className="mb-6 text-sm text-muted">Sign in to your household finances.</p>
+      <p className="mb-6 text-sm text-muted">Sign in to your finances.</p>
 
       {!devLoginEnabled && (
         <p className="rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-muted">

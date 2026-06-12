@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -31,13 +31,13 @@ const txnSchema = z.object({
 
 export type TransactionInput = z.input<typeof txnSchema>;
 
-async function assertOwnership(householdId: string, accountId?: string | null, categoryId?: string | null) {
+async function assertOwnership(userId: string, accountId?: string | null, categoryId?: string | null) {
   if (accountId) {
-    const a = await prisma.financialAccount.findFirst({ where: { id: accountId, householdId } });
+    const a = await prisma.financialAccount.findFirst({ where: { id: accountId, userId } });
     if (!a) throw new UserError("Account not found");
   }
   if (categoryId) {
-    const c = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+    const c = await prisma.category.findFirst({ where: { id: categoryId, userId } });
     if (!c) throw new UserError("Category not found");
   }
 }
@@ -45,16 +45,16 @@ async function assertOwnership(householdId: string, accountId?: string | null, c
 export async function createTransactionAction(input: TransactionInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId, userId } = await requireHousehold();
+    const { userId } = await requireUser();
     const data = txnSchema.parse(input);
-    await assertOwnership(householdId, data.accountId, data.categoryId);
+    await assertOwnership(userId, data.accountId, data.categoryId);
 
     await prisma.$transaction(async (tx) => {
       let recurringRuleId: string | undefined;
       if (data.recurring) {
         const rule = await tx.recurringRule.create({
           data: {
-            householdId,
+            userId,
             accountId: data.accountId || null,
             categoryId: data.categoryId || null,
             type: data.type,
@@ -74,10 +74,9 @@ export async function createTransactionAction(input: TransactionInput): Promise<
 
       await tx.transaction.create({
         data: {
-          householdId,
+          userId,
           accountId: data.accountId || null,
           categoryId: data.categoryId || null,
-          createdById: userId,
           type: data.type,
           amount: data.amount,
           date: parseISODay(data.date),
@@ -95,11 +94,11 @@ export async function createTransactionAction(input: TransactionInput): Promise<
 export async function updateTransactionAction(id: string, input: TransactionInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.transaction.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Transaction not found");
     const data = txnSchema.parse(input);
-    await assertOwnership(householdId, data.accountId, data.categoryId);
+    await assertOwnership(userId, data.accountId, data.categoryId);
 
     await prisma.transaction.update({
       where: { id },
@@ -121,8 +120,8 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.transaction.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Transaction not found");
     await prisma.transaction.delete({ where: { id } });
     revalidateAll();
@@ -132,8 +131,8 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
 export async function setClearedAction(id: string, cleared: boolean): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.transaction.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Transaction not found");
     await prisma.transaction.update({ where: { id }, data: { cleared } });
     revalidateAll();
@@ -142,7 +141,7 @@ export async function setClearedAction(id: string, cleared: boolean): Promise<Ac
 
 // ---------------------------------------------------------------------------
 // Bulk operations (driven by multi-select on the Transactions list). Each is
-// scoped to the household, so a stray id can never touch another household's
+// scoped to the user, so a stray id can never touch another user's
 // data.
 // ---------------------------------------------------------------------------
 
@@ -151,13 +150,13 @@ const idsSchema = z.array(z.string().min(1)).min(1, "Select at least one transac
 export async function bulkSetCategoryAction(ids: string[], categoryId: string | null): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const list = idsSchema.parse(ids);
     if (categoryId) {
-      const c = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+      const c = await prisma.category.findFirst({ where: { id: categoryId, userId } });
       if (!c) throw new UserError("Category not found");
     }
-    await prisma.transaction.updateMany({ where: { householdId, id: { in: list } }, data: { categoryId } });
+    await prisma.transaction.updateMany({ where: { userId, id: { in: list } }, data: { categoryId } });
     revalidateAll();
   });
 }
@@ -165,13 +164,13 @@ export async function bulkSetCategoryAction(ids: string[], categoryId: string | 
 export async function bulkSetAccountAction(ids: string[], accountId: string | null): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const list = idsSchema.parse(ids);
     if (accountId) {
-      const a = await prisma.financialAccount.findFirst({ where: { id: accountId, householdId } });
+      const a = await prisma.financialAccount.findFirst({ where: { id: accountId, userId } });
       if (!a) throw new UserError("Account not found");
     }
-    await prisma.transaction.updateMany({ where: { householdId, id: { in: list } }, data: { accountId } });
+    await prisma.transaction.updateMany({ where: { userId, id: { in: list } }, data: { accountId } });
     revalidateAll();
   });
 }
@@ -179,9 +178,9 @@ export async function bulkSetAccountAction(ids: string[], accountId: string | nu
 export async function bulkSetClearedAction(ids: string[], cleared: boolean): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const list = idsSchema.parse(ids);
-    await prisma.transaction.updateMany({ where: { householdId, id: { in: list } }, data: { cleared } });
+    await prisma.transaction.updateMany({ where: { userId, id: { in: list } }, data: { cleared } });
     revalidateAll();
   });
 }
@@ -189,9 +188,9 @@ export async function bulkSetClearedAction(ids: string[], cleared: boolean): Pro
 export async function bulkDeleteTransactionsAction(ids: string[]): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const list = idsSchema.parse(ids);
-    await prisma.transaction.deleteMany({ where: { householdId, id: { in: list } } });
+    await prisma.transaction.deleteMany({ where: { userId, id: { in: list } } });
     revalidateAll();
   });
 }
@@ -207,8 +206,8 @@ export type ConvertToRecurringInput = z.input<typeof convertSchema>;
 export async function convertToRecurringAction(id: string, input: ConvertToRecurringInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const txn = await prisma.transaction.findFirst({ where: { id, userId } });
     if (!txn) throw new UserError("Transaction not found");
     if (txn.recurringRuleId) throw new UserError("This transaction is already part of a recurring series.");
     const data = convertSchema.parse(input);
@@ -216,7 +215,7 @@ export async function convertToRecurringAction(id: string, input: ConvertToRecur
     await prisma.$transaction(async (tx) => {
       const rule = await tx.recurringRule.create({
         data: {
-          householdId,
+          userId,
           accountId: txn.accountId,
           categoryId: txn.categoryId,
           type: txn.type,
@@ -246,23 +245,22 @@ export async function convertToRecurringAction(id: string, input: ConvertToRecur
 export async function materializeOccurrenceAction(ruleId: string, dateISO: string, cleared = true): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId, userId } = await requireHousehold();
-    const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, householdId } });
+    const { userId } = await requireUser();
+    const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, userId } });
     if (!rule) throw new UserError("Recurring rule not found");
     const date = parseISODay(dateISO);
 
     const existing = await prisma.transaction.findFirst({
-      where: { householdId, recurringRuleId: ruleId, date },
+      where: { userId, recurringRuleId: ruleId, date },
     });
     if (existing) {
       await prisma.transaction.update({ where: { id: existing.id }, data: { cleared } });
     } else {
       await prisma.transaction.create({
         data: {
-          householdId,
+          userId,
           accountId: rule.accountId,
           categoryId: rule.categoryId,
-          createdById: userId,
           type: rule.type,
           amount: rule.amount,
           date,
@@ -286,8 +284,8 @@ export async function materializeOccurrenceAction(ruleId: string, dateISO: strin
 export async function pairTransfersAction(idA: string, idB: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const txns = await prisma.transaction.findMany({ where: { id: { in: [idA, idB] }, householdId } });
+    const { userId } = await requireUser();
+    const txns = await prisma.transaction.findMany({ where: { id: { in: [idA, idB] }, userId } });
     if (txns.length !== 2) throw new UserError("Transaction not found");
     const [a, b] = txns;
     if (a.type === b.type) throw new UserError("A transfer pair needs one expense and one income.");
@@ -305,9 +303,9 @@ export async function pairTransfersAction(idA: string, idB: string): Promise<Act
 export async function unpairTransferAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const txn = await prisma.transaction.findFirst({
-      where: { id, householdId },
+      where: { id, userId },
       include: { transferPeer: true, transferPeerOf: true },
     });
     if (!txn) throw new UserError("Transaction not found");
@@ -342,7 +340,7 @@ export interface SearchHit {
 
 export async function searchTransactionsAction(query: string): Promise<SearchHit[]> {
   if (isDemoMode()) return [];
-  const { householdId } = await requireHousehold();
+  const { userId } = await requireUser();
   const q = query.trim();
   if (q.length < 2) return [];
 
@@ -356,7 +354,7 @@ export async function searchTransactionsAction(query: string): Promise<SearchHit
 
   const rows = await prisma.transaction.findMany({
     where: {
-      householdId,
+      userId,
       OR: [
         { description: { contains: q, mode: "insensitive" } },
         { note: { contains: q, mode: "insensitive" } },

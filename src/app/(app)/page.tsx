@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSafeToTransfer, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
-import { getDemoHouseholdId } from "@/lib/demo-session";
+import { getDemoUserId } from "@/lib/demo-session";
 import {
   DEMO_TRANSACTIONS, DEMO_BUDGETS, DEMO_GOALS,
 } from "@/lib/demo-data";
@@ -29,26 +29,26 @@ export default async function DashboardPage() {
   const monthISO = isoDay(monthFirst);
   const lastMonthFirst = addUTCMonths(monthFirst, -1);
 
-  const householdId = DEMO_MODE
-    ? (await getDemoHouseholdId() ?? "")
-    : (await requireHousehold()).householdId;
+  const userId = DEMO_MODE
+    ? (await getDemoUserId() ?? "")
+    : (await requireUser()).userId;
 
   const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals, safeTransfer, anomalies, topMerchants] = await Promise.all([
-    getNetWorth(householdId),
-    getCalendarMonth(householdId, monthISO, todayISO),
-    getUpcoming(householdId, todayISO, 14),
-    getCategories(householdId),
+    getNetWorth(userId),
+    getCalendarMonth(userId, monthISO, todayISO),
+    getUpcoming(userId, todayISO, 14),
+    getCategories(userId),
     DEMO_MODE
       ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= monthISO && t.date <= isoDay(endOfUTCMonth(monthFirst))))
-      : getTransactionsBetween(householdId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
-    DEMO_MODE ? Promise.resolve(DEMO_BUDGETS) : getBudgetMonth(householdId, monthISO),
+      : getTransactionsBetween(userId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
+    DEMO_MODE ? Promise.resolve(DEMO_BUDGETS) : getBudgetMonth(userId, monthISO),
     DEMO_MODE
       ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= isoDay(lastMonthFirst) && t.date <= isoDay(endOfUTCMonth(lastMonthFirst))))
-      : getTransactionsBetween(householdId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
-    DEMO_MODE ? Promise.resolve(DEMO_GOALS) : getSavingsGoals(householdId),
-    getSafeToTransfer(householdId, todayISO),
-    getSpendingAnomalies(householdId, monthISO),
-    getTopMerchants(householdId, monthISO),
+      : getTransactionsBetween(userId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
+    DEMO_MODE ? Promise.resolve(DEMO_GOALS) : getSavingsGoals(userId),
+    getSafeToTransfer(userId, todayISO),
+    getSpendingAnomalies(userId, monthISO),
+    getTopMerchants(userId, monthISO),
   ]);
 
   const {
@@ -312,7 +312,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="Dashboard" subtitle="Your household at a glance." />
+      <PageHeader title="Dashboard" subtitle="Your finances at a glance." />
 
       <MilestonesBanner milestones={milestones} />
 

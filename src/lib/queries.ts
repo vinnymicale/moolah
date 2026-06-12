@@ -61,7 +61,6 @@ export interface TransactionDTO {
   isTransfer: boolean;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
-  createdBy: { id: string; name: string | null; image: string | null } | null;
 }
 
 export interface RecurringDTO {
@@ -80,9 +79,9 @@ export interface RecurringDTO {
   endDate: string | null;
 }
 
-export async function getAccounts(householdId: string, includeArchived = false): Promise<AccountDTO[]> {
+export async function getAccounts(userId: string, includeArchived = false): Promise<AccountDTO[]> {
   const rows = await prisma.financialAccount.findMany({
-    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
+    where: { userId, ...(includeArchived ? {} : { archived: false }) },
     orderBy: [{ isAsset: "desc" }, { createdAt: "asc" }],
   });
   return rows.map((a) => ({
@@ -109,9 +108,9 @@ export async function getAccounts(householdId: string, includeArchived = false):
   }));
 }
 
-export async function getCategories(householdId: string): Promise<CategoryDTO[]> {
+export async function getCategories(userId: string): Promise<CategoryDTO[]> {
   const rows = await prisma.category.findMany({
-    where: { householdId },
+    where: { userId },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
   });
   return rows.map((c) => ({
@@ -124,9 +123,9 @@ export async function getCategories(householdId: string): Promise<CategoryDTO[]>
   }));
 }
 
-export async function getRecurringRules(householdId: string, includeArchived = false): Promise<RecurringDTO[]> {
+export async function getRecurringRules(userId: string, includeArchived = false): Promise<RecurringDTO[]> {
   const rows = await prisma.recurringRule.findMany({
-    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
+    where: { userId, ...(includeArchived ? {} : { archived: false }) },
     orderBy: { createdAt: "asc" },
   });
   return rows.map((r) => ({
@@ -152,9 +151,9 @@ export interface CategoryRuleDTO {
   categoryId: string;
 }
 
-export async function getCategoryRules(householdId: string): Promise<CategoryRuleDTO[]> {
+export async function getCategoryRules(userId: string): Promise<CategoryRuleDTO[]> {
   const rows = await prisma.categoryRule.findMany({
-    where: { householdId },
+    where: { userId },
     orderBy: { createdAt: "asc" },
   });
   return rows.map((r) => ({ id: r.id, pattern: r.pattern, categoryId: r.categoryId }));
@@ -167,8 +166,8 @@ export interface NetWorth {
   accounts: AccountDTO[];
 }
 
-export async function getNetWorth(householdId: string): Promise<NetWorth> {
-  const accounts = await getAccounts(householdId);
+export async function getNetWorth(userId: string): Promise<NetWorth> {
+  const accounts = await getAccounts(userId);
   let assets = 0;
   let liabilities = 0;
   for (const a of accounts) {
@@ -180,13 +179,12 @@ export async function getNetWorth(householdId: string): Promise<NetWorth> {
 }
 
 export async function getTransactionsBetween(
-  householdId: string,
+  userId: string,
   startISO: string,
   endISO: string,
 ): Promise<TransactionDTO[]> {
   const rows = await prisma.transaction.findMany({
-    where: { householdId, date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) } },
-    include: { createdBy: { select: { id: true, name: true, image: true } } },
+    where: { userId, date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
   return rows.map((t) => ({
@@ -202,7 +200,6 @@ export async function getTransactionsBetween(
     isTransfer: t.isTransfer,
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
-    createdBy: t.createdBy,
   }));
 }
 
@@ -222,15 +219,15 @@ export interface BudgetLineDTO {
  * any day in the target month ("YYYY-MM-01" by convention). Categories without
  * a budget come back with limit 0 so the UI can offer to set one.
  */
-export async function getBudgetMonth(householdId: string, monthISO: string): Promise<BudgetLineDTO[]> {
+export async function getBudgetMonth(userId: string, monthISO: string): Promise<BudgetLineDTO[]> {
   const monthStart = parseISODay(`${monthISO.slice(0, 7)}-01`);
   const monthEnd = endOfUTCMonth(monthStart);
 
   const [cats, budgets, txns] = await Promise.all([
-    prisma.category.findMany({ where: { householdId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
-    prisma.budget.findMany({ where: { householdId, month: monthStart } }),
+    prisma.category.findMany({ where: { userId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
+    prisma.budget.findMany({ where: { userId, month: monthStart } }),
     prisma.transaction.findMany({
-      where: { householdId, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
+      where: { userId, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
       select: { categoryId: true, amount: true },
     }),
   ]);
@@ -256,16 +253,16 @@ export async function getBudgetMonth(householdId: string, monthISO: string): Pro
  * Suggest recurring rules by scanning the last ~8 months of transactions for
  * regularly-repeating charges that aren't already covered by a rule.
  */
-export async function getRecurringSuggestions(householdId: string, todayISO: string): Promise<RecurringSuggestion[]> {
+export async function getRecurringSuggestions(userId: string, todayISO: string): Promise<RecurringSuggestion[]> {
   const since = startOfUTCMonth(addUTCMonths(parseISODay(todayISO), -8));
 
   const [txns, rules] = await Promise.all([
     prisma.transaction.findMany({
-      where: { householdId, date: { gte: since } },
+      where: { userId, date: { gte: since } },
       select: { date: true, description: true, amount: true, type: true, categoryId: true, accountId: true, recurringRuleId: true },
       orderBy: { date: "asc" },
     }),
-    prisma.recurringRule.findMany({ where: { householdId }, select: { description: true } }),
+    prisma.recurringRule.findMany({ where: { userId }, select: { description: true } }),
   ]);
 
   // Include both the user-named rule descriptions AND the raw bank descriptions
@@ -303,14 +300,14 @@ export interface BudgetMonthSummaryDTO {
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Budgeted vs. actual spending for each of the 12 months of `year`. */
-export async function getBudgetYear(householdId: string, year: number): Promise<BudgetMonthSummaryDTO[]> {
+export async function getBudgetYear(userId: string, year: number): Promise<BudgetMonthSummaryDTO[]> {
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const yearEnd = new Date(Date.UTC(year, 11, 31));
 
   const [budgets, txns] = await Promise.all([
-    prisma.budget.findMany({ where: { householdId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
+    prisma.budget.findMany({ where: { userId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
     prisma.transaction.findMany({
-      where: { householdId, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
+      where: { userId, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
       select: { date: true, amount: true },
     }),
   ]);
@@ -356,9 +353,9 @@ export interface PlaidItemDTO {
   linkedAccounts: PlaidLinkedAccountDTO[];
 }
 
-export async function getPlaidItems(householdId: string): Promise<PlaidItemDTO[]> {
+export async function getPlaidItems(userId: string): Promise<PlaidItemDTO[]> {
   const items = await prisma.plaidItem.findMany({
-    where: { householdId },
+    where: { userId },
     include: { linkedAccounts: true },
     orderBy: { createdAt: "asc" },
   });
@@ -394,9 +391,9 @@ export interface SavingsGoalDTO {
   archived: boolean;
 }
 
-export async function getSavingsGoals(householdId: string, includeArchived = false): Promise<SavingsGoalDTO[]> {
+export async function getSavingsGoals(userId: string, includeArchived = false): Promise<SavingsGoalDTO[]> {
   const rows = await prisma.savingsGoal.findMany({
-    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
+    where: { userId, ...(includeArchived ? {} : { archived: false }) },
     orderBy: { createdAt: "asc" },
   });
   return rows.map((g) => ({
@@ -448,7 +445,7 @@ export interface SafeTransferDTO {
 const BUFFER_CUSHION_PCT = 15;
 
 /**
- * Computes how much the household can safely move out of checking.
+ * Computes how much the user can safely move out of checking.
  *
  * Formula: checkingBalance - remaining uncleared expenses this month
  *          - (earlyMonthAvg × 1.15 next-month buffer), rounded down to $50.
@@ -456,7 +453,7 @@ const BUFFER_CUSHION_PCT = 15;
  * Shown throughout the entire month (not gated on remaining days).
  * Returns show:false when no checking accounts exist or the safe amount < $50.
  */
-export async function getSafeToTransfer(householdId: string, todayISO: string): Promise<SafeTransferDTO> {
+export async function getSafeToTransfer(userId: string, todayISO: string): Promise<SafeTransferDTO> {
   const nothing: SafeTransferDTO = {
     show: false, safeAmount: 0, anchorBalance: 0, checkingCount: 0,
     remainingExpenses: 0, remainingRecurring: 0, remainingRecurringCount: 0,
@@ -471,7 +468,7 @@ export async function getSafeToTransfer(householdId: string, todayISO: string): 
 
   // Fetch all accounts once and derive typed subsets.
   const allAccounts = await prisma.financialAccount.findMany({
-    where: { householdId, archived: false },
+    where: { userId, archived: false },
     select: { id: true, type: true, currentBalance: true, isAsset: true },
   });
 
@@ -501,7 +498,7 @@ export async function getSafeToTransfer(householdId: string, todayISO: string): 
   const [unclearedTxns, recurringRules, materialisedLinks] = await Promise.all([
     prisma.transaction.findMany({
       where: {
-        householdId,
+        userId,
         type: "EXPENSE",
         cleared: false,
         date: { gte: today, lte: monthEnd },
@@ -510,9 +507,9 @@ export async function getSafeToTransfer(householdId: string, todayISO: string): 
       },
       select: { amount: true },
     }),
-    prisma.recurringRule.findMany({ where: { householdId, type: "EXPENSE", archived: false } }),
+    prisma.recurringRule.findMany({ where: { userId, type: "EXPENSE", archived: false } }),
     prisma.transaction.findMany({
-      where: { householdId, recurringRuleId: { not: null }, date: { gte: today, lte: monthEnd } },
+      where: { userId, recurringRuleId: { not: null }, date: { gte: today, lte: monthEnd } },
       select: { recurringRuleId: true, date: true },
     }),
   ]);
@@ -551,7 +548,7 @@ export async function getSafeToTransfer(householdId: string, todayISO: string): 
     const pastMid = new Date(Date.UTC(pastStart.getUTCFullYear(), pastStart.getUTCMonth(), 14));
     const agg = await prisma.transaction.aggregate({
       where: {
-        householdId,
+        userId,
         type: "EXPENSE",
         cleared: true,
         date: { gte: pastStart, lte: pastMid },
@@ -604,7 +601,7 @@ export interface SpendingAnomalyDTO {
  * there are fewer than 2 prior months of data for a category.
  */
 export async function getSpendingAnomalies(
-  householdId: string,
+  userId: string,
   monthISO: string,
 ): Promise<SpendingAnomalyDTO[]> {
   const monthStart = parseISODay(`${monthISO.slice(0, 7)}-01`);
@@ -612,7 +609,7 @@ export async function getSpendingAnomalies(
 
   const currentTxns = await prisma.transaction.findMany({
     where: {
-      householdId,
+      userId,
       type: "EXPENSE",
       cleared: true,
       isTransfer: false,
@@ -636,7 +633,7 @@ export async function getSpendingAnomalies(
     const me = endOfUTCMonth(ms);
     const hist = await prisma.transaction.findMany({
       where: {
-        householdId,
+        userId,
         type: "EXPENSE",
         cleared: true,
         isTransfer: false,
@@ -658,7 +655,7 @@ export async function getSpendingAnomalies(
   }
 
   const cats = await prisma.category.findMany({
-    where: { id: { in: [...currentByCat.keys()] }, householdId },
+    where: { id: { in: [...currentByCat.keys()] }, userId },
     select: { id: true, name: true, color: true, icon: true },
   });
   const catMap = new Map(cats.map((c) => [c.id, c]));
@@ -705,7 +702,7 @@ export interface TopMerchantDTO {
  * is used for display.
  */
 export async function getTopMerchants(
-  householdId: string,
+  userId: string,
   monthISO: string,
   limit = 6,
 ): Promise<TopMerchantDTO[]> {
@@ -714,7 +711,7 @@ export async function getTopMerchants(
 
   const txns = await prisma.transaction.findMany({
     where: {
-      householdId,
+      userId,
       type: "EXPENSE",
       cleared: true,
       isTransfer: false,
@@ -751,9 +748,9 @@ export interface SnapshotDTO {
   note: string | null;
 }
 
-export async function getSnapshots(householdId: string): Promise<SnapshotDTO[]> {
+export async function getSnapshots(userId: string): Promise<SnapshotDTO[]> {
   const rows = await prisma.accountSnapshot.findMany({
-    where: { account: { householdId } },
+    where: { account: { userId } },
     orderBy: { date: "asc" },
   });
   return rows.map((s) => ({

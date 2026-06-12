@@ -38,7 +38,7 @@ const TOOLS = [
   {
     name: "get_financial_summary",
     description:
-      "Get a high-level summary of the household's current financial standing: net worth, account balances, and current month income/expenses.",
+      "Get a high-level summary of the user's current financial standing: net worth, account balances, and current month income/expenses.",
     parameters: { type: "object", properties: {}, required: [] },
   },
   {
@@ -201,7 +201,7 @@ const setBudgetArgs = z.object({
 async function executeTool(
   name: string,
   args: Record<string, unknown>,
-  householdId: string,
+  userId: string,
 ): Promise<string> {
   const today = isoDay(new Date());
 
@@ -209,12 +209,12 @@ async function executeTool(
     switch (name) {
       case "get_financial_summary": {
         const [netWorth, accounts] = await Promise.all([
-          getNetWorth(householdId),
-          getAccounts(householdId),
+          getNetWorth(userId),
+          getAccounts(userId),
         ]);
         const now = new Date();
         const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-        const txns = await getTransactionsBetween(householdId, monthStart, today);
+        const txns = await getTransactionsBetween(userId, monthStart, today);
         const income = txns.filter((t) => t.type === "INCOME" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
         const expenses = txns.filter((t) => t.type === "EXPENSE" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
         return JSON.stringify({
@@ -241,9 +241,9 @@ async function executeTool(
         startDate.setDate(startDate.getDate() - 30);
         const start = (args.start_date as string) || isoDay(startDate);
         const [txns, categories, accounts] = await Promise.all([
-          getTransactionsBetween(householdId, start, end),
-          getCategories(householdId),
-          getAccounts(householdId),
+          getTransactionsBetween(userId, start, end),
+          getCategories(userId),
+          getAccounts(userId),
         ]);
         const catMap = new Map(categories.map((c) => [c.id, c.name]));
         const accMap = new Map(accounts.map((a) => [a.id, a.name]));
@@ -264,7 +264,7 @@ async function executeTool(
         const now = new Date();
         const monthStr = (args.month as string) ||
           `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-        const lines = await getBudgetMonth(householdId, `${monthStr}-01`);
+        const lines = await getBudgetMonth(userId, `${monthStr}-01`);
         return JSON.stringify(
           lines.map((l) => ({
             category: l.name,
@@ -277,7 +277,7 @@ async function executeTool(
       }
 
       case "get_savings_goals": {
-        const goals = await getSavingsGoals(householdId);
+        const goals = await getSavingsGoals(userId);
         return JSON.stringify(
           goals.map((g) => ({
             name: g.name,
@@ -291,17 +291,17 @@ async function executeTool(
 
       case "get_spending_insights": {
         const [anomalies, merchants] = await Promise.all([
-          getSpendingAnomalies(householdId, today),
-          getTopMerchants(householdId, today, 10),
+          getSpendingAnomalies(userId, today),
+          getTopMerchants(userId, today, 10),
         ]);
         return JSON.stringify({ anomalies, top_merchants: merchants });
       }
 
       case "get_recurring_expenses": {
-        const rules = await getRecurringRules(householdId);
+        const rules = await getRecurringRules(userId);
         const [categories, accounts] = await Promise.all([
-          getCategories(householdId),
-          getAccounts(householdId),
+          getCategories(userId),
+          getAccounts(userId),
         ]);
         const catMap = new Map(categories.map((c) => [c.id, c.name]));
         const accMap = new Map(accounts.map((a) => [a.id, a.name]));
@@ -321,8 +321,8 @@ async function executeTool(
       case "create_transaction": {
         const input = createTransactionArgs.parse(args);
         const [categories, accounts] = await Promise.all([
-          getCategories(householdId),
-          getAccounts(householdId),
+          getCategories(userId),
+          getAccounts(userId),
         ]);
         const category = input.category_name
           ? categories.find((c) => c.name.toLowerCase().includes(input.category_name!.toLowerCase()))
@@ -333,7 +333,7 @@ async function executeTool(
 
         await prisma.transaction.create({
           data: {
-            householdId,
+            userId,
             type: input.type,
             amount: input.amount,
             date: new Date(`${input.date}T00:00:00.000Z`),
@@ -353,8 +353,8 @@ async function executeTool(
       case "create_recurring_rule": {
         const input = createRecurringArgs.parse(args);
         const [categories, accounts] = await Promise.all([
-          getCategories(householdId),
-          getAccounts(householdId),
+          getCategories(userId),
+          getAccounts(userId),
         ]);
         const category = input.category_name
           ? categories.find((c) => c.name.toLowerCase().includes(input.category_name!.toLowerCase()))
@@ -365,7 +365,7 @@ async function executeTool(
 
         await prisma.recurringRule.create({
           data: {
-            householdId,
+            userId,
             type: input.type,
             amount: input.amount,
             description: input.description,
@@ -385,7 +385,7 @@ async function executeTool(
 
       case "set_budget": {
         const input = setBudgetArgs.parse(args);
-        const categories = await getCategories(householdId);
+        const categories = await getCategories(userId);
         const category = categories.find((c) =>
           c.name.toLowerCase().includes(input.category_name.toLowerCase()),
         );
@@ -403,14 +403,14 @@ async function executeTool(
 
         await prisma.budget.upsert({
           where: {
-            householdId_categoryId_month: {
-              householdId,
+            userId_categoryId_month: {
+              userId,
               categoryId: category.id,
               month: monthDate,
             },
           },
           create: {
-            householdId,
+            userId,
             categoryId: category.id,
             month: monthDate,
             limit: input.limit,
@@ -439,7 +439,7 @@ async function callAnthropic(
   apiKey: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  householdId: string,
+  userId: string,
 ): Promise<string> {
   const anthropicTools = TOOLS.map((t) => ({
     name: t.name,
@@ -510,7 +510,7 @@ async function callAnthropic(
         toolUses.map(async (tu) => ({
           type: "tool_result" as const,
           tool_use_id: tu.id,
-          content: await executeTool(tu.name, tu.input, householdId),
+          content: await executeTool(tu.name, tu.input, userId),
         })),
       );
       convMessages.push({ role: "user", content: toolResults });
@@ -531,7 +531,7 @@ async function callOpenAI(
   apiKey: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  householdId: string,
+  userId: string,
 ): Promise<string> {
   const openaiTools = TOOLS.map((t) => ({
     type: "function",
@@ -610,7 +610,7 @@ async function callOpenAI(
           content: await executeTool(
             tc.function.name,
             JSON.parse(tc.function.arguments) as Record<string, unknown>,
-            householdId,
+            userId,
           ),
         })),
       );
@@ -628,7 +628,7 @@ async function callGemini(
   apiKey: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  householdId: string,
+  userId: string,
 ): Promise<string> {
   const geminiTools = [
     {
@@ -697,7 +697,7 @@ async function callGemini(
       functionCalls.map(async (fc) => ({
         functionResponse: {
           name: fc.functionCall.name,
-          response: { content: await executeTool(fc.functionCall.name, fc.functionCall.args, householdId) },
+          response: { content: await executeTool(fc.functionCall.name, fc.functionCall.args, userId) },
         },
       })),
     );
@@ -726,17 +726,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!user?.householdId) {
-    return NextResponse.json({ error: "No household" }, { status: 403 });
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, name: true, aiProvider: true, aiApiKey: true },
+  });
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const household = await prisma.household.findUnique({
-    where: { id: user.householdId },
-    select: { aiProvider: true, aiApiKey: true, name: true },
-  });
-
-  if (!household?.aiProvider || !household?.aiApiKey) {
+  if (!user.aiProvider || !user.aiApiKey) {
     return NextResponse.json(
       { error: "AI assistant not configured. Add your API key in Settings." },
       { status: 422 },
@@ -757,7 +755,7 @@ export async function POST(request: Request) {
   }
 
   const today = isoDay(new Date());
-  const systemPrompt = `You are a helpful personal finance assistant for ${household.name}'s household finances. Today is ${today}.
+  const systemPrompt = `You are a helpful personal finance assistant for ${user.name ?? "the user"}'s finances. Today is ${today}.
 
 You have access to tools to read and write their financial data. Use them proactively to answer questions with real numbers rather than giving generic advice.
 
@@ -770,18 +768,18 @@ Guidelines:
 
   try {
     let reply: string;
-    const householdId = user.householdId;
-    const apiKey = decryptSecret(household.aiApiKey);
+    const userId = user.id;
+    const apiKey = decryptSecret(user.aiApiKey);
 
-    switch (household.aiProvider) {
+    switch (user.aiProvider) {
       case "anthropic":
-        reply = await callAnthropic(apiKey, systemPrompt, body.messages, householdId);
+        reply = await callAnthropic(apiKey, systemPrompt, body.messages, userId);
         break;
       case "openai":
-        reply = await callOpenAI(apiKey, systemPrompt, body.messages, householdId);
+        reply = await callOpenAI(apiKey, systemPrompt, body.messages, userId);
         break;
       case "gemini":
-        reply = await callGemini(apiKey, systemPrompt, body.messages, householdId);
+        reply = await callGemini(apiKey, systemPrompt, body.messages, userId);
         break;
       default:
         return NextResponse.json({ error: "Unknown AI provider" }, { status: 422 });

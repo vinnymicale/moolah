@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { signIn } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isLocalHost } from "@/lib/setup-config";
-import { createHouseholdForUser } from "@/lib/household";
+import { ensureDefaultCategories } from "@/lib/user-setup";
 
 export const dynamic = "force-dynamic";
 
@@ -20,20 +20,15 @@ export async function GET(req: NextRequest) {
 
   const email = localUserEmail();
 
-  // Ensure user exists.
-  let user = await prisma.user.findUnique({ where: { email }, select: { id: true, householdId: true } });
+  // Ensure the local user exists, with the default categories seeded.
+  let user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (!user) {
-    const created = await prisma.user.create({
+    user = await prisma.user.create({
       data: { email, name: email.split("@")[0] },
-      select: { id: true, householdId: true },
+      select: { id: true },
     });
-    user = created;
   }
-
-  // Ensure household exists - seeds default categories too.
-  if (!user.householdId) {
-    await createHouseholdForUser(user.id, "My Household");
-  }
+  await ensureDefaultCategories(user.id);
 
   const callbackUrl = req.nextUrl.searchParams.get("callbackUrl") || "/";
   // signIn throws NEXT_REDIRECT internally; this never returns normally.

@@ -278,7 +278,7 @@ function directionFromType(raw: string | undefined, cols: ColumnMap): ImportType
 // ---------------------------------------------------------------------------
 // Category suggestion. Maps a description to one of the seeded default category
 // names (see default-categories.ts); the server resolves the name to an actual
-// category id for the household.
+// category id for the user.
 // ---------------------------------------------------------------------------
 
 const EXPENSE_KEYWORDS: { re: RegExp; category: string }[] = [

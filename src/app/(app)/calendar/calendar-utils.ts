@@ -39,6 +39,5 @@ export function eventToTxn(e: CalendarEvent): TransactionDTO {
     isTransfer: e.isTransfer,
     recurringRuleId: e.recurringRuleId,
     plaidTransactionId: e.plaidTransactionId,
-    createdBy: e.createdBy,
   };
 }

@@ -1,4 +1,4 @@
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { getCategories, getCategoryRules, type CategoryRuleDTO } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
 import { CategoriesManager } from "./CategoriesManager";
@@ -13,10 +13,10 @@ export default async function CategoriesPage() {
   if (DEMO_MODE) {
     categories = DEMO_CATEGORIES;
   } else {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     [categories, rules] = await Promise.all([
-      getCategories(householdId),
-      getCategoryRules(householdId),
+      getCategories(userId),
+      getCategoryRules(userId),
     ]);
   }
 

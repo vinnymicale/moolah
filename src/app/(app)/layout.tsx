@@ -1,5 +1,4 @@
-import { requireHousehold } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/session";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { AppChrome } from "@/components/AppChrome";
 import { AutoPlaidSync } from "./AutoPlaidSync";
@@ -28,7 +27,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       >
         <AppChrome
           user={{ name: "Demo User", email: "demo@example.com", image: null }}
-          householdName="Our Household"
           accounts={DEMO_ACCOUNTS}
           categories={DEMO_CATEGORIES}
           authBypass
@@ -40,17 +38,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const ctx = await requireHousehold();
-  const [household, accounts, categories] = await Promise.all([
-    prisma.household.findUnique({ where: { id: ctx.householdId }, select: { name: true } }),
-    getAccounts(ctx.householdId),
-    getCategories(ctx.householdId),
+  const ctx = await requireUser();
+  const [accounts, categories] = await Promise.all([
+    getAccounts(ctx.userId),
+    getCategories(ctx.userId),
   ]);
 
   return (
     <AppChrome
       user={{ name: ctx.name, email: ctx.email, image: ctx.image }}
-      householdName={household?.name ?? "Household"}
       accounts={accounts}
       categories={categories}
       authBypass={process.env.AUTH_BYPASS === "true"}

@@ -14,11 +14,8 @@ export async function DELETE(
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!user?.householdId) return NextResponse.json({ error: "No household" }, { status: 403 });
-
   const { itemId } = await params;
-  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, householdId: user.householdId } });
+  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, userId: session.user.id } });
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   try {

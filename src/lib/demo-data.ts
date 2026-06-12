@@ -330,7 +330,6 @@ function txn(
     isTransfer: false,
     recurringRuleId,
     plaidTransactionId: null,
-    createdBy: null,
   };
 }
 

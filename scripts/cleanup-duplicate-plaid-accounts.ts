@@ -4,12 +4,12 @@
  * (instead of update mode). Safe to run multiple times - idempotent.
  *
  * Strategy:
- *   1. Find FinancialAccounts that share the same (householdId, name).
+ *   1. Find FinancialAccounts that share the same (userId, name).
  *   2. Keep the OLDEST account (has transaction history).
  *   3. Re-point any PlaidLinkedAccounts from newer duplicates to the keeper.
  *   4. Delete the newer duplicate FinancialAccounts.
  *   5. Delete older PlaidItems whose item_id is now superseded by a newer one
- *      for the same institution within the same household.
+ *      for the same institution for the same user.
  *
  * Run with:  npx tsx scripts/cleanup-duplicate-plaid-accounts.ts
  */
@@ -27,14 +27,14 @@ async function main() {
   // ── Step 1: find duplicate FinancialAccounts ────────────────────────────────
 
   const allAccounts = await p.financialAccount.findMany({
-    select: { id: true, householdId: true, name: true, createdAt: true },
+    select: { id: true, userId: true, name: true, createdAt: true },
     orderBy: { createdAt: "asc" },
   });
 
-  // Group by (householdId, name)
+  // Group by (userId, name)
   const groups = new Map<string, typeof allAccounts>();
   for (const acct of allAccounts) {
-    const key = `${acct.householdId}::${acct.name}`;
+    const key = `${acct.userId}::${acct.name}`;
     const group = groups.get(key) ?? [];
     group.push(acct);
     groups.set(key, group);
@@ -82,17 +82,17 @@ async function main() {
   console.log(`\nFinancialAccount cleanup: ${deleted} duplicate(s) removed, ${reassigned} link(s) reassigned.`);
 
   // ── Step 2: remove stale PlaidItems ────────────────────────────────────────
-  // For each household+institution pair, keep only the newest PlaidItem.
+  // For each user+institution pair, keep only the newest PlaidItem.
 
   const allItems = await p.plaidItem.findMany({
-    select: { id: true, householdId: true, institutionId: true, institutionName: true, createdAt: true },
+    select: { id: true, userId: true, institutionId: true, institutionName: true, createdAt: true },
     orderBy: { createdAt: "asc" },
   });
 
-  // Group by (householdId, institutionId). Fall back to institutionName if id is null.
+  // Group by (userId, institutionId). Fall back to institutionName if id is null.
   const itemGroups = new Map<string, typeof allItems>();
   for (const item of allItems) {
-    const key = `${item.householdId}::${item.institutionId ?? item.institutionName ?? item.id}`;
+    const key = `${item.userId}::${item.institutionId ?? item.institutionName ?? item.id}`;
     const group = itemGroups.get(key) ?? [];
     group.push(item);
     itemGroups.set(key, group);

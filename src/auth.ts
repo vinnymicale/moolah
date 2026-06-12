@@ -3,6 +3,7 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import { ensureDefaultCategories } from "@/lib/user-setup";
 
 /**
  * Dev login lets you sign in locally without Google OAuth credentials. It is
@@ -10,7 +11,7 @@ import { prisma } from "@/lib/prisma";
  */
 const allowDevLogin = process.env.AUTH_DEV_LOGIN === "true" || process.env.AUTH_BYPASS === "true";
 
-/** Optional allow-list so only you and your wife can sign in. */
+/** Optional allow-list so only you can sign in. */
 function isAllowedEmail(email: string | null | undefined): boolean {
   const raw = process.env.ALLOWED_EMAILS?.trim();
   if (!raw) return true; // no allow-list configured => anyone may sign in
@@ -55,6 +56,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 user = await prisma.user.create({
                   data: { email, name: email.split("@")[0] },
                 });
+                await ensureDefaultCategories(user.id);
               }
               return { id: user.id, email: user.email, name: user.name, image: user.image };
             },
@@ -71,25 +73,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, user }) {
       if (user?.id) token.uid = user.id;
-      const uid = token.uid as string | undefined;
-      // Always resolve the current household from the DB so the session never
-      // goes stale (e.g. right after creating or joining a household). This is
-      // a single indexed lookup per session check - negligible for this app.
-      if (uid) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: uid },
-          select: { householdId: true },
-        });
-        token.householdId = dbUser?.householdId ?? null;
-      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = (token.uid as string | undefined) ?? "";
-        session.user.householdId = (token.householdId as string | null | undefined) ?? null;
       }
       return session;
+    },
+  },
+  events: {
+    // Seed the default categories for users created by the Prisma adapter
+    // (Google sign-in); dev login and auto-signin seed on their own create paths.
+    async createUser({ user }) {
+      if (user.id) await ensureDefaultCategories(user.id);
     },
   },
 });
