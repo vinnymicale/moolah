@@ -161,15 +161,12 @@ export function Sidebar({
           <Avatar user={user} />
           {!compact && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
-              <p className="flex items-center gap-1.5 truncate text-xs text-muted">
-                {user.email}
-                {authBypass && (
-                  <span className="shrink-0 rounded bg-surface2 px-1 py-px text-[10px] font-medium text-muted">
-                    local
-                  </span>
-                )}
-              </p>
+              <p className="truncate text-sm font-medium">{user.name ?? "Moolah"}</p>
+              {authBypass && (
+                <p className="text-xs text-muted">
+                  <span className="rounded bg-surface2 px-1 py-px text-[10px] font-medium">local</span>
+                </p>
+              )}
             </div>
           )}
         </div>

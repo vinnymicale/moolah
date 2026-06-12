@@ -1,26 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
-import { exportAllData, backupStamp } from "@/lib/backup";
+import { exportUserData, backupStamp } from "@/lib/backup";
 
-// Full-database backup download. Returns a single JSON file containing every
-// table - including the Plaid access tokens - so it can be restored on another
-// machine without re-linking banks. Because the dump is database-wide, it is
-// only allowed when the requester is the sole user in the database (the
-// self-host case); otherwise it would expose other users' data.
+// Backup download for the signed-in user. Returns a single JSON file with all
+// of their rows - including their Plaid access tokens - so it can be restored
+// on another machine without re-linking banks. Scoped to the requesting user,
+// so other local accounts (and the seeded demo user) are never included. For a
+// whole-database dump, use the db:backup CLI script on the server.
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const otherUsers = await prisma.user.count({ where: { id: { not: session.user.id } } });
-  if (otherUsers > 0) {
-    return NextResponse.json(
-      { error: "Backup download is only available on single-user installations. Use the db:backup CLI script on the server instead." },
-      { status: 403 },
-    );
-  }
-
-  const payload = await exportAllData();
+  const payload = await exportUserData(session.user.id);
   const filename = `moolah-backup-${backupStamp(payload.exportedAt)}.json`;
 
   return new NextResponse(JSON.stringify(payload), {

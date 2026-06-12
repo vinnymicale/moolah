@@ -5,6 +5,7 @@ import { PageHeader, StatCard } from "@/components/ui-bits";
 import { AccountsManager } from "./AccountsManager";
 import { PlaidConnectButton, PlaidItemsList } from "./PlaidLinkButton";
 import { DEMO_ACCOUNTS, buildDemoSnapshots } from "@/lib/demo-data";
+import { hasPlaidConfig } from "@/lib/plaid";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -27,13 +28,12 @@ export default async function AccountsPage() {
   }
 
   const { userId } = await requireUser();
-  const [netWorth, snapshots, plaidItems] = await Promise.all([
+  const [netWorth, snapshots, plaidItems, hasPlaid] = await Promise.all([
     getNetWorth(userId),
     getSnapshots(userId),
     getPlaidItems(userId),
+    hasPlaidConfig(userId),
   ]);
-
-  const hasPlaid = !!process.env.PLAID_CLIENT_ID && !!process.env.PLAID_SECRET;
 
   return (
     <div className="mx-auto max-w-5xl">
