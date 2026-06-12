@@ -7,9 +7,18 @@ import { DEFAULT_CATEGORIES } from "./default-categories";
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
 export function generateInviteCode(): string {
-  const bytes = randomBytes(8);
+  // Rejection sampling: a plain `byte % ALPHABET.length` biases toward the
+  // start of the alphabet because 256 is not a multiple of 31. Discard bytes in
+  // the unbalanced tail so every character is equally likely.
+  const limit = Math.floor(256 / ALPHABET.length) * ALPHABET.length;
   let s = "";
-  for (let i = 0; i < 8; i++) s += ALPHABET[bytes[i] % ALPHABET.length];
+  while (s.length < 8) {
+    for (const b of randomBytes(16)) {
+      if (b >= limit) continue;
+      s += ALPHABET[b % ALPHABET.length];
+      if (s.length === 8) break;
+    }
+  }
   return `${s.slice(0, 4)}-${s.slice(4)}`;
 }
 

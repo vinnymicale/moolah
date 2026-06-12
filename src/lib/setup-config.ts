@@ -61,7 +61,9 @@ function setKey(content: string, key: string, value: string): string {
   const line = `${key}=${JSON.stringify(value)}`;
   const re = new RegExp(`^${key}=.*$`, "m");
   if (re.test(content)) return content.replace(re, line);
-  return `${content.replace(/\s*$/, "")}\n${line}\n`;
+  // trimEnd() is linear; a trailing-whitespace regex like /\s*$/ can backtrack
+  // polynomially on file content (ReDoS).
+  return `${content.trimEnd()}\n${line}\n`;
 }
 
 /**
