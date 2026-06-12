@@ -36,14 +36,14 @@ export function computeMilestones({
 }): Milestone[] {
   const out: Milestone[] = [];
 
-  // Highest net-worth tier the household has crossed.
+  // Highest net-worth tier the user has crossed.
   const tier = [...NET_WORTH_TIERS].reverse().find((t) => netWorth >= t);
   if (tier) {
     out.push({
       id: `nw-${tier}`,
       kind: "networth",
       title: `${fmt(tier)} net worth reached!`,
-      detail: `Your household net worth has crossed ${fmt(tier)}. Keep up the momentum.`,
+      detail: `Your net worth has crossed ${fmt(tier)}. Keep up the momentum.`,
     });
   }
 

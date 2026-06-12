@@ -11,30 +11,8 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Household & Auth (Auth.js / NextAuth models live here so users are shared)
+// Auth (Auth.js / NextAuth models)
 // ---------------------------------------------------------------------------
-
-model Household {
-  id           String   @id @default(cuid())
-  name         String
-  inviteCode   String   @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // AI assistant configuration — stored per household so each family uses their own key.
-  aiProvider   String?  // "anthropic" | "openai" | "gemini"
-  aiApiKey     String?  // user-supplied key, never sent to the browser
-
-  users         User[]
-  accounts      FinancialAccount[]
-  categories    Category[]
-  transactions  Transaction[]
-  recurring     RecurringRule[]
-  budgets       Budget[]
-  savingsGoals  SavingsGoal[]
-  plaidItems    PlaidItem[]
-  categoryRules CategoryRule[]
-}
 
 model User {
   id            String    @id @default(cuid())
@@ -44,12 +22,20 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
-  householdId   String?
-  household     Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  // AI assistant configuration — user-supplied key, never sent to the browser.
+  aiProvider    String?   // "anthropic" | "openai" | "gemini"
+  aiApiKey      String?
 
-  accounts      Account[] // OAuth accounts (Auth.js)
-  sessions      Session[]
-  createdTxns   Transaction[] @relation("TxnCreatedBy")
+  accounts          Account[] // OAuth accounts (Auth.js)
+  sessions          Session[]
+  financialAccounts FinancialAccount[]
+  categories        Category[]
+  transactions      Transaction[]
+  recurring         RecurringRule[]
+  budgets           Budget[]
+  savingsGoals      SavingsGoal[]
+  plaidItems        PlaidItem[]
+  categoryRules     CategoryRule[]
 }
 
 // Auth.js OAuth account link
@@ -126,8 +112,8 @@ enum Frequency {
 
 model FinancialAccount {
   id             String      @id @default(cuid())
-  householdId    String
-  household      Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name           String
   type           AccountType
@@ -167,7 +153,7 @@ model FinancialAccount {
   recurring           RecurringRule[]
   plaidLinkedAccounts PlaidLinkedAccount[]
 
-  @@index([householdId])
+  @@index([userId])
 }
 
 model AccountSnapshot {
@@ -184,8 +170,8 @@ model AccountSnapshot {
 
 model Category {
   id          String       @id @default(cuid())
-  householdId String
-  household   Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name        String
   kind        CategoryKind
@@ -202,7 +188,7 @@ model Category {
   budgets      Budget[]
   rules        CategoryRule[]
 
-  @@index([householdId])
+  @@index([userId])
 }
 
 // User-defined auto-categorization: when a transaction description contains
@@ -210,8 +196,8 @@ model Category {
 // CSV import; rules take precedence over Plaid's generic category mapping.
 model CategoryRule {
   id          String    @id @default(cuid())
-  householdId String
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   pattern     String
   categoryId  String
@@ -219,22 +205,19 @@ model CategoryRule {
 
   createdAt   DateTime  @default(now())
 
-  @@index([householdId])
+  @@index([userId])
 }
 
 model Transaction {
   id              String        @id @default(cuid())
-  householdId     String
-  household       Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   accountId       String?
   account         FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
   categoryId      String?
   category        Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-
-  createdById     String?
-  createdBy       User?         @relation("TxnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   type            TxnType
   amount          Decimal       @db.Decimal(14, 2)
@@ -262,15 +245,15 @@ model Transaction {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  @@index([householdId, date])
+  @@index([userId, date])
   @@index([accountId])
   @@index([categoryId])
 }
 
 model RecurringRule {
   id           String     @id @default(cuid())
-  householdId  String
-  household    Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   accountId    String?
   account      FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
@@ -298,13 +281,13 @@ model RecurringRule {
 
   transactions Transaction[]
 
-  @@index([householdId])
+  @@index([userId])
 }
 
 model Budget {
   id          String   @id @default(cuid())
-  householdId String
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -313,14 +296,14 @@ model Budget {
   month       DateTime
   limit       Decimal  @db.Decimal(14, 2)
 
-  @@unique([householdId, categoryId, month])
-  @@index([householdId])
+  @@unique([userId, categoryId, month])
+  @@index([userId])
 }
 
 model SavingsGoal {
   id            String    @id @default(cuid())
-  householdId   String
-  household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name          String
   targetAmount  Decimal   @db.Decimal(14, 2)
@@ -333,15 +316,15 @@ model SavingsGoal {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  @@index([householdId])
+  @@index([userId])
 }
 
 // ── Plaid bank connections ────────────────────────────────────────────────────
 
 model PlaidItem {
   id              String    @id @default(cuid())
-  householdId     String
-  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // The Plaid access token is server-side only — never exposed to the browser.
   accessToken     String
@@ -358,7 +341,7 @@ model PlaidItem {
 
   linkedAccounts  PlaidLinkedAccount[]
 
-  @@index([householdId])
+  @@index([userId])
 }
 
 model PlaidLinkedAccount {

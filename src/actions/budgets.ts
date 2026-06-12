@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -20,19 +20,19 @@ export type BudgetInput = z.input<typeof budgetSchema>;
 export async function setBudgetAction(input: BudgetInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const data = budgetSchema.parse(input);
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId } });
+    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId } });
     if (!category) throw new UserError("Category not found");
     const month = parseISODay(data.month);
 
     if (data.limit <= 0) {
-      await prisma.budget.deleteMany({ where: { householdId, categoryId: data.categoryId, month } });
+      await prisma.budget.deleteMany({ where: { userId, categoryId: data.categoryId, month } });
     } else {
       await prisma.budget.upsert({
-        where: { householdId_categoryId_month: { householdId, categoryId: data.categoryId, month } },
+        where: { userId_categoryId_month: { userId, categoryId: data.categoryId, month } },
         update: { limit: data.limit },
-        create: { householdId, categoryId: data.categoryId, month, limit: data.limit },
+        create: { userId, categoryId: data.categoryId, month, limit: data.limit },
       });
     }
     revalidatePath("/trends");
@@ -52,20 +52,20 @@ export type CopyBudgetsInput = z.input<typeof copySchema>;
 export async function copyBudgetsAction(input: CopyBudgetsInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const { fromMonth, toMonth } = copySchema.parse(input);
     const from = parseISODay(fromMonth);
     const to = parseISODay(toMonth);
 
-    const prior = await prisma.budget.findMany({ where: { householdId, month: from } });
+    const prior = await prisma.budget.findMany({ where: { userId, month: from } });
     if (prior.length === 0) throw new UserError("No budgets in that month to copy.");
 
     await prisma.$transaction(
       prior.map((b) =>
         prisma.budget.upsert({
-          where: { householdId_categoryId_month: { householdId, categoryId: b.categoryId, month: to } },
+          where: { userId_categoryId_month: { userId, categoryId: b.categoryId, month: to } },
           update: { limit: b.limit },
-          create: { householdId, categoryId: b.categoryId, month: to, limit: b.limit },
+          create: { userId, categoryId: b.categoryId, month: to, limit: b.limit },
         }),
       ),
     );

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { CategoryKind } from "@/generated/prisma/enums";
@@ -21,11 +21,11 @@ export type CategoryInput = z.input<typeof categorySchema>;
 export async function createCategoryAction(input: CategoryInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const data = categorySchema.parse(input);
     await prisma.category.create({
       data: {
-        householdId,
+        userId,
         name: data.name,
         kind: data.kind,
         color: data.color || "#64748b",
@@ -40,8 +40,8 @@ export async function createCategoryAction(input: CategoryInput): Promise<Action
 export async function updateCategoryAction(id: string, input: CategoryInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.category.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.category.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Category not found");
     const data = categorySchema.parse(input);
     await prisma.category.update({
@@ -61,8 +61,8 @@ export async function updateCategoryAction(id: string, input: CategoryInput): Pr
 export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.category.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.category.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Category not found");
     await prisma.category.delete({ where: { id } });
     revalidatePath("/categories");

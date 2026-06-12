@@ -1,4 +1,4 @@
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { getAccounts, getCategories, getRecurringRules, getRecurringSuggestions } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
 import { RecurringManager } from "./RecurringManager";
@@ -17,12 +17,12 @@ export default async function RecurringPage() {
     );
   }
 
-  const { householdId } = await requireHousehold();
+  const { userId } = await requireUser();
   const [rules, accounts, categories, suggestions] = await Promise.all([
-    getRecurringRules(householdId),
-    getAccounts(householdId),
-    getCategories(householdId),
-    getRecurringSuggestions(householdId, await userTodayISO()),
+    getRecurringRules(userId),
+    getAccounts(userId),
+    getCategories(userId),
+    getRecurringSuggestions(userId, await userTodayISO()),
   ]);
 
   return (

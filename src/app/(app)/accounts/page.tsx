@@ -1,4 +1,4 @@
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { getNetWorth, getSnapshots, getPlaidItems } from "@/lib/queries";
 import { formatUSD } from "@/lib/money";
 import { PageHeader, StatCard } from "@/components/ui-bits";
@@ -26,11 +26,11 @@ export default async function AccountsPage() {
     );
   }
 
-  const { householdId } = await requireHousehold();
+  const { userId } = await requireUser();
   const [netWorth, snapshots, plaidItems] = await Promise.all([
-    getNetWorth(householdId),
-    getSnapshots(householdId),
-    getPlaidItems(householdId),
+    getNetWorth(userId),
+    getSnapshots(userId),
+    getPlaidItems(userId),
   ]);
 
   const hasPlaid = !!process.env.PLAID_CLIENT_ID && !!process.env.PLAID_SECRET;

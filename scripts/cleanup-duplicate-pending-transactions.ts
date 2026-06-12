@@ -33,7 +33,7 @@ const WINDOW_DAYS = 5;
 async function main() {
   const pending = await p.transaction.findMany({
     where: { plaidTransactionId: { not: null }, cleared: false },
-    select: { id: true, householdId: true, accountId: true, type: true, amount: true, date: true, description: true },
+    select: { id: true, userId: true, accountId: true, type: true, amount: true, date: true, description: true },
     orderBy: { date: "asc" },
   });
 
@@ -47,7 +47,7 @@ async function main() {
       where: {
         plaidTransactionId: { not: null },
         cleared: true,
-        householdId: pend.householdId,
+        userId: pend.userId,
         accountId: pend.accountId,
         type: pend.type,
         amount: pend.amount,

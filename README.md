@@ -1,9 +1,9 @@
 # Moolah
 
-A shared personal-finance, budgeting & net-worth tracker for two people (you and your partner).
+A self-hosted personal-finance, budgeting & net-worth tracker.
 Log income and expenses on a **monthly calendar** with a running **projected cash balance**, link your banks with **Plaid** for automatic transaction sync, budget by
 category, set **savings goals**, plan your **debt payoff**, and watch your **net worth** and
-**trends** evolve over time. Both of you sign in with Google and share one unified dataset.
+**trends** evolve over time. Your data lives in your own database, on your own machine.
 
 Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · Auth.js v5 · Plaid · Tailwind v4 · Recharts**.
 
@@ -11,7 +11,7 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=flat&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/vinnymicale)
 
 **[Try the live demo →](https://moolah-five.vercel.app)** - no sign-up; it serves a seeded sample
-household, and anything you change stays in your browser only.
+dataset, and anything you change stays in your browser only.
 
 > **AI disclaimer:** Moolah was built with help from AI (Anthropic's Claude). Treat it
 > accordingly - review the code yourself before trusting it with sensitive financial data, and note
@@ -79,9 +79,7 @@ household, and anything you change stays in your browser only.
 - **Data export** - download your full transaction history as CSV, filtered by date, account, or
   category, from Settings.
 
-### Shared & polished
-- **Shared household** - invite your partner with a code; everything shows on one calendar with
-  "who entered it" attribution.
+### Polished
 - **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and dates that
   follow **your timezone** (not the server's). Recurrence / projection / debt-payoff / matching
   math is unit-tested, with a Playwright e2e suite and CI on every push and PR.
@@ -90,7 +88,7 @@ household, and anything you change stays in your browser only.
 
 ## Screenshots
 
-A tour of every page. _(Sample data - generated from the isolated `demo@example.com` household.)_
+A tour of every page. _(Sample data - generated from the isolated `demo@example.com` account.)_
 
 ### Money in & out
 
@@ -132,14 +130,12 @@ A built-in **dark theme** (toggle in the sidebar) carries across every page.
 **Categories** - organize how you classify income and spending, each with its own icon and color.
 ![Categories](docs/screenshots/categories.png)
 
-**Settings** - rename your household, share the invite code, export data as CSV, and manage members.
+**Settings** - export data as CSV, download a full backup, and connect the AI assistant.
 ![Settings](docs/screenshots/settings.png)
 
-**Sign in & onboarding** - Google sign-in (with a local dev login), then create or join a shared household.
+**Sign in** - Google sign-in, with a local dev login for offline use.
 
-| Sign in | Set up your household |
-| --- | --- |
-| ![Sign in](docs/screenshots/signin.png) | ![Welcome](docs/screenshots/welcome.png) |
+![Sign in](docs/screenshots/signin.png)
 
 ---
 
@@ -159,24 +155,24 @@ npm run start:all          # run the database and web app together
 `npm run start:all` runs the bundled Postgres **and** the Next.js dev server side by side (via
 `concurrently`), so you only need one terminal. Open <http://localhost:3000>.
 
-With the shipped defaults (`AUTH_BYPASS="true"`) you're **signed in automatically** into your own
-local household - no Google account, password, or sign-in screen - so you can start adding
-transactions right away. Set up Google sign-in below when you want real, multi-user login.
+With the shipped defaults (`AUTH_BYPASS="true"`) you're **signed in automatically** as a local
+user - no Google account, password, or sign-in screen - so you can start adding transactions
+right away. Set up Google sign-in below when you want real login.
 
 > **Heads up:** the web app needs the database running. Use `npm run start:all` (DB + web) rather
 > than `npm run dev` alone, or the app will fail to reach Postgres.
 
 ### Want to explore with sample data first?
 
-Load an isolated demo household full of example accounts, transactions, budgets and goals:
+Load an isolated demo dataset full of example accounts, transactions, budgets and goals:
 
 ```bash
-npm run setup -- --seed    # create the schema *and* a demo household
+npm run setup -- --seed    # create the schema *and* the demo data
 ```
 
-Then, to sign in as that demo household, set `AUTH_BYPASS="false"` and `AUTH_DEV_LOGIN="true"` in
+Then, to sign in as that demo user, set `AUTH_BYPASS="false"` and `AUTH_DEV_LOGIN="true"` in
 `.env`, relaunch, and use the **Dev Login** on the sign-in screen with `demo@example.com`. The demo
-seed is fully isolated: it only ever touches the throwaway `demo@example.com` household and never
+seed is fully isolated: it only ever touches the throwaway `demo@example.com` account and never
 modifies your own data.
 
 Useful scripts:
@@ -188,7 +184,7 @@ Useful scripts:
 | `npm run dev` | Start just the app (assumes the DB is already running) |
 | `npm run db:local` | Run the bundled local Postgres on port 5433 |
 | `npm run db:push` | Sync the Prisma schema to the database |
-| `npm run db:seed` | Load/refresh the isolated demo household |
+| `npm run db:seed` | Load/refresh the isolated demo data |
 | `npm run db:studio` | Browse the database in Prisma Studio |
 | `npm run test` | Run the unit tests (recurrence, projection, debt-payoff, matching) |
 | `npm run test:e2e` | Run the Playwright end-to-end suite against a production build |
@@ -203,7 +199,7 @@ separate. To let someone test it:
 
 1. Add them as a **collaborator** on the repo (GitHub → **Settings → Collaborators**).
 2. They clone it and follow the **Quick start** above. With the shipped `.env.example`
-   (`AUTH_BYPASS="true"`), they're signed straight into their own empty household - no credentials
+   (`AUTH_BYPASS="true"`), they're signed straight into their own empty copy - no credentials
    needed to look around.
 3. To use it for real (their own Google sign-in and/or bank sync), they don't need to hand-edit
    `.env`: set `AUTH_BYPASS="false"` and the **sign-in screen shows a built-in "First-time setup"
@@ -241,7 +237,7 @@ Local dev works without this, but you'll want real Google login for day-to-day u
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/) → create (or pick) a project.
 2. **APIs & Services → OAuth consent screen** → choose **External**, fill in the app name and your
-   email, and add yourself + your partner as **Test users** (or publish the app).
+   email, and add yourself as a **Test user** (or publish the app).
 3. **APIs & Services → Credentials → Create credentials → OAuth client ID** → **Web application**.
 4. Add **Authorized redirect URIs**:
    - `http://localhost:3000/api/auth/callback/google` (local)
@@ -254,11 +250,8 @@ Local dev works without this, but you'll want real Google login for day-to-day u
    ```
 6. (Recommended) Restrict who can sign in:
    ```env
-   ALLOWED_EMAILS="you@gmail.com,partner@gmail.com"
+   ALLOWED_EMAILS="you@gmail.com"
    ```
-
-The first person to sign in creates the household; the second joins with the **invite code** shown
-on the **Settings** page.
 
 ---
 
@@ -356,7 +349,7 @@ For a full cold copy you can also just back up the database folder itself:
    AUTH_SECRET=...                      # run: npx auth secret
    AUTH_GOOGLE_ID=...
    AUTH_GOOGLE_SECRET=...
-   ALLOWED_EMAILS=you@gmail.com,partner@gmail.com
+   ALLOWED_EMAILS=you@gmail.com
    NEXTAUTH_URL=https://YOUR-DOMAIN.vercel.app
    # Optional, for bank sync:
    PLAID_CLIENT_ID=...
@@ -394,7 +387,7 @@ and is covered by unit tests.
 prisma/            schema.prisma, migrations, seed.ts
 scripts/           setup.ts (first-run schema), local-db.ts (embedded Postgres runner)
 src/
-  app/(auth)/      sign-in & household onboarding
+  app/(auth)/      sign-in
   app/(app)/       dashboard, calendar, transactions, accounts, recurring,
                    budgets, goals, debt, categories, trends, settings
   app/api/         plaid (link/exchange/sync/recategorize), export (CSV)
@@ -404,6 +397,19 @@ src/
   components/      AppChrome, CommandPalette, MultiSelect, TransactionModal,
                    Modal, charts, icons
 ```
+
+---
+
+## Roadmap
+
+Planned improvements, roughly in priority order:
+
+- **Docker support** - an official Docker image and a docker-compose example (app + Postgres) so
+  Moolah can be deployed like any other self-hosted service.
+- **Household / multi-user support** - share one dataset with a partner: invite codes, per-member
+  attribution on transactions, and a shared calendar.
+
+Have a request? Open an issue on GitHub.
 
 ---
 

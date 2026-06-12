@@ -9,7 +9,7 @@ import { syncPlaidItem } from "@/lib/plaid-sync";
 const STALE_MS = 60 * 60 * 1000; // 1 hour
 
 /**
- * Syncs every linked bank for the signed-in household that is "stale" (never
+ * Syncs every linked bank for the signed-in user that is "stale" (never
  * synced, or last synced longer ago than STALE_MS). Best-effort: one item
  * failing doesn't stop the others. Called in the background from the app on
  * load - see AutoPlaidSync.
@@ -18,13 +18,10 @@ export async function POST() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!user?.householdId) return NextResponse.json({ error: "No household" }, { status: 403 });
-
   const cutoff = new Date(Date.now() - STALE_MS);
   const items = await prisma.plaidItem.findMany({
     where: {
-      householdId: user.householdId,
+      userId: session.user.id,
       OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: cutoff } }],
     },
     select: { id: true },

@@ -4,7 +4,7 @@
  * After this you can run the app with `npm run start:all`.
  *
  *   npm run setup            # create the schema
- *   npm run setup -- --seed  # also load the demo household
+ *   npm run setup -- --seed  # also load the demo data
  */
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -61,7 +61,7 @@ async function main() {
   execSync("prisma db push", { stdio: "inherit" });
 
   if (process.argv.includes("--seed")) {
-    console.log("Loading the demo household …");
+    console.log("Loading the demo data …");
     execSync("tsx prisma/seed.ts", { stdio: "inherit" });
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
 
@@ -8,9 +8,9 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 // GET /api/export/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD&account=ID&category=ID
 // Streams the full (filtered) transaction history as a CSV download.
 export async function GET(req: NextRequest) {
-  let householdId: string;
+  let userId: string;
   try {
-    ({ householdId } = await requireHousehold());
+    ({ userId } = await requireUser());
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const account = sp.get("account");
   const category = sp.get("category");
 
-  const where: Record<string, unknown> = { householdId };
+  const where: Record<string, unknown> = { userId };
   if (ISO_DAY.test(from ?? "") || ISO_DAY.test(to ?? "")) {
     const dateFilter: Record<string, Date> = {};
     if (ISO_DAY.test(from ?? "")) dateFilter.gte = new Date(`${from}T00:00:00.000Z`);
@@ -36,16 +36,15 @@ export async function GET(req: NextRequest) {
     prisma.transaction.findMany({
       where,
       orderBy: { date: "desc" },
-      include: { createdBy: { select: { name: true, email: true } } },
     }),
-    prisma.financialAccount.findMany({ where: { householdId }, select: { id: true, name: true } }),
-    prisma.category.findMany({ where: { householdId }, select: { id: true, name: true } }),
+    prisma.financialAccount.findMany({ where: { userId }, select: { id: true, name: true } }),
+    prisma.category.findMany({ where: { userId }, select: { id: true, name: true } }),
   ]);
 
   const acctName = new Map(accounts.map((a) => [a.id, a.name]));
   const catName = new Map(categories.map((c) => [c.id, c.name]));
 
-  const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note", "Added by"];
+  const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note"];
   const lines = [header.join(",")];
   for (const t of rows) {
     lines.push([
@@ -57,7 +56,6 @@ export async function GET(req: NextRequest) {
       csv(t.accountId ? acctName.get(t.accountId) ?? "" : ""),
       t.cleared ? "yes" : "no",
       csv(t.note ?? ""),
-      csv(t.createdBy?.name ?? t.createdBy?.email ?? ""),
     ].join(","));
   }
 

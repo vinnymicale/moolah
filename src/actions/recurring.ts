@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -27,9 +27,9 @@ const ruleSchema = z.object({
 
 export type RecurringInput = z.input<typeof ruleSchema>;
 
-function toData(data: z.infer<typeof ruleSchema>, householdId: string) {
+function toData(data: z.infer<typeof ruleSchema>, userId: string) {
   return {
-    householdId,
+    userId,
     accountId: data.accountId || null,
     categoryId: data.categoryId || null,
     type: data.type,
@@ -48,9 +48,9 @@ function toData(data: z.infer<typeof ruleSchema>, householdId: string) {
 export async function createRecurringAction(input: RecurringInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
     const data = ruleSchema.parse(input);
-    await prisma.recurringRule.create({ data: toData(data, householdId) });
+    await prisma.recurringRule.create({ data: toData(data, userId) });
     revalidateAll();
   });
 }
@@ -58,11 +58,11 @@ export async function createRecurringAction(input: RecurringInput): Promise<Acti
 export async function updateRecurringAction(id: string, input: RecurringInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.recurringRule.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.recurringRule.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Recurring rule not found");
     const data = ruleSchema.parse(input);
-    const { householdId: _hid, ...rest } = toData(data, householdId);
+    const { userId: _hid, ...rest } = toData(data, userId);
     void _hid;
     await prisma.recurringRule.update({ where: { id }, data: rest });
     revalidateAll();
@@ -72,11 +72,11 @@ export async function updateRecurringAction(id: string, input: RecurringInput): 
 export async function deleteRecurringAction(id: string, deleteOccurrences = false): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
-    const existing = await prisma.recurringRule.findFirst({ where: { id, householdId } });
+    const { userId } = await requireUser();
+    const existing = await prisma.recurringRule.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Recurring rule not found");
     if (deleteOccurrences) {
-      await prisma.transaction.deleteMany({ where: { householdId, recurringRuleId: id } });
+      await prisma.transaction.deleteMany({ where: { userId, recurringRuleId: id } });
     }
     await prisma.recurringRule.delete({ where: { id } });
     revalidateAll();
@@ -95,9 +95,9 @@ export async function deleteRecurringAction(id: string, deleteOccurrences = fals
 export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireHousehold();
+    const { userId } = await requireUser();
 
-    const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, householdId } });
+    const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, userId } });
     if (!rule) throw new UserError("Recurring rule not found");
 
     const sep = suggestionKey.indexOf("|");
@@ -109,7 +109,7 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
 
     // The normalized grouping isn't expressible in SQL, so match in memory.
     const candidates = await prisma.transaction.findMany({
-      where: { householdId, type: type as TxnType, recurringRuleId: null },
+      where: { userId, type: type as TxnType, recurringRuleId: null },
       select: { id: true, description: true },
     });
     const ids = candidates
@@ -118,7 +118,7 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
 
     if (ids.length > 0) {
       await prisma.transaction.updateMany({
-        where: { id: { in: ids }, householdId },
+        where: { id: { in: ids }, userId },
         data: { recurringRuleId: ruleId },
       });
     }

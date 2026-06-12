@@ -9,7 +9,6 @@ const DEMO_BLOCKED = [
   "/api/backup",
   "/api/export/",
   "/api/auth/auto-signin",
-  "/welcome",
 ];
 
 export function proxy(req: NextRequest) {
@@ -35,6 +34,5 @@ export const config = {
   matcher: [
     "/api/:path*",
     "/signin",
-    "/welcome",
   ],
 };

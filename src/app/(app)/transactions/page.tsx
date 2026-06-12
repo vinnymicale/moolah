@@ -1,4 +1,4 @@
-import { requireHousehold } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { getAccounts, getCategories, getTransactionsBetween } from "@/lib/queries";
 import { addUTCMonths, endOfUTCMonth, formatMonthDayYear, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { PageHeader } from "@/components/ui-bits";
@@ -17,7 +17,7 @@ export default async function TransactionsPage({
   searchParams: Promise<{ m?: string; account?: string; range?: string; category?: string; focus?: string; from?: string; to?: string }>;
 }) {
   const { m, account, range: rangeParam, category, focus, from, to } = await searchParams;
-  const householdId = DEMO_MODE ? "" : (await requireHousehold()).householdId;
+  const userId = DEMO_MODE ? "" : (await requireUser()).userId;
   let range = RANGES.has(rangeParam ?? "") ? (rangeParam as string) : "month";
   // A valid from/to pair forces custom mode regardless of the range param.
   const hasCustom = ISO_DAY.test(from ?? "") && ISO_DAY.test(to ?? "") && (from as string) <= (to as string);
@@ -72,9 +72,9 @@ export default async function TransactionsPage({
         DEMO_TRANSACTIONS.filter((t) => t.date >= startISO && t.date <= endISO),
       ]
     : await Promise.all([
-        getAccounts(householdId),
-        getCategories(householdId),
-        getTransactionsBetween(householdId, startISO, endISO),
+        getAccounts(userId),
+        getCategories(userId),
+        getTransactionsBetween(userId, startISO, endISO),
       ]);
 
   // Validate comma-separated category/account filters from the URL, keeping

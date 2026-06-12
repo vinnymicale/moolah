@@ -35,9 +35,6 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!user?.householdId) return NextResponse.json({ error: "No household" }, { status: 403 });
-
   const { public_token } = (await req.json()) as { public_token: string };
   if (!public_token) return NextResponse.json({ error: "Missing public_token" }, { status: 400 });
 
@@ -66,7 +63,7 @@ export async function POST(req: NextRequest) {
     const plaidItem = await prisma.plaidItem.upsert({
       where: { itemId: item_id },
       create: {
-        householdId: user.householdId,
+        userId: session.user.id,
         accessToken: access_token,
         itemId: item_id,
         institutionId,
@@ -106,7 +103,7 @@ export async function POST(req: NextRequest) {
       } else {
         const finAcct = await prisma.financialAccount.create({
           data: {
-            householdId: user.householdId,
+            userId: session.user.id,
             name: acct.name,
             type: accountType as never,
             institution: institutionName,

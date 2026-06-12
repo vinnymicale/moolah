@@ -1,5 +1,5 @@
-// Default categories seeded into every new household. Kept here so both the
-// household-creation flow and the demo seed stay in sync.
+// Default categories seeded for every new user. Kept here so both the
+// first-run setup flow and the demo seed stay in sync.
 
 export interface DefaultCategory {
   name: string;

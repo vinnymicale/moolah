@@ -19,7 +19,6 @@ import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 export function AppChrome({
   children,
   user,
-  householdName,
   accounts,
   categories,
   authBypass = false,
@@ -27,7 +26,6 @@ export function AppChrome({
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
-  householdName: string;
   accounts: AccountDTO[];
   categories: CategoryDTO[];
   authBypass?: boolean;
@@ -151,7 +149,6 @@ export function AppChrome({
 
   const sidebarProps = {
     user,
-    householdName,
     authBypass,
     demoMode,
     nav: orderedNav,

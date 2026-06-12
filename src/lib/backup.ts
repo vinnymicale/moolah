@@ -76,7 +76,7 @@ export async function importAllData(
   const client = new Client({ connectionString: requireUrl(databaseUrl) });
   await client.connect();
   try {
-    const { rows } = await client.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM "Household"');
+    const { rows } = await client.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM "User"');
     const hasData = rows[0].n > 0;
     if (hasData && !opts.force) {
       throw new Error(
