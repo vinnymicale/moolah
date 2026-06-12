@@ -1,0 +1,3 @@
+ALTER TABLE "User" ADD COLUMN "plaidClientId" TEXT;
+ALTER TABLE "User" ADD COLUMN "plaidSecret" TEXT;
+ALTER TABLE "User" ADD COLUMN "plaidEnv" TEXT;

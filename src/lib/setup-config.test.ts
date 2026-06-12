@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isLocalHost } from "./setup-config";
 
-// Security-relevant: this gates the .env-writing setup endpoint.
+// Security-relevant: this gates the auto-signin (AUTH_BYPASS) endpoint.
 describe("isLocalHost", () => {
   it("accepts localhost forms with and without ports", () => {
     expect(isLocalHost("localhost")).toBe(true);

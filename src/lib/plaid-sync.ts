@@ -5,7 +5,7 @@
 // API route so it runs entirely server-side (access tokens never touch
 // the browser).
 
-import { plaidClient } from "./plaid";
+import { getPlaidClient } from "./plaid";
 import { prisma } from "./prisma";
 import { parseISODay, isoDay } from "./dates";
 import { expandOccurrences } from "./recurrence";
@@ -171,6 +171,8 @@ export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Pr
     },
   });
 
+
+  const plaidClient = await getPlaidClient(item.userId);
 
   // Build a map from plaidAccountId → our linked account row.
   const linkedByPlaidId = new Map(item.linkedAccounts.map((a) => [a.plaidAccountId, a]));

@@ -24,6 +24,19 @@ dataset, and anything you change stays in your browser only.
 
 ---
 
+## Roadmap
+
+Planned improvements, roughly in priority order:
+
+- **Docker support** - an official Docker image and a docker-compose example (app + Postgres) so
+  Moolah can be deployed like any other self-hosted service.
+- **Household / multi-user support** - share one dataset with a partner: invite codes, per-member
+  attribution on transactions, and a shared calendar.
+
+Have a request? Open an issue on GitHub.
+
+---
+
 ## Features
 
 ### Money in & out
@@ -133,7 +146,7 @@ A built-in **dark theme** (toggle in the sidebar) carries across every page.
 **Settings** - export data as CSV, download a full backup, and connect the AI assistant.
 ![Settings](docs/screenshots/settings.png)
 
-**Sign in** - Google sign-in, with a local dev login for offline use.
+**Sign in** - simple name + password accounts, stored entirely in your own database.
 
 ![Sign in](docs/screenshots/signin.png)
 
@@ -156,8 +169,8 @@ npm run start:all          # run the database and web app together
 `concurrently`), so you only need one terminal. Open <http://localhost:3000>.
 
 With the shipped defaults (`AUTH_BYPASS="true"`) you're **signed in automatically** as a local
-user - no Google account, password, or sign-in screen - so you can start adding transactions
-right away. Set up Google sign-in below when you want real login.
+user - no password or sign-in screen - so you can start adding transactions right away. Set
+`AUTH_BYPASS="false"` when you want a real password-protected login.
 
 > **Heads up:** the web app needs the database running. Use `npm run start:all` (DB + web) rather
 > than `npm run dev` alone, or the app will fail to reach Postgres.
@@ -170,10 +183,9 @@ Load an isolated demo dataset full of example accounts, transactions, budgets an
 npm run setup -- --seed    # create the schema *and* the demo data
 ```
 
-Then, to sign in as that demo user, set `AUTH_BYPASS="false"` and `AUTH_DEV_LOGIN="true"` in
-`.env`, relaunch, and use the **Dev Login** on the sign-in screen with `demo@example.com`. The demo
-seed is fully isolated: it only ever touches the throwaway `demo@example.com` account and never
-modifies your own data.
+Then, to browse that demo data, set `DEMO_MODE="true"` (with `AUTH_BYPASS="true"`) in `.env` and
+relaunch - no sign-in needed. The demo seed is fully isolated: it only ever touches the throwaway
+`demo@example.com` account and never modifies your own data.
 
 Useful scripts:
 
@@ -201,15 +213,9 @@ separate. To let someone test it:
 2. They clone it and follow the **Quick start** above. With the shipped `.env.example`
    (`AUTH_BYPASS="true"`), they're signed straight into their own empty copy - no credentials
    needed to look around.
-3. To use it for real (their own Google sign-in and/or bank sync), they don't need to hand-edit
-   `.env`: set `AUTH_BYPASS="false"` and the **sign-in screen shows a built-in "First-time setup"
-   panel** (only when running locally) where they can paste their own Google OAuth and Plaid keys.
-   It writes their local `.env` and auto-generates an `AUTH_SECRET`; they just relaunch to apply.
-   See the next two sections for
-   where to get those keys.
-
-> The setup panel is **localhost-only** by design - both the panel and its write endpoint refuse any
-> non-local request, so it can never expose a config-writing endpoint on a deployment.
+3. To use it for real, set `AUTH_BYPASS="false"` - the sign-in screen shows a name + password
+   form to create their account. For bank sync, they paste their own Plaid keys into
+   **Settings → Plaid bank sync** after signing in (stored per-user, secret encrypted).
 
 ---
 
@@ -225,41 +231,12 @@ On the maintainer's machine it's wired to a single **Moolah** desktop shortcut: 
 runs `wsl.exe … bash scripts/launch.sh`, opening an Edge `--app` window. The paths inside the
 scripts/shortcut are machine-specific - adapt them for your own setup.
 
----
-
-## Setting up Google sign-in
-
-Local dev works without this, but you'll want real Google login for day-to-day use.
-
-> **Tip:** instead of editing `.env` by hand, you can paste the Client ID/secret below into the
-> **"First-time setup" panel on the sign-in screen** (it even shows the exact redirect URI to copy),
-> then relaunch.
-
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/) → create (or pick) a project.
-2. **APIs & Services → OAuth consent screen** → choose **External**, fill in the app name and your
-   email, and add yourself as a **Test user** (or publish the app).
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID** → **Web application**.
-4. Add **Authorized redirect URIs**:
-   - `http://localhost:3000/api/auth/callback/google` (local)
-   - `https://YOUR-DOMAIN.vercel.app/api/auth/callback/google` (production)
-5. Copy the **Client ID** and **Client secret** into `.env`:
-   ```env
-   AUTH_GOOGLE_ID="...apps.googleusercontent.com"
-   AUTH_GOOGLE_SECRET="..."
-   AUTH_DEV_LOGIN="false"     # turn the dev bypass off once Google works
-   ```
-6. (Recommended) Restrict who can sign in:
-   ```env
-   ALLOWED_EMAILS="you@gmail.com"
-   ```
-
----
-
 ## Connecting banks with Plaid (optional)
 
 Create a free account at the [Plaid Dashboard](https://dashboard.plaid.com/), grab your keys from
-**Developers → Keys**, and add them to `.env` - or paste them into the **"First-time setup" panel on
-the sign-in screen** (then relaunch). Manually, they go in `.env` as:
+**Developers → Keys**, and paste them into **Settings → Plaid bank sync** - they're stored
+per-user (secret encrypted) so each account can use its own Plaid credentials. Alternatively, set
+them in `.env` as an instance-wide fallback for users without their own keys:
 
 ```env
 PLAID_CLIENT_ID="..."
@@ -338,32 +315,6 @@ For a full cold copy you can also just back up the database folder itself:
 
 ---
 
-## Deploying to Vercel + Postgres
-
-1. **Database** - create a free Postgres (e.g. [Neon](https://neon.tech) or Vercel Postgres) and
-   copy its connection string.
-2. **Push** this repo to GitHub and **import** it into [Vercel](https://vercel.com).
-3. **Environment variables** in the Vercel project settings:
-   ```env
-   DATABASE_URL=postgresql://...        # your hosted Postgres (with sslmode=require)
-   AUTH_SECRET=...                      # run: npx auth secret
-   AUTH_GOOGLE_ID=...
-   AUTH_GOOGLE_SECRET=...
-   ALLOWED_EMAILS=you@gmail.com
-   NEXTAUTH_URL=https://YOUR-DOMAIN.vercel.app
-   # Optional, for bank sync:
-   PLAID_CLIENT_ID=...
-   PLAID_SECRET=...
-   PLAID_ENV=production
-   ```
-4. Add the production redirect URI to your Google OAuth client (step 4 above) and deploy.
-   Optionally run `npm run db:seed` against the hosted DB if you want demo data.
-
-Production builds run `prisma migrate deploy` automatically (see `vercel.json`), so the schema is
-created and kept up to date on every deploy - no manual sync step.
-
----
-
 ## How the cash projection works
 
 Each cash account (checking/savings/cash flagged "include in cash flow") has a `currentBalance`
@@ -397,19 +348,6 @@ src/
   components/      AppChrome, CommandPalette, MultiSelect, TransactionModal,
                    Modal, charts, icons
 ```
-
----
-
-## Roadmap
-
-Planned improvements, roughly in priority order:
-
-- **Docker support** - an official Docker image and a docker-compose example (app + Postgres) so
-  Moolah can be deployed like any other self-hosted service.
-- **Household / multi-user support** - share one dataset with a partner: invite codes, per-member
-  attribution on transactions, and a shared calendar.
-
-Have a request? Open an issue on GitHub.
 
 ---
 

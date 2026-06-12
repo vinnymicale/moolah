@@ -5,8 +5,6 @@ const baseProd = {
   NODE_ENV: "production",
   DATABASE_URL: "postgresql://x",
   AUTH_SECRET: "secret",
-  AUTH_GOOGLE_ID: "id",
-  AUTH_GOOGLE_SECRET: "sec",
 } as NodeJS.ProcessEnv;
 
 describe("checkEnv", () => {
@@ -24,22 +22,6 @@ describe("checkEnv", () => {
     const r = checkEnv({ ...baseProd, AUTH_SECRET: undefined });
     expect(r.ok).toBe(false);
     expect(r.errors.join(" ")).toMatch(/AUTH_SECRET/);
-  });
-
-  it("requires a sign-in method in production", () => {
-    const r = checkEnv({ ...baseProd, AUTH_GOOGLE_ID: undefined, AUTH_GOOGLE_SECRET: undefined });
-    expect(r.ok).toBe(false);
-    expect(r.errors.join(" ")).toMatch(/sign-in method/);
-  });
-
-  it("accepts dev-login as the production sign-in method", () => {
-    const r = checkEnv({
-      ...baseProd,
-      AUTH_GOOGLE_ID: undefined,
-      AUTH_GOOGLE_SECRET: undefined,
-      AUTH_DEV_LOGIN: "true",
-    });
-    expect(r.ok).toBe(true);
   });
 
   it("relaxes auth requirements in demo mode", () => {
