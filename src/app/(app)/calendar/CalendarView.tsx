@@ -10,7 +10,7 @@ import { DEFAULT_CATEGORY_COLOR, INCOME_COLOR, TRANSFER_COLOR, categoryColor } f
 import { toggleInSet } from "@/lib/collections";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import type { CalendarEvent, CalendarMonth, CcDueEvent } from "@/lib/calendar";
-import { WEEKDAYS, eventToTxn } from "./calendar-utils";
+import { WEEKDAYS, eventToTxn, eventIsActual } from "./calendar-utils";
 import { DayCell } from "./DayCell";
 import { DayEventsModal } from "./DayEventsModal";
 import { OccurrenceModal } from "./OccurrenceModal";
@@ -64,10 +64,15 @@ export function CalendarView({
     }
   };
 
-  // Client-side filtered events and recomputed monthly totals.
-  const { filteredEventsByDay, filteredMonthIncome, filteredMonthExpense } = useMemo(() => {
+  // Client-side filtered events and recomputed monthly totals. Each total is
+  // split into actual (cleared, on/before today) and a projected grand total
+  // (actual plus pending + virtual occurrences through month end), mirroring
+  // groupEventsByDay on the server.
+  const { filteredEventsByDay, monthIncome, monthExpense, monthIncomeActual, monthExpenseActual } = useMemo(() => {
     let income = 0;
     let expense = 0;
+    let incomeActual = 0;
+    let expenseActual = 0;
     const byDay: Record<string, CalendarEvent[]> = {};
 
     for (const [day, events] of Object.entries(data.eventsByDay)) {
@@ -81,16 +86,29 @@ export function CalendarView({
 
       if (day.startsWith(monthNum)) {
         for (const e of filtered) {
-          if (e.type === "INCOME" && !e.isTransfer) income += e.amount;
-          else if (e.type === "EXPENSE" && !e.isTransfer) expense += e.amount;
+          if (e.isTransfer) continue;
+          const actual = eventIsActual(e, data.todayISO);
+          if (e.type === "INCOME") {
+            income += e.amount;
+            if (actual) incomeActual += e.amount;
+          } else if (e.type === "EXPENSE") {
+            expense += e.amount;
+            if (actual) expenseActual += e.amount;
+          }
         }
       }
     }
 
-    return { filteredEventsByDay: byDay, filteredMonthIncome: income, filteredMonthExpense: expense };
-  }, [data.eventsByDay, enabledAccountIds, showIncome, showExpense, monthNum]);
+    return {
+      filteredEventsByDay: byDay,
+      monthIncome: income,
+      monthExpense: expense,
+      monthIncomeActual: incomeActual,
+      monthExpenseActual: expenseActual,
+    };
+  }, [data.eventsByDay, data.todayISO, enabledAccountIds, showIncome, showExpense, monthNum]);
 
-  const net = filteredMonthIncome - filteredMonthExpense;
+  const net = monthIncomeActual - monthExpenseActual;
   const endOfMonthBalance = data.projection.length ? data.projection[data.projection.length - 1].balance : data.anchorBalance;
   const lowest = data.projection.reduce(
     (min, p) => (p.balance < min.balance ? p : min),
@@ -126,9 +144,9 @@ export function CalendarView({
 
       {/* Summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard size="sm" label="Income" value={formatUSD(filteredMonthIncome)} tone="income" />
-        <StatCard size="sm" label="Expenses" value={formatUSD(filteredMonthExpense)} tone="expense" />
-        <StatCard size="sm" label="Net" value={formatUSD(net)} tone={net >= 0 ? "income" : "expense"} />
+        <StatCard size="sm" label="Income" value={formatUSD(monthIncomeActual)} tone="income" hint={`${formatUSD(monthIncome)} projected`} />
+        <StatCard size="sm" label="Expenses" value={formatUSD(monthExpenseActual)} tone="expense" hint={`${formatUSD(monthExpense)} projected`} />
+        <StatCard size="sm" label="Net" value={formatUSD(net)} tone={net >= 0 ? "income" : "expense"} hint={`${formatUSD(monthIncome - monthExpense)} projected`} />
         {hasCash && <StatCard size="sm" label="Projected end-of-month" value={formatUSD(endOfMonthBalance)} tone={endOfMonthBalance >= 0 ? "default" : "expense"} />}
       </div>
 

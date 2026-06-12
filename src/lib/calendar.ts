@@ -14,7 +14,10 @@ import {
 import { expandOccurrences } from "@/lib/recurrence";
 import { projectDailyBalances, type DayProjection, type ProjTxn } from "@/lib/projection";
 import { getAccounts } from "@/lib/queries";
+import { eventIsActual } from "@/app/(app)/calendar/calendar-utils";
 import type { TxnType } from "@/generated/prisma/enums";
+
+export { eventIsActual };
 
 export interface CalendarEvent {
   /** Concrete transaction id, or a synthetic id for a projected occurrence. */
@@ -67,8 +70,12 @@ export interface CalendarMonth {
   projectionByIso: Record<string, DayProjectionDTO>;
   anchorBalance: number;
   todayISO: string;
+  /** Grand total: actual so far plus everything projected through month end. */
   monthIncome: number;
   monthExpense: number;
+  /** Actual: cleared transactions dated on or before today. */
+  monthIncomeActual: number;
+  monthExpenseActual: number;
 }
 
 export interface UpcomingItem {
@@ -99,28 +106,49 @@ export function occurrenceIsMatched(occ: Date, materialisedTs: number[] | undefi
  * Group events onto their calendar days (restricted to `gridIso`), sum the
  * visible month's real income/expense, and sort each day income-first then by
  * amount descending. Transfers (CC payment credits) are excluded from totals.
+ *
+ * Two pairs of totals are returned for each of income and expense:
+ * - `*Actual`: cleared transactions dated on or before today - what has
+ *   genuinely moved so far this month.
+ * - `month*`: actual plus everything still projected through month end
+ *   (pending transactions and virtual recurring occurrences) - the grand total.
  */
 export function groupEventsByDay(
   events: CalendarEvent[],
   gridIso: Set<string>,
   visibleMonth: number,
-): { eventsByDay: Record<string, CalendarEvent[]>; monthIncome: number; monthExpense: number } {
+  todayISO: string,
+): {
+  eventsByDay: Record<string, CalendarEvent[]>;
+  monthIncome: number;
+  monthExpense: number;
+  monthIncomeActual: number;
+  monthExpenseActual: number;
+} {
   const eventsByDay: Record<string, CalendarEvent[]> = {};
   let monthIncome = 0;
   let monthExpense = 0;
+  let monthIncomeActual = 0;
+  let monthExpenseActual = 0;
 
   for (const e of events) {
     if (!gridIso.has(e.date)) continue;
     (eventsByDay[e.date] ??= []).push(e);
-    if (toUTCDay(e.date).getUTCMonth() === visibleMonth) {
-      if (e.type === "INCOME" && !e.isTransfer) monthIncome += e.amount;
-      else if (e.type === "EXPENSE" && !e.isTransfer) monthExpense += e.amount;
+    if (toUTCDay(e.date).getUTCMonth() === visibleMonth && !e.isTransfer) {
+      const actual = eventIsActual(e, todayISO);
+      if (e.type === "INCOME") {
+        monthIncome += e.amount;
+        if (actual) monthIncomeActual += e.amount;
+      } else if (e.type === "EXPENSE") {
+        monthExpense += e.amount;
+        if (actual) monthExpenseActual += e.amount;
+      }
     }
   }
   for (const list of Object.values(eventsByDay)) {
     list.sort((a, b) => (a.type === b.type ? b.amount - a.amount : a.type === "INCOME" ? -1 : 1));
   }
-  return { eventsByDay, monthIncome, monthExpense };
+  return { eventsByDay, monthIncome, monthExpense, monthIncomeActual, monthExpenseActual };
 }
 
 /**
@@ -323,10 +351,11 @@ export async function getCalendarMonth(
 
   // Group events for the visible grid days.
   const gridIso = new Set(grid.map(isoDay));
-  const { eventsByDay, monthIncome, monthExpense } = groupEventsByDay(
+  const { eventsByDay, monthIncome, monthExpense, monthIncomeActual, monthExpenseActual } = groupEventsByDay(
     events,
     gridIso,
     monthDate.getUTCMonth(),
+    isoDay(today),
   );
 
   // Credit card payment due dates - show on the calendar for any account whose
@@ -357,5 +386,7 @@ export async function getCalendarMonth(
     todayISO: isoDay(today),
     monthIncome,
     monthExpense,
+    monthIncomeActual,
+    monthExpenseActual,
   };
 }

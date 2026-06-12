@@ -26,7 +26,7 @@ export function DayEventsModal({
 }) {
   const catById = new Map(categories.map((c) => [c.id, c]));
   const income = events.filter((e) => e.type === "INCOME" && !e.isTransfer).reduce((s, e) => s + e.amount, 0);
-  const expense = events.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + e.amount, 0);
+  const expense = events.filter((e) => e.type === "EXPENSE" && !e.isTransfer).reduce((s, e) => s + e.amount, 0);
 
   return (
     <Modal open onClose={onClose} title={formatMonthDay(iso)} widthClass="max-w-sm">
