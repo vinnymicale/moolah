@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { plaidClient } from "@/lib/plaid";
+import { getPlaidClient } from "@/lib/plaid";
 import { syncPlaidItem } from "@/lib/plaid-sync";
 
 const LIABILITY_SUBTYPES = new Set(["credit card", "auto loan", "student loan", "mortgage", "line of credit", "home equity line of credit"]);
@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
   if (!public_token) return NextResponse.json({ error: "Missing public_token" }, { status: 400 });
 
   try {
+    const plaidClient = await getPlaidClient(session.user.id);
+
     // Exchange the short-lived public token for a permanent access token.
     const exchangeRes = await plaidClient.itemPublicTokenExchange({ public_token });
     const { access_token, item_id } = exchangeRes.data;

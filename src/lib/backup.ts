@@ -61,6 +61,49 @@ export async function exportAllData(databaseUrl?: string): Promise<BackupPayload
   }
 }
 
+// Tables with no userId column, reachable through a user-scoped parent.
+const CHILD_FILTERS: Record<string, string> = {
+  AccountSnapshot: '"accountId" IN (SELECT id FROM "FinancialAccount" WHERE "userId" = $1)',
+  PlaidLinkedAccount: '"plaidItemId" IN (SELECT id FROM "PlaidItem" WHERE "userId" = $1)',
+};
+
+/**
+ * Dump only the rows belonging to one user. Same payload shape as
+ * exportAllData, so it restores with the same importer. Tables are scoped by
+ * their userId column (detected from the schema), by id for User itself, or by
+ * the CHILD_FILTERS subqueries for child tables. Tables with no relationship to
+ * a user (e.g. VerificationToken) are skipped rather than risk including
+ * another user's rows.
+ */
+export async function exportUserData(userId: string, databaseUrl?: string): Promise<BackupPayload> {
+  const client = new Client({ connectionString: requireUrl(databaseUrl) });
+  await client.connect();
+  try {
+    const { rows: tables } = await client.query<{ tablename: string }>(
+      "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename",
+    );
+    const { rows: userIdCols } = await client.query<{ table_name: string }>(
+      "SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'userId'",
+    );
+    const hasUserId = new Set(userIdCols.map((r) => r.table_name));
+
+    const out: BackupTable[] = [];
+    for (const { tablename } of tables) {
+      if (EXCLUDE.has(tablename)) continue;
+      let where: string;
+      if (tablename === "User") where = "id = $1";
+      else if (hasUserId.has(tablename)) where = '"userId" = $1';
+      else if (CHILD_FILTERS[tablename]) where = CHILD_FILTERS[tablename];
+      else continue;
+      const { rows } = await client.query(`SELECT * FROM "${tablename}" WHERE ${where}`, [userId]);
+      out.push({ table: tablename, rows });
+    }
+    return { app: "moolah", version: 1, exportedAt: new Date().toISOString(), tables: out };
+  } finally {
+    await client.end();
+  }
+}
+
 /**
  * Load a backup into the database. FK checks are disabled for the load (so table
  * order doesn't matter) and it all runs in one transaction that rolls back on

@@ -1,11 +1,8 @@
-import { headers } from "next/headers";
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
-import { getSetupStatus, isLocalHost } from "@/lib/setup-config";
 import { PageHeader } from "@/components/ui-bits";
-import { SetupPanel } from "@/app/(auth)/signin/SetupPanel";
-import { ExportData, BackupData, AiConfigForm } from "./SettingsForm";
+import { ExportData, BackupData, AiConfigForm, PlaidConfigForm } from "./SettingsForm";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -27,9 +24,6 @@ export default async function SettingsPage() {
   }
 
   const { userId } = await requireUser();
-  const host = (await headers()).get("host");
-  const status = getSetupStatus();
-  const showPlaidSetup = isLocalHost(host);
 
   const [user, accounts, categories] = await Promise.all([
     prisma.user.findUnique({
@@ -37,8 +31,11 @@ export default async function SettingsPage() {
       select: {
         id: true,
         aiProvider: true,
-        // Avoid leaking the actual key to the browser; just signal whether one is set.
+        // Avoid leaking the actual keys to the browser; just signal whether they're set.
         aiApiKey: true,
+        plaidClientId: true,
+        plaidSecret: true,
+        plaidEnv: true,
       },
     }),
     getAccounts(userId),
@@ -46,13 +43,25 @@ export default async function SettingsPage() {
   ]);
   if (!user) return null;
 
+  const envFallback = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <PageHeader title="Settings" subtitle="Manage your data, exports, and integrations." />
 
-      {showPlaidSetup && (
-        <SetupPanel status={status} plaidOnly={process.env.AUTH_BYPASS === "true"} />
-      )}
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Plaid bank sync</h2>
+        <p className="mb-3 text-sm text-muted">
+          Connect your own Plaid account to link banks and sync balances and transactions
+          automatically. Sandbox uses fake test banks; Production connects your real banks.
+        </p>
+        <PlaidConfigForm
+          currentClientId={user.plaidClientId}
+          hasSecret={!!user.plaidSecret}
+          currentEnv={user.plaidEnv}
+          envFallback={envFallback}
+        />
+      </section>
 
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Export your data</h2>

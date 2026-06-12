@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "@/lib/plaid";
+import { getPlaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "@/lib/plaid";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as { itemId?: string };
 
   try {
+    const plaidClient = await getPlaidClient(session.user.id);
     let linkTokenParams: Parameters<typeof plaidClient.linkTokenCreate>[0];
 
     if (body.itemId) {
