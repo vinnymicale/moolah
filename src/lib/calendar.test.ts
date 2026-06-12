@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   occurrenceIsMatched,
   groupEventsByDay,
+  eventIsActual,
   ccDueIsVisible,
   MATCH_WINDOW_MS,
   type CalendarEvent,
@@ -51,14 +52,31 @@ describe("occurrenceIsMatched", () => {
   });
 });
 
+describe("eventIsActual", () => {
+  const today = "2026-06-10";
+
+  it("is true for a cleared transaction on or before today", () => {
+    expect(eventIsActual(event({ cleared: true, date: "2026-06-10" }), today)).toBe(true);
+    expect(eventIsActual(event({ cleared: true, date: "2026-06-09" }), today)).toBe(true);
+  });
+
+  it("is false for pending, virtual, or future-dated events", () => {
+    expect(eventIsActual(event({ cleared: false, date: "2026-06-09" }), today)).toBe(false);
+    expect(eventIsActual(event({ cleared: true, isVirtual: true, date: "2026-06-09" }), today)).toBe(false);
+    expect(eventIsActual(event({ cleared: true, date: "2026-06-11" }), today)).toBe(false);
+  });
+});
+
 describe("groupEventsByDay", () => {
   const grid = new Set(["2026-06-09", "2026-06-10", "2026-06-11"]);
+  const today = "2026-06-10";
 
   it("buckets events by day and drops days outside the grid", () => {
     const { eventsByDay } = groupEventsByDay(
       [event({ id: "a", date: "2026-06-10" }), event({ id: "b", date: "2026-05-30" })],
       grid,
       5, // June (0-indexed)
+      today,
     );
     expect(Object.keys(eventsByDay)).toEqual(["2026-06-10"]);
     expect(eventsByDay["2026-06-10"].map((e) => e.id)).toEqual(["a"]);
@@ -73,9 +91,29 @@ describe("groupEventsByDay", () => {
       ],
       grid,
       5,
+      today,
     );
     expect(monthIncome).toBe(1000);
     expect(monthExpense).toBe(200);
+  });
+
+  it("splits actual (cleared, on/before today) from the projected grand total", () => {
+    const { monthExpense, monthExpenseActual, monthIncome, monthIncomeActual } = groupEventsByDay(
+      [
+        event({ date: "2026-06-09", type: "EXPENSE", amount: 100, cleared: true }), // actual
+        event({ date: "2026-06-10", type: "EXPENSE", amount: 50, cleared: false }), // pending → projected only
+        event({ date: "2026-06-11", type: "EXPENSE", amount: 30, cleared: true, isVirtual: true }), // future recurring
+        event({ date: "2026-06-09", type: "INCOME", amount: 1000, cleared: true }), // actual
+        event({ date: "2026-06-11", type: "INCOME", amount: 200, cleared: true }), // future-dated → projected only
+      ],
+      grid,
+      5,
+      today,
+    );
+    expect(monthExpenseActual).toBe(100);
+    expect(monthExpense).toBe(180);
+    expect(monthIncomeActual).toBe(1000);
+    expect(monthIncome).toBe(1200);
   });
 
   it("excludes grid days that belong to an adjacent month from the totals", () => {
@@ -84,6 +122,7 @@ describe("groupEventsByDay", () => {
       [event({ date: "2026-05-31", type: "INCOME", amount: 999 })],
       sept,
       5, // visible month is June, so the May 31 spillover day is excluded
+      today,
     );
     expect(monthIncome).toBe(0);
   });
@@ -97,6 +136,7 @@ describe("groupEventsByDay", () => {
       ],
       grid,
       5,
+      today,
     );
     expect(eventsByDay["2026-06-10"].map((e) => e.id)).toEqual(["inc", "exp-big", "exp-small"]);
   });
