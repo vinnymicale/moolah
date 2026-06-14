@@ -27,9 +27,23 @@ function ran(fragment: string): boolean {
   return sqls().some((s) => s.includes(fragment));
 }
 
-// Make the User COUNT(*) return `userCount`; everything else resolves empty.
+// The schema columns the importer validates identifiers against. Covers every
+// table/column the fixtures below reference.
+const SCHEMA_ROWS = [
+  { table_name: "User", column_name: "id" },
+  { table_name: "User", column_name: "name" },
+  { table_name: "Transaction", column_name: "id" },
+  { table_name: "Transaction", column_name: "userId" },
+  { table_name: "Transaction", column_name: "amount" },
+];
+
+// Make the User COUNT(*) return `userCount`; the schema lookup returns
+// SCHEMA_ROWS; everything else resolves empty.
 function wireCount(userCount: number) {
   query.mockImplementation((sql: string) => {
+    if (sql.includes("information_schema.columns")) {
+      return Promise.resolve({ rows: SCHEMA_ROWS });
+    }
     if (sql.includes('COUNT(*)') && sql.includes('"User"')) {
       return Promise.resolve({ rows: [{ n: userCount }] });
     }
@@ -131,6 +145,7 @@ describe("importAllData", () => {
 
   it("rolls back and rethrows when an insert fails", async () => {
     query.mockImplementation((sql: string) => {
+      if (sql.includes("information_schema.columns")) return Promise.resolve({ rows: SCHEMA_ROWS });
       if (sql.includes("COUNT(*)")) return Promise.resolve({ rows: [{ n: 0 }] });
       if (sql.startsWith("INSERT INTO")) return Promise.reject(new Error("constraint blew up"));
       return Promise.resolve({ rows: [] });
@@ -141,6 +156,30 @@ describe("importAllData", () => {
     expect(ran("ROLLBACK")).toBe(true);
     expect(ran("COMMIT")).toBe(false);
     expect(end).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a backup that references a table not in the schema", async () => {
+    wireCount(0);
+
+    await expect(
+      importAllData({ ...payload, tables: [{ table: "evil; DROP TABLE", rows: [{ id: "x" }] }] }, "postgres://test"),
+    ).rejects.toThrow(/unknown table/i);
+
+    // Rejected before any insert ran.
+    expect(ran("INSERT INTO")).toBe(false);
+  });
+
+  it("rejects a backup that references a column not in the schema", async () => {
+    wireCount(0);
+
+    await expect(
+      importAllData(
+        { ...payload, tables: [{ table: "User", rows: [{ id: "u1", "evil\" --": 1 }] }] },
+        "postgres://test",
+      ),
+    ).rejects.toThrow(/unknown column/i);
+
+    expect(ran('INSERT INTO "User"')).toBe(false);
   });
 
   it("accepts a bare table array as well as a full payload", async () => {
