@@ -262,10 +262,12 @@ invalidates the old one.
 
 Two ways to surface these numbers in Home Assistant:
 
-- **Dedicated integration** (`hass-moolah`) - a companion custom component (HACS-style) that you
-  point at your Moolah URL and paste the read-only token into during setup. It polls `/api/v1` and
-  exposes sensors for net worth, assets, liabilities, safe-to-transfer, budget limit/spent/remaining,
-  and upcoming bills - ready to drop onto a dashboard.
+- **Dedicated integration** ([`hass-moolah`](https://github.com/vinnymicale/hass-moolah)) - a
+  companion custom component (HACS-style) that you point at your Moolah URL and paste the read-only
+  token into during setup. It polls `/api/v1` and exposes sensors for net worth, assets,
+  liabilities, safe-to-transfer, budget limit/spent/remaining, and upcoming bills - ready to drop
+  onto a dashboard. Install it via HACS as a custom repository, or copy `custom_components/moolah`
+  into your Home Assistant config.
 - **No-integration option** - a built-in [RESTful
   sensor](https://www.home-assistant.io/integrations/sensor.rest/) polling `/api/v1/summary` with
   the bearer token works without installing anything.
