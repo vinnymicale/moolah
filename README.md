@@ -33,7 +33,9 @@ Planned improvements, roughly in priority order:
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
 
 Recently shipped: [Docker support](#self-hosting-with-docker), the [read-only data
-API](#read-only-data-api), and category splits (one charge across multiple categories).
+API](#read-only-data-api), category splits (one charge across multiple categories), and
+[in-app backup restore](#backing-up-your-data-and-your-plaid-connections) (upload a full backup
+from Settings, not just the CLI).
 
 Have a request? Open an issue on GitHub.
 
@@ -96,6 +98,10 @@ Have a request? Open an issue on GitHub.
   ranges, and named **saved filters** on the Transactions page.
 - **Data export** - download your full transaction history as CSV, filtered by date, account, or
   category, from Settings.
+- **Full backup & restore** - download a single JSON snapshot of everything (every table, including
+  your Plaid access tokens) and restore it later - both from the CLI and directly in **Settings**.
+  Restoring re-uses your existing Plaid connections, so moving to a new machine or Docker host
+  costs no new billed bank links.
 
 ### Polished
 - **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and dates that
@@ -148,7 +154,7 @@ A built-in **dark theme** (toggle in the sidebar) carries across every page.
 **Categories** - organize how you classify income and spending, each with its own icon and color.
 ![Categories](docs/screenshots/categories.png)
 
-**Settings** - export data as CSV, download a full backup, and connect the AI assistant.
+**Settings** - export data as CSV, download or restore a full backup, generate a read-only API token, manage Plaid keys, and connect the AI assistant.
 ![Settings](docs/screenshots/settings.png)
 
 **Sign in** - simple name + password accounts, stored entirely in your own database.
@@ -250,9 +256,21 @@ curl -H "Authorization: Bearer moolah_…" http://localhost:3000/api/v1/summary
 
 Pass `?tz=America/New_York` to anchor "today"/"this month" to your timezone (defaults to UTC).
 Requests are rate-limited per token. Regenerating or revoking the token in Settings immediately
-invalidates the old one. In Home Assistant, a built-in [RESTful
-sensor](https://www.home-assistant.io/integrations/sensor.rest/) polling `/api/v1/summary` with the
-bearer token needs no custom integration.
+invalidates the old one.
+
+### Home Assistant
+
+Two ways to surface these numbers in Home Assistant:
+
+- **Dedicated integration** ([`hass-moolah`](https://github.com/vinnymicale/hass-moolah)) - a
+  companion custom component (HACS-style) that you point at your Moolah URL and paste the read-only
+  token into during setup. It polls `/api/v1` and exposes sensors for net worth, assets,
+  liabilities, safe-to-transfer, budget limit/spent/remaining, and upcoming bills - ready to drop
+  onto a dashboard. Install it via HACS as a custom repository, or copy `custom_components/moolah`
+  into your Home Assistant config.
+- **No-integration option** - a built-in [RESTful
+  sensor](https://www.home-assistant.io/integrations/sensor.rest/) polling `/api/v1/summary` with
+  the bearer token works without installing anything.
 
 ---
 
@@ -333,7 +351,12 @@ npm run db:backup          # writes backups/moolah-backup-<timestamp>.json
 Or, in the running app, go to **Settings → Back up everything → Download backup** to get the same
 file in your browser. Copy it somewhere safe (external drive / cloud folder).
 
-**To restore** into a fresh clone:
+**To restore in the app:** go to **Settings → Restore from a backup**, pick a backup file, and
+confirm. This overwrites the current database with the backup's contents, so you're signed out
+afterward and log back in with the restored account. Ideal for the export → spin up Docker →
+import-without-reconfiguring workflow.
+
+**To restore from the CLI** (e.g. into a fresh clone):
 
 ```bash
 npm install
@@ -343,7 +366,8 @@ npm run db:restore -- ./path/to/moolah-backup-<timestamp>.json
 ```
 
 Your banks reconnect with **no new Plaid items** and no re-linking. (`db:restore` only writes into an
-empty database; pass `--force` to overwrite an existing one.) The `backups/` folder is gitignored.
+empty database; pass `--force` to overwrite an existing one - the in-app restore always overwrites.)
+The `backups/` folder is gitignored.
 
 ### Option B - raw data-directory copy
 
@@ -393,10 +417,12 @@ src/
   app/(auth)/      sign-in
   app/(app)/       dashboard, calendar, transactions, accounts, recurring,
                    budgets, goals, debt, categories, trends, settings
-  app/api/         plaid (link/exchange/sync/recategorize), export (CSV)
+  app/api/         plaid (link/exchange/sync/recategorize), export (CSV),
+                   backup (download/import), v1 (read-only API), chat (AI assistant), health
   actions/         server actions (mutations)
   lib/             prisma, auth/session, money, dates, recurrence, projection,
-                   calendar, reports, queries, plaid-sync, debt-payoff, milestones
+                   calendar, reports, queries, plaid-sync, debt-payoff, milestones,
+                   backup (full export/restore), crypto (secret encryption), api-auth (token auth)
   components/      AppChrome, CommandPalette, MultiSelect, TransactionModal,
                    Modal, charts, icons
 ```
