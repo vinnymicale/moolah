@@ -161,9 +161,18 @@ export interface SyncOptions {
   recategorizeOnly?: boolean;
 }
 
-export async function syncPlaidItem(plaidItemId: string, opts?: SyncOptions): Promise<SyncResult> {
+/**
+ * Sync a single Plaid item. Pass `userId` to scope the item lookup to that
+ * owner - the lookup throws if the item doesn't belong to them, so callers get
+ * a defensive ownership check rather than relying on having pre-verified it.
+ */
+export async function syncPlaidItem(
+  plaidItemId: string,
+  userId: string,
+  opts?: SyncOptions,
+): Promise<SyncResult> {
   const item = await prisma.plaidItem.findUniqueOrThrow({
-    where: { id: plaidItemId },
+    where: { id: plaidItemId, userId },
     include: {
       linkedAccounts: {
         include: { financialAccount: true },

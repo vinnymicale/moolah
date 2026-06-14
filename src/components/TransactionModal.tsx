@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Copy } from "lucide-react";
 import { Modal } from "./Modal";
+import { SplitEditor, EMPTY_SPLITS, type SplitRow } from "./SplitEditor";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import {
   createTransactionAction,
@@ -10,6 +11,8 @@ import {
   deleteTransactionAction,
   convertToRecurringAction,
 } from "@/actions/transactions";
+import { validateSplits } from "@/lib/splits";
+import { localTodayISO } from "@/lib/dates";
 import type { Frequency } from "@/generated/prisma/enums";
 
 type TxType = "INCOME" | "EXPENSE";
@@ -38,57 +41,89 @@ export function TransactionModal(props: TransactionModalProps) {
   const editing = !!transaction;
   const alreadyRecurring = !!transaction?.recurringRuleId;
 
-  const [type, setType] = useState<TxType>(transaction?.type ?? "EXPENSE");
-  const [amount, setAmount] = useState(transaction ? String(transaction.amount) : "");
-  const [date, setDate] = useState(transaction?.date ?? defaultDate ?? todayISO());
-  const [description, setDescription] = useState(transaction?.description ?? "");
-  const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
-  const [accountId, setAccountId] = useState(
-    transaction?.accountId ?? accounts.find((a) => a.includeInCash)?.id ?? accounts[0]?.id ?? "",
+  // Category splits, seeded from the existing transaction when it was split.
+  const initialSplits: SplitRow[] = (transaction?.splits ?? []).map((s) => ({
+    categoryId: s.categoryId ?? "",
+    amount: String(s.amount),
+  }));
+
+  const [form, setForm] = useState({
+    type: (transaction?.type ?? "EXPENSE") as TxType,
+    amount: transaction ? String(transaction.amount) : "",
+    date: transaction?.date ?? defaultDate ?? localTodayISO(),
+    description: transaction?.description ?? "",
+    categoryId: transaction?.categoryId ?? "",
+    accountId:
+      transaction?.accountId ?? accounts.find((a) => a.includeInCash)?.id ?? accounts[0]?.id ?? "",
+    note: transaction?.note ?? "",
+    cleared: transaction?.cleared ?? true,
+    recurring: false,
+    frequency: "MONTHLY" as Frequency,
+    interval: "1",
+    endDate: "",
+  });
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  const [split, setSplit] = useState(initialSplits.length > 0);
+  const [splits, setSplits] = useState<SplitRow[]>(
+    initialSplits.length > 0 ? initialSplits : EMPTY_SPLITS,
   );
-  const [note, setNote] = useState(transaction?.note ?? "");
-  const [cleared, setCleared] = useState(transaction?.cleared ?? true);
-  const [recurring, setRecurring] = useState(false);
-  const [frequency, setFrequency] = useState<Frequency>("MONTHLY");
-  const [interval, setInterval] = useState("1");
-  const [endDate, setEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const catOptions = categories.filter((c) => c.kind === type);
+  const catOptions = categories.filter((c) => c.kind === form.type);
+
+  const buildSplits = () =>
+    split
+      ? splits
+        .filter((s) => Number(s.amount) > 0)
+        .map((s) => ({ categoryId: s.categoryId || null, amount: Number(s.amount) }))
+      : null;
+
+  // Shape the form into the action payload. The recurring field is passed in so
+  // create/duplicate/edit can each set it without restating the rest.
+  const payload = (recurring: { frequency: Frequency; interval: string; endDate: string | null } | null) => ({
+    type: form.type,
+    amount: form.amount,
+    date: form.date,
+    description: form.description,
+    note: form.note || null,
+    categoryId: form.categoryId || null,
+    accountId: form.accountId || null,
+    cleared: form.cleared,
+    splits: buildSplits(),
+    recurring,
+  });
+
+  const recurringInput = {
+    frequency: form.frequency,
+    interval: form.interval,
+    endDate: form.endDate || null,
+  };
 
   const submit = () =>
     start(async () => {
       setError(null);
-      const payload = {
-        type,
-        amount,
-        date,
-        description,
-        note: note || null,
-        categoryId: categoryId || null,
-        accountId: accountId || null,
-        cleared,
-        recurring:
-          recurring && !editing
-            ? { frequency, interval, endDate: endDate || null }
-            : null,
-      };
+      if (split) {
+        const parts = buildSplits() ?? [];
+        const invalid = validateSplits(Number(form.amount) || 0, parts);
+        if (invalid) {
+          setError(invalid);
+          return;
+        }
+      }
       const res = editing
-        ? await updateTransactionAction(transaction!.id, payload)
-        : await createTransactionAction(payload);
+        ? await updateTransactionAction(transaction!.id, payload(null))
+        : await createTransactionAction(payload(form.recurring ? recurringInput : null));
       if (!res.ok) {
         setError(res.error ?? "Something went wrong.");
         return;
       }
       // When editing an existing one-off, turning on "recurring" promotes it to
       // a series (the create path handles its own recurring inline).
-      if (editing && recurring && !alreadyRecurring) {
-        const conv = await convertToRecurringAction(transaction!.id, {
-          frequency,
-          interval,
-          endDate: endDate || null,
-        });
+      if (editing && form.recurring && !alreadyRecurring) {
+        const conv = await convertToRecurringAction(transaction!.id, recurringInput);
         if (!conv.ok) {
           setError(conv.error ?? "Saved, but couldn't make it recurring.");
           return;
@@ -108,17 +143,7 @@ export function TransactionModal(props: TransactionModalProps) {
   const duplicate = () =>
     start(async () => {
       setError(null);
-      const res = await createTransactionAction({
-        type,
-        amount,
-        date,
-        description,
-        note: note || null,
-        categoryId: categoryId || null,
-        accountId: accountId || null,
-        cleared,
-        recurring: null,
-      });
+      const res = await createTransactionAction(payload(null));
       if (!res.ok) {
         setError(res.error ?? "Something went wrong.");
         return;
@@ -135,16 +160,17 @@ export function TransactionModal(props: TransactionModalProps) {
             <button
               key={t}
               onClick={() => {
-                setType(t);
-                setCategoryId("");
+                setForm((f) => ({ ...f, type: t, categoryId: "" }));
+                // Categories are kind-specific, so clear them; keep the amounts
+                // since the split allocation is still valid against the total.
+                setSplits((rows) => rows.map((r) => ({ ...r, categoryId: "" })));
               }}
-              className={`btn text-sm ${
-                type === t
+              className={`btn text-sm ${form.type === t
                   ? t === "EXPENSE"
                     ? "bg-surface text-expense shadow-sm"
                     : "bg-surface text-income shadow-sm"
                   : "text-muted"
-              }`}
+                }`}
             >
               {t === "EXPENSE" ? "Expense" : "Income"}
             </button>
@@ -159,8 +185,8 @@ export function TransactionModal(props: TransactionModalProps) {
               <input
                 className="input pl-7"
                 inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={form.amount}
+                onChange={(e) => set("amount", e.target.value)}
                 placeholder="0.00"
                 autoFocus
               />
@@ -168,7 +194,7 @@ export function TransactionModal(props: TransactionModalProps) {
           </div>
           <div>
             <label className="label">Date</label>
-            <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} />
           </div>
         </div>
 
@@ -176,27 +202,39 @@ export function TransactionModal(props: TransactionModalProps) {
           <label className="label">Description</label>
           <input
             className="input"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={type === "EXPENSE" ? "e.g. Groceries at Costco" : "e.g. Paycheck"}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            placeholder={form.type === "EXPENSE" ? "e.g. Groceries at Costco" : "e.g. Paycheck"}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">Category</label>
-            <select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Uncategorized</option>
-              {catOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between">
+              <label className="label">Category</label>
+              <button
+                type="button"
+                onClick={() => setSplit((v) => !v)}
+                className="text-xs text-muted underline hover:text-text"
+              >
+                {split ? "Single category" : "Split"}
+              </button>
+            </div>
+            {!split && (
+              <select className="input" value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}>
+                <option value="">Uncategorized</option>
+                {catOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {split && <p className="text-xs text-muted">Split across categories below.</p>}
           </div>
           <div>
             <label className="label">Account</label>
-            <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <select className="input" value={form.accountId} onChange={(e) => set("accountId", e.target.value)}>
               <option value="">None</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -207,20 +245,29 @@ export function TransactionModal(props: TransactionModalProps) {
           </div>
         </div>
 
+        {split && (
+          <SplitEditor
+            categories={catOptions}
+            total={Number(form.amount) || 0}
+            rows={splits}
+            onChange={setSplits}
+          />
+        )}
+
         <div>
           <label className="label">Note (optional)</label>
           <textarea
             className="input min-h-16 resize-y"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
+            value={form.note}
+            onChange={(e) => set("note", e.target.value)}
             placeholder="Any extra detail…"
             rows={2}
           />
         </div>
 
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={cleared} onChange={(e) => setCleared(e.target.checked)} />
-          <span>Already {type === "INCOME" ? "received" : "paid"} (uncheck if it&apos;s expected/upcoming)</span>
+          <input type="checkbox" checked={form.cleared} onChange={(e) => set("cleared", e.target.checked)} />
+          <span>Already {form.type === "INCOME" ? "received" : "paid"} (uncheck if it&apos;s expected/upcoming)</span>
         </label>
 
         {alreadyRecurring && (
@@ -232,19 +279,19 @@ export function TransactionModal(props: TransactionModalProps) {
         {!alreadyRecurring && (
           <div className="rounded-lg border border-line p-3">
             <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />
+              <input type="checkbox" checked={form.recurring} onChange={(e) => set("recurring", e.target.checked)} />
               Make this recurring
             </label>
-            {editing && recurring && (
+            {editing && form.recurring && (
               <p className="mt-2 text-xs text-muted">
                 Creates a recurring series starting on this transaction&apos;s date.
               </p>
             )}
-            {recurring && (
+            {form.recurring && (
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Frequency</label>
-                  <select className="input" value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)}>
+                  <select className="input" value={form.frequency} onChange={(e) => set("frequency", e.target.value as Frequency)}>
                     {FREQUENCIES.map((f) => (
                       <option key={f.value} value={f.value}>
                         {f.label}
@@ -254,11 +301,11 @@ export function TransactionModal(props: TransactionModalProps) {
                 </div>
                 <div>
                   <label className="label">Repeat every</label>
-                  <input className="input" inputMode="numeric" value={interval} onChange={(e) => setInterval(e.target.value)} />
+                  <input className="input" inputMode="numeric" value={form.interval} onChange={(e) => set("interval", e.target.value)} />
                 </div>
                 <div className="col-span-2">
                   <label className="label">End date (optional)</label>
-                  <input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  <input className="input" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
                 </div>
               </div>
             )}
@@ -284,7 +331,7 @@ export function TransactionModal(props: TransactionModalProps) {
             <button onClick={onClose} className="btn-ghost">
               Cancel
             </button>
-            <button onClick={submit} disabled={pending || !amount || !description} className="btn-primary">
+            <button onClick={submit} disabled={pending || !form.amount || !form.description} className="btn-primary">
               {pending ? "Saving…" : editing ? "Save" : "Add"}
             </button>
           </div>
@@ -292,9 +339,4 @@ export function TransactionModal(props: TransactionModalProps) {
       </div>
     </Modal>
   );
-}
-
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

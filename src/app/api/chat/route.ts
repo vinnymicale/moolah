@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
+import { isDemoMode } from "@/lib/demo-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
   getAccounts,
@@ -204,6 +205,13 @@ async function executeTool(
   userId: string,
 ): Promise<string> {
   const today = isoDay(new Date());
+
+  // The write tools below bypass the server-action layer, so re-apply the same
+  // demo-mode guard those actions enforce: no model-driven mutation in demo mode.
+  const WRITE_TOOLS = new Set(["create_transaction", "create_recurring_rule", "set_budget"]);
+  if (WRITE_TOOLS.has(name) && isDemoMode()) {
+    return JSON.stringify({ success: false, error: "This is a read-only demo. Changes are disabled." });
+  }
 
   try {
     switch (name) {

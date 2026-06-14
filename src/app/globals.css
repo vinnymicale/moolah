@@ -93,6 +93,21 @@ body {
   }
 }
 
+/* Interactive elements get a pointer cursor by default. Native disabled
+   controls keep the default cursor so they don't look clickable. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label[for],
+summary,
+select:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"],
+select:disabled {
+  cursor: default;
+}
+
 /* Thin, theme-aware scrollbars. */
 * {
   scrollbar-width: thin;

@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
+import { validateSplits } from "@/lib/splits";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
 
 const recurringSchema = z.object({
@@ -15,6 +16,11 @@ const recurringSchema = z.object({
   dayOfMonth: z.coerce.number().int().min(1).max(31).optional().nullable(),
   weekday: z.coerce.number().int().min(0).max(6).optional().nullable(),
   endDate: z.string().optional().nullable(),
+});
+
+const splitSchema = z.object({
+  categoryId: z.string().optional().nullable(),
+  amount: z.coerce.number().positive("Split amount must be greater than zero"),
 });
 
 const txnSchema = z.object({
@@ -27,19 +33,61 @@ const txnSchema = z.object({
   categoryId: z.string().optional().nullable(),
   cleared: z.boolean().optional().default(true),
   recurring: recurringSchema.optional().nullable(),
+  // Optional category splits. When present (2+ parts summing to amount), the
+  // transaction's own categoryId is cleared and these carry the attribution.
+  splits: z.array(splitSchema).max(50).optional().nullable(),
 });
 
 export type TransactionInput = z.input<typeof txnSchema>;
 
-async function assertOwnership(userId: string, accountId?: string | null, categoryId?: string | null) {
+async function assertOwnership(
+  userId: string,
+  accountId?: string | null,
+  categoryId?: string | null,
+  type?: TxnType,
+) {
   if (accountId) {
     const a = await prisma.financialAccount.findFirst({ where: { id: accountId, userId } });
     if (!a) throw new UserError("Account not found");
   }
   if (categoryId) {
-    const c = await prisma.category.findFirst({ where: { id: categoryId, userId } });
+    // When a type is given, require the category's kind to match (an expense
+    // can't be filed under an income category), mirroring the form's options.
+    const c = await prisma.category.findFirst({
+      where: { id: categoryId, userId, ...(type ? { kind: type } : {}) },
+    });
     if (!c) throw new UserError("Category not found");
   }
+}
+
+interface NormalizedSplit {
+  categoryId: string | null;
+  amount: number;
+}
+
+/**
+ * Validate split parts against the transaction total and confirm every split
+ * category belongs to the user and matches the transaction's kind (an EXPENSE
+ * can only split across expense categories, etc. - mirroring what the form
+ * offers). Returns the cleaned splits, or [] when no real split was provided
+ * (a single part or none means "not split").
+ */
+export async function normalizeSplits(
+  userId: string,
+  type: TxnType,
+  total: number,
+  splits?: { categoryId?: string | null; amount: number }[] | null,
+): Promise<NormalizedSplit[]> {
+  if (!splits || splits.length < 2) return [];
+  const cleaned: NormalizedSplit[] = splits.map((s) => ({ categoryId: s.categoryId || null, amount: s.amount }));
+  const err = validateSplits(total, cleaned);
+  if (err) throw new UserError(err);
+  const catIds = [...new Set(cleaned.map((s) => s.categoryId).filter((id): id is string => !!id))];
+  if (catIds.length > 0) {
+    const found = await prisma.category.count({ where: { id: { in: catIds }, userId, kind: type } });
+    if (found !== catIds.length) throw new UserError("Split category not found");
+  }
+  return cleaned;
 }
 
 export async function createTransactionAction(input: TransactionInput): Promise<ActionResult> {
@@ -47,7 +95,8 @@ export async function createTransactionAction(input: TransactionInput): Promise<
   return run(async () => {
     const { userId } = await requireUser();
     const data = txnSchema.parse(input);
-    await assertOwnership(userId, data.accountId, data.categoryId);
+    await assertOwnership(userId, data.accountId, data.categoryId, data.type);
+    const splits = await normalizeSplits(userId, data.type, data.amount, data.splits);
 
     await prisma.$transaction(async (tx) => {
       let recurringRuleId: string | undefined;
@@ -76,7 +125,8 @@ export async function createTransactionAction(input: TransactionInput): Promise<
         data: {
           userId,
           accountId: data.accountId || null,
-          categoryId: data.categoryId || null,
+          // When split, the parent carries no single category.
+          categoryId: splits.length > 0 ? null : data.categoryId || null,
           type: data.type,
           amount: data.amount,
           date: parseISODay(data.date),
@@ -84,6 +134,9 @@ export async function createTransactionAction(input: TransactionInput): Promise<
           note: data.note || null,
           cleared: data.cleared ?? true,
           recurringRuleId,
+          ...(splits.length > 0
+            ? { splits: { create: splits.map((s) => ({ categoryId: s.categoryId, amount: s.amount })) } }
+            : {}),
         },
       });
     });
@@ -98,20 +151,28 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
     const existing = await prisma.transaction.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Transaction not found");
     const data = txnSchema.parse(input);
-    await assertOwnership(userId, data.accountId, data.categoryId);
+    await assertOwnership(userId, data.accountId, data.categoryId, data.type);
+    const splits = await normalizeSplits(userId, data.type, data.amount, data.splits);
 
-    await prisma.transaction.update({
-      where: { id },
-      data: {
-        accountId: data.accountId || null,
-        categoryId: data.categoryId || null,
-        type: data.type,
-        amount: data.amount,
-        date: parseISODay(data.date),
-        description: data.description,
-        note: data.note || null,
-        cleared: data.cleared ?? existing.cleared,
-      },
+    await prisma.$transaction(async (tx) => {
+      // Replace any existing splits wholesale; the new set is authoritative.
+      await tx.transactionSplit.deleteMany({ where: { transactionId: id } });
+      await tx.transaction.update({
+        where: { id },
+        data: {
+          accountId: data.accountId || null,
+          categoryId: splits.length > 0 ? null : data.categoryId || null,
+          type: data.type,
+          amount: data.amount,
+          date: parseISODay(data.date),
+          description: data.description,
+          note: data.note || null,
+          cleared: data.cleared ?? existing.cleared,
+          ...(splits.length > 0
+            ? { splits: { create: splits.map((s) => ({ categoryId: s.categoryId, amount: s.amount })) } }
+            : {}),
+        },
+      });
     });
     revalidateAll();
   });
@@ -156,7 +217,11 @@ export async function bulkSetCategoryAction(ids: string[], categoryId: string | 
       const c = await prisma.category.findFirst({ where: { id: categoryId, userId } });
       if (!c) throw new UserError("Category not found");
     }
-    await prisma.transaction.updateMany({ where: { userId, id: { in: list } }, data: { categoryId } });
+    // Setting a single category supersedes any splits on the selected rows.
+    await prisma.$transaction([
+      prisma.transactionSplit.deleteMany({ where: { transaction: { userId, id: { in: list } } } }),
+      prisma.transaction.updateMany({ where: { userId, id: { in: list } }, data: { categoryId } }),
+    ]);
     revalidateAll();
   });
 }

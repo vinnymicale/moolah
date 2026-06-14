@@ -30,6 +30,13 @@ export async function GET(req: NextRequest) {
   }
   await ensureDefaultCategories(user.id);
 
-  const callbackUrl = req.nextUrl.searchParams.get("callbackUrl") || "/";
+  // Only allow same-origin relative paths as the post-login redirect target, so
+  // a crafted ?callbackUrl can't bounce the user to an external site. A value
+  // like "//evil.com" or "/\evil.com" is treated as external and rejected.
+  const requested = req.nextUrl.searchParams.get("callbackUrl") ?? "/";
+  const callbackUrl =
+    requested.startsWith("/") && !requested.startsWith("//") && !requested.startsWith("/\\")
+      ? requested
+      : "/";
   await signIn("local-login", { name, redirectTo: callbackUrl });
 }

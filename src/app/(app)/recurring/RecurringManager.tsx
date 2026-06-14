@@ -13,6 +13,7 @@ import {
   createRecurringAction, updateRecurringAction, deleteRecurringAction,
   linkSuggestionToRuleAction, type RecurringInput,
 } from "@/actions/recurring";
+import { localTodayISO } from "@/lib/dates";
 import type { Frequency, TxnType } from "@/generated/prisma/enums";
 
 const DISMISSED_KEY = "dismissedRecurringSuggestions";
@@ -258,11 +259,6 @@ function SuggestionRow({
   );
 }
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function RecurringForm({
   rule,
   prefill,
@@ -284,7 +280,7 @@ function RecurringForm({
   const [accountId, setAccountId] = useState(rule?.accountId ?? prefill?.accountId ?? accounts.find((a) => a.includeInCash)?.id ?? "");
   const [frequency, setFrequency] = useState<Frequency>(rule?.frequency ?? prefill?.frequency ?? "MONTHLY");
   const [interval, setInterval] = useState(String(rule?.interval ?? prefill?.interval ?? 1));
-  const [startDate, setStartDate] = useState(rule?.startDate ?? prefill?.startDate ?? todayISO());
+  const [startDate, setStartDate] = useState(rule?.startDate ?? prefill?.startDate ?? localTodayISO());
   const [endDate, setEndDate] = useState(rule?.endDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();

@@ -330,13 +330,22 @@ function txn(
     isTransfer: false,
     recurringRuleId,
     plaidTransactionId: null,
+    splits: [],
   };
 }
 
 export const DEMO_TRANSACTIONS: TransactionDTO[] = [
   // Current month — cleared
   txn("tx-01", 1, "EXPENSE", 2150, "Mortgage", "cat-mortgage", "acct-checking", true, "rec-mortgage"),
-  txn("tx-02", 3, "EXPENSE", 86.42, "Costco run", "cat-groceries", "acct-cc"),
+  // A split charge: part groceries, part household shopping.
+  {
+    ...txn("tx-02", 3, "EXPENSE", 86.42, "Costco run", "", "acct-cc"),
+    categoryId: null,
+    splits: [
+      { categoryId: "cat-groceries", amount: 56.42 },
+      { categoryId: "cat-shopping", amount: 30 },
+    ],
+  },
   txn("tx-03", 4, "EXPENSE", 54.18, "Dinner – Tavola", "cat-dining", "acct-cc"),
   txn("tx-04", 5, "EXPENSE", 500, "Auto-transfer to savings", "cat-savings", "acct-checking", true, "rec-savings-transfer"),
   txn("tx-05", 6, "EXPENSE", 42.3, "Shell gas", "cat-gas", "acct-cc"),
