@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Emit a self-contained server bundle (.next/standalone) for the Docker image.
+  // Ignored by Vercel, which uses its own build output.
+  output: "standalone",
   async headers() {
     return [
       {

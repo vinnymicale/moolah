@@ -1,0 +1,26 @@
+# Keep the build context small and never ship secrets or local state.
+node_modules
+.next
+out
+build
+coverage
+.pgdata
+.vercel
+.git
+.github
+test-results
+playwright-report
+backups
+*.tsbuildinfo
+.launch.log
+.launch.pid
+.env
+.env.*
+!.env.example
+!.env.docker.example
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md
+docs
+e2e
