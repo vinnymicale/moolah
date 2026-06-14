@@ -19,6 +19,8 @@ function req(headers: Record<string, string> = {}): NextRequest {
 
 describe("requireApiUser", () => {
   beforeEach(() => {
+    // hashApiToken (used for the rate-limit key) keys its HMAC with the app secret.
+    process.env.AUTH_SECRET = "test-secret-for-unit-tests";
     authn.mockReset();
     rl.mockReset();
     rl.mockReturnValue({ allowed: true, retryAfterSec: 0 });

@@ -1,24 +1,35 @@
 // Bearer-token auth for the read-only data API (/api/v1).
 //
 // Tokens are high-entropy random strings shown once at generation time. We
-// persist only their SHA-256 hash on the User, so a database leak doesn't
-// expose working tokens. Because the token is random and full-entropy, an
-// unsalted fast hash is appropriate here (unlike passwords): it allows an O(1)
-// indexed lookup by hash and there's nothing to brute-force.
+// persist only a keyed hash on the User, so a database leak doesn't expose
+// working tokens. Because the token is random and full-entropy there's nothing
+// to brute-force, so a slow password hash isn't needed; but we key the hash
+// with the app secret (HMAC) so that a DB dump alone - without the secret - is
+// useless for forging a stored hash. The hash stays deterministic, preserving
+// the O(1) indexed lookup by apiTokenHash.
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
 const TOKEN_PREFIX = "moolah_";
+
+/** Secret keying the token HMAC. Reuses the same secret as at-rest encryption. */
+function tokenSecret(): string {
+  const secret = process.env.ENCRYPTION_KEY || process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("ENCRYPTION_KEY or AUTH_SECRET must be set to hash API tokens.");
+  }
+  return secret;
+}
 
 /** Generate a new raw API token. Shown to the user once; never stored as-is. */
 export function generateApiToken(): string {
   return TOKEN_PREFIX + randomBytes(24).toString("base64url");
 }
 
-/** SHA-256 hash of a raw token, as stored in User.apiTokenHash. */
+/** Keyed (HMAC-SHA256) hash of a raw token, as stored in User.apiTokenHash. */
 export function hashApiToken(raw: string): string {
-  return createHash("sha256").update(raw).digest("hex");
+  return createHmac("sha256", tokenSecret()).update(raw).digest("hex");
 }
 
 /** Pull the bearer token out of an Authorization header, or null. */

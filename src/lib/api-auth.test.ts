@@ -13,6 +13,11 @@ vi.mock("@/lib/prisma", () => ({
 
 const findUnique = vi.mocked(prisma.user.findUnique);
 
+// hashApiToken keys its HMAC with the app secret, so the tests need one set.
+beforeEach(() => {
+  process.env.AUTH_SECRET = "test-secret-for-unit-tests";
+});
+
 describe("generateApiToken", () => {
   it("produces a prefixed, high-entropy token", () => {
     const t = generateApiToken();
@@ -32,7 +37,7 @@ describe("hashApiToken", () => {
     expect(hashApiToken(t)).toBe(hashApiToken(t));
   });
 
-  it("is a 64-char hex SHA-256 digest", () => {
+  it("is a 64-char hex HMAC-SHA256 digest", () => {
     expect(hashApiToken("anything")).toMatch(/^[0-9a-f]{64}$/);
   });
 
