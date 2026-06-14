@@ -1,0 +1,42 @@
+# Self-hosted Moolah: the app plus its own Postgres. Copy .env.docker.example to
+# .env, set AUTH_SECRET (npx auth secret), then `docker compose up -d`.
+# The app applies migrations on start and serves on http://localhost:3000.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finance}
+      POSTGRES_DB: ${POSTGRES_DB:-finance}
+    volumes:
+      - moolah-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finance} -d ${POSTGRES_DB:-finance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-finance}:${POSTGRES_PASSWORD:-finance}@db:5432/${POSTGRES_DB:-finance}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (npx auth secret)}
+      AUTH_BYPASS: ${AUTH_BYPASS:-true}
+      LOCAL_USER_NAME: ${LOCAL_USER_NAME:-local}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      # Auth.js needs the public origin to build callback URLs behind a proxy.
+      AUTH_TRUST_HOST: "true"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  moolah-db:

@@ -33,9 +33,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.docker.example
 
 # local embedded-postgres data dir
 /.pgdata
+
+# host-specific WSL Docker installer (not part of the repo)
+/scripts/install-docker-wsl.sh
 
 # one-click launcher runtime files
 /.launch.pid

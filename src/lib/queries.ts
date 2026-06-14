@@ -3,9 +3,10 @@
 // are never sent across that boundary.
 
 import { prisma } from "@/lib/prisma";
-import { fromCents, toCents, toNumber } from "@/lib/money";
+import { fromCents, toCents, toNumber, type MoneyInput } from "@/lib/money";
 import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { expandOccurrences } from "@/lib/recurrence";
+import { sumPartsByCategory, type SplittableTxn } from "@/lib/splits";
 import {
   detectRecurringCandidates,
   type RecurringSuggestion,
@@ -14,6 +15,22 @@ import {
 import type { AccountType, CategoryKind, TxnType, Frequency } from "@/generated/prisma/enums";
 
 export type { RecurringSuggestion } from "@/lib/recurring-suggestions";
+
+/** A transaction row selected with its splits, where money is still a Decimal. */
+type RowWithSplits = {
+  categoryId: string | null;
+  amount: MoneyInput;
+  splits: { categoryId: string | null; amount: MoneyInput }[];
+};
+
+/** Convert a DB row's Decimal money fields to numbers for split fan-out. */
+function rowToSplittable(t: RowWithSplits): SplittableTxn {
+  return {
+    categoryId: t.categoryId,
+    amount: toNumber(t.amount),
+    splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
+  };
+}
 
 export interface AccountDTO {
   id: string;
@@ -47,6 +64,11 @@ export interface CategoryDTO {
   parentId: string | null;
 }
 
+export interface TransactionSplitDTO {
+  categoryId: string | null;
+  amount: number;
+}
+
 export interface TransactionDTO {
   id: string;
   type: TxnType;
@@ -61,6 +83,8 @@ export interface TransactionDTO {
   isTransfer: boolean;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
+  /** Per-category split parts. Empty when the transaction has a single category. */
+  splits: TransactionSplitDTO[];
 }
 
 export interface RecurringDTO {
@@ -186,6 +210,7 @@ export async function getTransactionsBetween(
   const rows = await prisma.transaction.findMany({
     where: { userId, date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    include: { splits: true },
   });
   return rows.map((t) => ({
     id: t.id,
@@ -200,6 +225,7 @@ export async function getTransactionsBetween(
     isTransfer: t.isTransfer,
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
+    splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
   }));
 }
 
@@ -228,16 +254,12 @@ export async function getBudgetMonth(userId: string, monthISO: string): Promise<
     prisma.budget.findMany({ where: { userId, month: monthStart } }),
     prisma.transaction.findMany({
       where: { userId, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
-      select: { categoryId: true, amount: true },
+      select: { categoryId: true, amount: true, splits: { select: { categoryId: true, amount: true } } },
     }),
   ]);
 
   const limitByCat = new Map(budgets.map((b) => [b.categoryId, toNumber(b.limit)]));
-  const actualCentsByCat = new Map<string, number>();
-  for (const t of txns) {
-    if (!t.categoryId) continue;
-    actualCentsByCat.set(t.categoryId, (actualCentsByCat.get(t.categoryId) ?? 0) + toCents(t.amount));
-  }
+  const actualByCat = sumPartsByCategory(txns.map(rowToSplittable));
 
   return cats.map((c) => ({
     categoryId: c.id,
@@ -245,7 +267,7 @@ export async function getBudgetMonth(userId: string, monthISO: string): Promise<
     color: c.color,
     icon: c.icon,
     limit: limitByCat.get(c.id) ?? 0,
-    actual: fromCents(actualCentsByCat.get(c.id) ?? 0),
+    actual: actualByCat.get(c.id) ?? 0,
   }));
 }
 
@@ -607,23 +629,21 @@ export async function getSpendingAnomalies(
   const monthStart = parseISODay(`${monthISO.slice(0, 7)}-01`);
   const monthEnd = endOfUTCMonth(monthStart);
 
+  // We can't pre-filter by categoryId in SQL: split transactions carry their
+  // category attribution on child rows (the parent's categoryId is null), so the
+  // per-category bucketing has to happen in JS after expanding each row's parts.
   const currentTxns = await prisma.transaction.findMany({
     where: {
       userId,
       type: "EXPENSE",
       cleared: true,
       isTransfer: false,
-      categoryId: { not: null },
       date: { gte: monthStart, lte: monthEnd },
     },
-    select: { categoryId: true, amount: true },
+    select: { categoryId: true, amount: true, splits: { select: { categoryId: true, amount: true } } },
   });
 
-  const currentByCat = new Map<string, number>();
-  for (const t of currentTxns) {
-    if (!t.categoryId) continue;
-    currentByCat.set(t.categoryId, (currentByCat.get(t.categoryId) ?? 0) + toNumber(t.amount));
-  }
+  const currentByCat = sumPartsByCategory(currentTxns.map(rowToSplittable));
   if (currentByCat.size === 0) return [];
 
   // Three prior months, one query each (keeps this readable; only 3 trips).
@@ -637,16 +657,11 @@ export async function getSpendingAnomalies(
         type: "EXPENSE",
         cleared: true,
         isTransfer: false,
-        categoryId: { in: [...currentByCat.keys()] },
         date: { gte: ms, lte: me },
       },
-      select: { categoryId: true, amount: true },
+      select: { categoryId: true, amount: true, splits: { select: { categoryId: true, amount: true } } },
     });
-    const monthByCat = new Map<string, number>();
-    for (const t of hist) {
-      if (!t.categoryId) continue;
-      monthByCat.set(t.categoryId, (monthByCat.get(t.categoryId) ?? 0) + toNumber(t.amount));
-    }
+    const monthByCat = sumPartsByCategory(hist.map(rowToSplittable));
     for (const catId of currentByCat.keys()) {
       const arr = historicalByCat.get(catId) ?? [];
       arr.push(monthByCat.get(catId) ?? 0);

@@ -28,14 +28,12 @@ dataset, and anything you change stays in your browser only.
 
 Planned improvements, roughly in priority order:
 
-- **Docker support** - an official Docker image and a docker-compose example (app + Postgres) so
-  Moolah can be deployed like any other self-hosted service.
-- **Read-only data API** - versioned `/api/v1` endpoints (net worth, budget status, upcoming
-  bills) behind per-user bearer tokens, so external tools like Home Assistant can pull data
-  for dashboards.
 - **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
+
+Recently shipped: [Docker support](#self-hosting-with-docker), the [read-only data
+API](#read-only-data-api), and category splits (one charge across multiple categories).
 
 Have a request? Open an issue on GitHub.
 
@@ -60,6 +58,9 @@ Have a request? Open an issue on GitHub.
 - **Transfer matching** - credit-card payments are detected automatically (the checking debit and
   the card credit are linked as a pair) and excluded from income/spending totals, so paying your
   card never counts as "spending" twice. Pairs can also be linked/unlinked by hand.
+- **Split transactions** - attribute one charge to multiple categories (a Costco run that's part
+  groceries, part household). Budgets, trends, and spending alerts count each split part under its
+  own category, while the charge still totals once.
 - **CSV import** - drag-and-drop a bank CSV anywhere to review and import transactions.
 
 ### Planning
@@ -205,6 +206,53 @@ Useful scripts:
 | `npm run test` | Run the unit tests (recurrence, projection, debt-payoff, matching) |
 | `npm run test:e2e` | Run the Playwright end-to-end suite against a production build |
 | `npm run build` | Production build |
+
+---
+
+## Self-hosting with Docker
+
+For a deploy that runs like any other self-hosted service (Unraid, a NAS, a VPS), use the bundled
+image and compose file - the app and its own Postgres, no Node toolchain on the host.
+
+```bash
+cp .env.docker.example .env     # then edit .env
+npx auth secret                 # generate a value for AUTH_SECRET in .env
+docker compose up -d --build
+```
+
+Open <http://localhost:3000> (or whatever `APP_PORT` you set). On start the container waits for
+Postgres, applies any pending database migrations automatically, then serves the app. Data lives in
+the `moolah-db` Docker volume, so it survives restarts and image rebuilds.
+
+The image is a multi-stage build producing Next.js [standalone](https://nextjs.org/docs/app/api-reference/config/next-config-js/output)
+output and runs as a non-root user. To update: `git pull && docker compose up -d --build`.
+
+---
+
+## Read-only data API
+
+Moolah exposes versioned, read-only `/api/v1` endpoints so external tools - e.g. a **Home
+Assistant** dashboard on your network - can pull your numbers. Generate a personal token under
+**Settings → Read-only API access** (shown once; only its hash is stored), then send it as a bearer
+token:
+
+```bash
+curl -H "Authorization: Bearer moolah_…" http://localhost:3000/api/v1/summary
+```
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/v1/summary` | Net worth, safe-to-transfer, current-month budget status, upcoming bills |
+| `GET /api/v1/net-worth` | Assets, liabilities, net, and per-account balances |
+| `GET /api/v1/accounts` | All non-archived accounts with balances |
+| `GET /api/v1/budget` | Budget vs. actual per category (`?month=YYYY-MM` optional) |
+| `GET /api/v1/upcoming` | Bills/income in the next N days (`?days=14`, 1-90) |
+
+Pass `?tz=America/New_York` to anchor "today"/"this month" to your timezone (defaults to UTC).
+Requests are rate-limited per token. Regenerating or revoking the token in Settings immediately
+invalidates the old one. In Home Assistant, a built-in [RESTful
+sensor](https://www.home-assistant.io/integrations/sensor.rest/) polling `/api/v1/summary` with the
+bearer token needs no custom integration.
 
 ---
 

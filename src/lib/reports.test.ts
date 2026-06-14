@@ -146,6 +146,34 @@ describe("aggregateReports category spending", () => {
     expect(r.categorySpending).toEqual([]);
     expect(r.categoryLastMonth).toEqual([{ id: "food", name: "Food", color: "#f00", value: 80 }]);
   });
+
+  it("attributes a split charge to each split category, not the parent", () => {
+    const r = aggregateReports({
+      ...base,
+      categories: [
+        { id: "food", name: "Food", color: "#f00" },
+        { id: "home", name: "Home", color: "#0f0" },
+      ],
+      txns: [
+        {
+          type: "EXPENSE",
+          amount: 100,
+          date: "2026-06-02",
+          categoryId: null,
+          splits: [
+            { categoryId: "food", amount: 60 },
+            { categoryId: "home", amount: 40 },
+          ],
+        },
+      ],
+    });
+    expect(r.categorySpending).toEqual([
+      { id: "food", name: "Food", color: "#f00", value: 60 },
+      { id: "home", name: "Home", color: "#0f0", value: 40 },
+    ]);
+    // The full amount still counts once toward the month's expense total.
+    expect(r.incomeExpenseSeries.at(-1)?.expense).toBe(100);
+  });
 });
 
 describe("aggregateReports budgets and savings", () => {

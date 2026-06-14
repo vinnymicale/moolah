@@ -39,5 +39,7 @@ export function eventToTxn(e: CalendarEvent): TransactionDTO {
     isTransfer: e.isTransfer,
     recurringRuleId: e.recurringRuleId,
     plaidTransactionId: e.plaidTransactionId,
+    // Calendar events are single-category; the editor seeds an unsplit form.
+    splits: [],
   };
 }
