@@ -119,6 +119,38 @@ export async function importAllData(
   const client = new Client({ connectionString: requireUrl(databaseUrl) });
   await client.connect();
   try {
+    // Identifiers (table/column names) from the backup can't be bound as query
+    // params, so they're interpolated. Validate every one against the live
+    // schema first - an uploaded file is untrusted input. Anything not a real
+    // public column of a real public table is rejected, so the strings that
+    // reach the SQL below come from this allowlist, not from the payload.
+    const { rows: schemaCols } = await client.query<{ table_name: string; column_name: string }>(
+      "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'",
+    );
+    // Map each known identifier to its already-quoted, schema-derived literal.
+    // ident() looks the payload's name up here and returns the *stored* string,
+    // so the text that reaches the SQL below originates from the database, never
+    // from the uploaded file - no untrusted value is ever interpolated.
+    const tableLiteral = new Map<string, string>();
+    const colLiteral = new Map<string, Map<string, string>>();
+    for (const { table_name, column_name } of schemaCols) {
+      tableLiteral.set(table_name, `"${table_name}"`);
+      if (!colLiteral.has(table_name)) colLiteral.set(table_name, new Map());
+      colLiteral.get(table_name)!.set(column_name, `"${column_name}"`);
+    }
+    const tableIdentOf = (table: string): string => {
+      const lit = tableLiteral.get(table);
+      if (lit === undefined) throw new Error(`Backup references unknown table "${table}"`);
+      return lit;
+    };
+    const colIdentOf = (table: string, col: string): string => {
+      const lit = colLiteral.get(table)?.get(col);
+      if (lit === undefined) {
+        throw new Error(`Backup references unknown column "${col}" on table "${table}"`);
+      }
+      return lit;
+    };
+
     const { rows } = await client.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM "User"');
     const hasData = rows[0].n > 0;
     if (hasData && !opts.force) {
@@ -131,20 +163,21 @@ export async function importAllData(
     await client.query("SET session_replication_role = replica"); // disable FK checks during load
 
     if (hasData && opts.force) {
-      const names = tables.map((t) => `"${t.table}"`).join(", ");
+      const names = tables.map((t) => tableIdentOf(t.table)).join(", ");
       if (names) await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
     }
 
     let imported = 0;
     for (const { table, rows: tableRows } of tables) {
+      const tableIdent = tableIdentOf(table);
       for (const row of tableRows) {
         const cols = Object.keys(row);
         if (cols.length === 0) continue;
         const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-        const colList = cols.map((c) => `"${c}"`).join(",");
+        const colList = cols.map((c) => colIdentOf(table, c)).join(",");
         const values = cols.map((c) => row[c]);
         await client.query(
-          `INSERT INTO "${table}" (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+          `INSERT INTO ${tableIdent} (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
           values,
         );
         imported++;

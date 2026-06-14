@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
-import { ExportData, BackupData, AiConfigForm, PlaidConfigForm, ApiTokenForm } from "./SettingsForm";
+import { ExportData, BackupData, RestoreData, AiConfigForm, PlaidConfigForm, ApiTokenForm } from "./SettingsForm";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -81,13 +81,22 @@ export default async function SettingsPage() {
           private: it contains your bank access tokens.
         </p>
         <BackupData />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Restore from a backup</h2>
+        <p className="mb-3 text-sm text-muted">
+          Import a backup file to move an existing instance here - e.g. into a fresh Docker container
+          - with no data loss or reconfiguration. This is a full replace: it wipes this instance and
+          loads everything from the file, including your accounts, transactions, and Plaid keys, so
+          your linked banks keep working without re-linking. You&apos;ll be signed out afterward; log
+          back in with the account from the backup.
+        </p>
+        <RestoreData />
         <p className="mt-3 text-xs text-muted">
-          To restore: in a fresh copy of the app, run{" "}
-          <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:local</code> and{" "}
-          <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:push</code>, then{" "}
+          Prefer the command line? On the server you can still run{" "}
           <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:restore -- &lt;file&gt;</code>{" "}
-          pointing at this JSON. Your accounts and linked banks come back with no re-linking (it only
-          restores into an empty database).
+          against an empty database.
         </p>
       </section>
 
