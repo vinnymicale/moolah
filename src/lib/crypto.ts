@@ -1,17 +1,27 @@
-// Symmetric encryption for secrets stored in the database (AI API keys).
+// Symmetric encryption for secrets stored in the database (AI API keys, Plaid
+// access tokens).
 //
-// AES-256-GCM with a key derived from AUTH_SECRET, so self-hosters get
-// encryption at rest without managing a separate key. Values are stored as
-// "enc:v1:<iv>:<ciphertext+tag>" (base64); anything not in that format is
-// treated as legacy plaintext so existing rows keep working until re-saved.
+// AES-256-GCM with a key derived from ENCRYPTION_KEY (falling back to
+// AUTH_SECRET so existing single-secret deployments keep working). Values are
+// stored as "enc:v1:<iv>:<ciphertext+tag>" (base64); anything not in that
+// format is treated as legacy plaintext so existing rows keep working until
+// re-saved.
+//
+// IMPORTANT: the encryption key must stay stable. Rotating ENCRYPTION_KEY (or
+// AUTH_SECRET, when that's what's keying encryption) makes every previously
+// stored secret undecryptable - they'd have to be re-entered. Set a dedicated
+// ENCRYPTION_KEY so the session secret can be rotated independently of secrets
+// at rest.
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const PREFIX = "enc:v1:";
 
 function key(): Buffer {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) throw new Error("AUTH_SECRET must be set to encrypt stored secrets.");
+  const secret = process.env.ENCRYPTION_KEY || process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("ENCRYPTION_KEY or AUTH_SECRET must be set to encrypt stored secrets.");
+  }
   return createHash("sha256").update(secret).digest();
 }
 

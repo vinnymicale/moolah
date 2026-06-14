@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     }
 
     // First sync - pull all available transactions.
-    const syncResult = await syncPlaidItem(plaidItem.id);
+    const syncResult = await syncPlaidItem(plaidItem.id, session.user.id);
 
     return NextResponse.json({ ok: true, institutionName, ...syncResult });
   } catch (e: unknown) {

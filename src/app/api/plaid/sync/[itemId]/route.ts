@@ -17,7 +17,7 @@ export async function POST(
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   try {
-    const result = await syncPlaidItem(itemId);
+    const result = await syncPlaidItem(itemId, session.user.id);
     return NextResponse.json({ ok: true, ...result });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Sync failed";

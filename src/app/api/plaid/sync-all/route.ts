@@ -33,7 +33,7 @@ export async function POST() {
 
   for (const { id } of items) {
     try {
-      const r = await syncPlaidItem(id);
+      const r = await syncPlaidItem(id, session.user.id);
       synced++;
       totals.added += r.added;
       totals.modified += r.modified;
