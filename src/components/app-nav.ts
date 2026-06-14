@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
-  Settings, PiggyBank, Target, TrendingDown,
+  Settings, PiggyBank, Target, TrendingDown, Wallet,
 } from "lucide-react";
 
 export const NAV = [
@@ -8,6 +8,7 @@ export const NAV = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/transactions", label: "Transactions", icon: Receipt },
   { href: "/accounts", label: "Accounts", icon: Landmark },
+  { href: "/networth", label: "Net Worth", icon: Wallet },
   { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/goals", label: "Goals", icon: Target },

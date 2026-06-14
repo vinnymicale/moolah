@@ -11,6 +11,7 @@ import { parseISODay, isoDay } from "./dates";
 import { expandOccurrences } from "./recurrence";
 import { findTransferPairs, type MatchableTxn } from "./transfer-match";
 import { matchCategoryRule } from "./category-rules";
+import { captureNetWorthSnapshot } from "./snapshots";
 import { toCents } from "./money";
 import type { TxnType } from "@/generated/prisma/enums";
 
@@ -415,6 +416,13 @@ export async function syncPlaidItem(
       where: { id: plaidItemId },
       data: { cursor, lastSyncedAt: new Date(), error: null },
     });
+    // Record a net-worth snapshot now that balances are up to date. Non-fatal:
+    // a failed snapshot must not fail the sync.
+    try {
+      await captureNetWorthSnapshot(item.userId);
+    } catch {
+      /* ignore */
+    }
   }
 
   return result;

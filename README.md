@@ -32,10 +32,12 @@ Planned improvements, roughly in priority order:
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
 
-Recently shipped: [Docker support](#self-hosting-with-docker), the [read-only data
-API](#read-only-data-api), category splits (one charge across multiple categories), and
-[in-app backup restore](#backing-up-your-data-and-your-plaid-connections) (upload a full backup
-from Settings, not just the CLI).
+Recently shipped: the [Net Worth page](#accounts--insight) (automatic daily snapshots on every
+sync, a history chart, and a 12-month forecast with low-balance warnings), [Docker
+support](#self-hosting-with-docker), the [read-only data API](#read-only-data-api), category
+splits (one charge across multiple categories), and [in-app backup
+restore](#backing-up-your-data-and-your-plaid-connections) (upload a full backup from Settings,
+not just the CLI).
 
 Have a request? Open an issue on GitHub.
 
@@ -78,9 +80,15 @@ Have a request? Open an issue on GitHub.
   early-month spending.
 
 ### Accounts & insight
-- **Accounts & net worth** - assets vs. liabilities with a live net-worth total; manual balance
-  snapshots build net-worth history (great for retirement, vehicle, or property values). Any
-  account can be **excluded from net worth** while still being tracked (e.g. student loans).
+- **Accounts & net worth** - assets vs. liabilities with a live net-worth total. Any account can
+  be **excluded from net worth** while still being tracked (e.g. student loans).
+- **Net Worth page** - a dedicated history chart of assets, liabilities, and net worth over time
+  (3M / 1Y / All), with a year-to-date change callout. Balances are snapshotted automatically on
+  every account sync and carried forward across gap days, so the line reflects real changes
+  (including market moves), not just transaction activity. A dashed **12-month forecast** projects
+  net worth forward from your recurring income and expenses, and a banner warns when the
+  trajectory dips negative or drops sharply. Manual **Update balance** snapshots still feed the
+  same history (great for retirement, vehicle, or property values).
 - **Trends** - net worth over time, income vs. expenses, spending by category, budget vs. actual,
   and a category month-over-month comparison table.
 - **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
@@ -140,6 +148,9 @@ A tour of every page. _(Sample data - generated from the isolated `demo@example.
 
 **Accounts & net worth** - assets vs. liabilities with a live net-worth total and per-account balance history.
 ![Accounts & net worth](docs/screenshots/accounts.png)
+
+**Net Worth** - assets, liabilities, and net worth over time with range toggles, a year-to-date change callout, and a dashed 12-month forecast from your recurring cash flow.
+![Net Worth](docs/screenshots/networth.png)
 
 **Trends** - net worth over time, income vs. expenses, spending by category, budget vs. actual, and month-over-month comparison.
 ![Trends](docs/screenshots/trends.png)
@@ -249,7 +260,7 @@ curl -H "Authorization: Bearer moolah_…" http://localhost:3000/api/v1/summary
 | Endpoint | Returns |
 | --- | --- |
 | `GET /api/v1/summary` | Net worth, safe-to-transfer, current-month budget status, upcoming bills |
-| `GET /api/v1/net-worth` | Assets, liabilities, net, and per-account balances |
+| `GET /api/v1/net-worth` | Assets, liabilities, net, and per-account balances. Add `?range=3m\|1y\|all` for a daily history series and `?forecast=12` (1-24 months) for a net-worth projection |
 | `GET /api/v1/accounts` | All non-archived accounts with balances |
 | `GET /api/v1/budget` | Budget vs. actual per category (`?month=YYYY-MM` optional) |
 | `GET /api/v1/upcoming` | Bills/income in the next N days (`?days=14`, 1-90) |
@@ -415,13 +426,14 @@ prisma/            schema.prisma, migrations, seed.ts
 scripts/           setup.ts (first-run schema), local-db.ts (embedded Postgres runner)
 src/
   app/(auth)/      sign-in
-  app/(app)/       dashboard, calendar, transactions, accounts, recurring,
-                   budgets, goals, debt, categories, trends, settings
+  app/(app)/       dashboard, calendar, transactions, accounts, networth,
+                   recurring, budgets, goals, debt, categories, trends, settings
   app/api/         plaid (link/exchange/sync/recategorize), export (CSV),
                    backup (download/import), v1 (read-only API), chat (AI assistant), health
   actions/         server actions (mutations)
   lib/             prisma, auth/session, money, dates, recurrence, projection,
                    calendar, reports, queries, plaid-sync, debt-payoff, milestones,
+                   snapshots (net-worth history), networth-forecast,
                    backup (full export/restore), crypto (secret encryption), api-auth (token auth)
   components/      AppChrome, CommandPalette, MultiSelect, TransactionModal,
                    Modal, charts, icons
