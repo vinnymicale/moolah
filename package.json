@@ -25,6 +25,7 @@
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/export-data.ts",
     "db:restore": "tsx scripts/import-data.ts",
+    "db:snapshot-backfill": "tsx scripts/backfill-snapshots.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

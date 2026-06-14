@@ -182,7 +182,9 @@ model AccountSnapshot {
   note      String?
   createdAt DateTime         @default(now())
 
-  @@index([accountId, date])
+  // At most one snapshot per account per day so the daily net-worth capture is
+  // idempotent (re-running a sync overwrites the day rather than stacking rows).
+  @@unique([accountId, date])
 }
 
 model Category {

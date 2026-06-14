@@ -18,13 +18,19 @@ vi.mock("@/lib/queries", () => ({
 }));
 vi.mock("@/lib/calendar", () => ({ getUpcoming: vi.fn() }));
 vi.mock("@/lib/user-tz", () => ({ todayInZone: vi.fn(() => "2026-06-13") }));
+vi.mock("@/lib/snapshots", () => ({ getNetWorthHistory: vi.fn() }));
+vi.mock("@/lib/networth-forecast", () => ({ forecastNetWorth: vi.fn() }));
 
 import { requireApiUser } from "./_auth";
 import { getNetWorth, getSafeToTransfer, getBudgetMonth, getAccounts } from "@/lib/queries";
 import { getUpcoming } from "@/lib/calendar";
+import { getNetWorthHistory } from "@/lib/snapshots";
+import { forecastNetWorth } from "@/lib/networth-forecast";
 
 const auth = vi.mocked(requireApiUser);
 const netWorth = vi.mocked(getNetWorth);
+const history = vi.mocked(getNetWorthHistory);
+const forecast = vi.mocked(forecastNetWorth);
 const safe = vi.mocked(getSafeToTransfer);
 const budget = vi.mocked(getBudgetMonth);
 const accounts = vi.mocked(getAccounts);
@@ -61,6 +67,7 @@ describe("GET /api/v1/net-worth", () => {
     const body = await (await GET(req())).json();
 
     expect(body).toEqual({
+      asOf: "2026-06-13",
       assets: 1000,
       liabilities: 250,
       net: 750,
@@ -68,6 +75,27 @@ describe("GET /api/v1/net-worth", () => {
         { id: "a1", name: "Checking", type: "CHECKING", balance: 1000, isAsset: true, includeInNetWorth: true },
       ],
     });
+    // No range/forecast params -> neither optional series is included or queried.
+    expect(body.history).toBeUndefined();
+    expect(body.forecast).toBeUndefined();
+    expect(history).not.toHaveBeenCalled();
+    expect(forecast).not.toHaveBeenCalled();
+  });
+
+  it("includes history and forecast when range and forecast params are given", async () => {
+    netWorth.mockResolvedValue({
+      assets: 1000, liabilities: 250, net: 750, accounts: [],
+    } as unknown as Awaited<ReturnType<typeof getNetWorth>>);
+    history.mockResolvedValue([{ date: "2026-06-13", assets: 1000, liabilities: 250, net: 750 }]);
+    forecast.mockResolvedValue([{ date: "2026-07-13", net: 800 }]);
+
+    const { GET } = await import("./net-worth/route");
+    const body = await (await GET(req("http://localhost/api/v1/net-worth?range=1y&forecast=6"))).json();
+
+    expect(history).toHaveBeenCalledWith("u1", 366, "2026-06-13");
+    expect(forecast).toHaveBeenCalledWith("u1", 750, 6, "2026-06-13");
+    expect(body.history).toEqual([{ date: "2026-06-13", assets: 1000, liabilities: 250, net: 750 }]);
+    expect(body.forecast).toEqual([{ date: "2026-07-13", net: 800 }]);
   });
 });
 

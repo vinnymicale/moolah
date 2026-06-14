@@ -55,6 +55,7 @@ async function main() {
   await shot(page, "/goals", "goals.png");
   await shot(page, "/debt", "debt.png");
   await shot(page, "/accounts", "accounts.png");
+  await shot(page, "/networth", "networth.png");
   await shot(page, "/trends", "trends.png");
   await shot(page, "/categories", "categories.png");
   await shot(page, "/settings", "settings.png");
