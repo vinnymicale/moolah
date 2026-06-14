@@ -6,6 +6,7 @@ import {
   addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth,
 } from "@/lib/dates";
 import { getAccounts, getSnapshots, type AccountDTO, type SnapshotDTO } from "@/lib/queries";
+import { categoryParts, type SplitLike } from "@/lib/splits";
 
 export interface NetWorthPoint { label: string; value: number; }
 export interface IncomeExpensePoint { label: string; income: number; expense: number; net: number; }
@@ -32,6 +33,8 @@ export interface ReportTxn {
   amount: number;
   date: string; // ISO day
   categoryId: string | null;
+  /** Per-category split parts. Empty/absent when the transaction has a single category. */
+  splits?: SplitLike[] | null;
 }
 
 /** A budget reduced to the fields the reports need. */
@@ -62,7 +65,7 @@ export async function computeReports(userId: string, todayISO: string): Promise<
     prisma.category.findMany({ where: { userId } }),
     prisma.transaction.findMany({
       where: { userId, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
-      select: { type: true, amount: true, date: true, categoryId: true },
+      select: { type: true, amount: true, date: true, categoryId: true, splits: { select: { categoryId: true, amount: true } } },
     }),
     prisma.budget.findMany({ where: { userId, month: monthStart } }),
   ]);
@@ -72,7 +75,13 @@ export async function computeReports(userId: string, todayISO: string): Promise<
     accounts,
     snapshots,
     categories,
-    txns: txnRows.map((t) => ({ type: t.type, amount: toNumber(t.amount), date: isoDay(t.date), categoryId: t.categoryId })),
+    txns: txnRows.map((t) => ({
+      type: t.type,
+      amount: toNumber(t.amount),
+      date: isoDay(t.date),
+      categoryId: t.categoryId,
+      splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
+    })),
     budgets: budgetRows.map((b) => ({ categoryId: b.categoryId, limit: toNumber(b.limit) })),
   });
 }
@@ -151,11 +160,15 @@ export function aggregateReports({ todayISO, accounts, snapshots, categories, tx
     if (key === currentMonthKey) {
       if (t.type === "INCOME") { monthIncome += amt; continue; }
       monthExpense += amt;
-      const catKey = t.categoryId ?? "uncategorized";
-      catTotals.set(catKey, (catTotals.get(catKey) ?? 0) + amt);
+      for (const part of categoryParts(t)) {
+        const catKey = part.categoryId ?? "uncategorized";
+        catTotals.set(catKey, (catTotals.get(catKey) ?? 0) + part.amount);
+      }
     } else if (key === lastMonthKey && t.type === "EXPENSE") {
-      const catKey = t.categoryId ?? "uncategorized";
-      catTotalsLastMonth.set(catKey, (catTotalsLastMonth.get(catKey) ?? 0) + amt);
+      for (const part of categoryParts(t)) {
+        const catKey = part.categoryId ?? "uncategorized";
+        catTotalsLastMonth.set(catKey, (catTotalsLastMonth.get(catKey) ?? 0) + part.amount);
+      }
     }
   }
 

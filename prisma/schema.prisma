@@ -195,6 +195,7 @@ model Category {
   recurring    RecurringRule[]
   budgets      Budget[]
   rules        CategoryRule[]
+  splits       TransactionSplit[]
 
   @@index([userId])
 }
@@ -250,11 +251,33 @@ model Transaction {
   transferPeer    Transaction?  @relation("TransferPair", fields: [transferPeerId], references: [id], onDelete: SetNull)
   transferPeerOf  Transaction?  @relation("TransferPair")
 
+  // Category splits: when a single charge covers multiple categories (e.g. a
+  // Costco run that's part groceries, part household). When any splits exist,
+  // categoryId is null and the splits carry the per-category attribution; their
+  // amounts sum to `amount`. No splits = the single categoryId applies.
+  splits          TransactionSplit[]
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([userId, date])
   @@index([accountId])
+  @@index([categoryId])
+}
+
+// One slice of a split transaction: part of the parent's amount attributed to a
+// category. Present only for transactions the user chose to split.
+model TransactionSplit {
+  id            String       @id @default(cuid())
+  transactionId String
+  transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  categoryId    String?
+  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  amount        Decimal      @db.Decimal(14, 2)
+
+  @@index([transactionId])
   @@index([categoryId])
 }
 
