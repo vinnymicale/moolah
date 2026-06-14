@@ -28,8 +28,8 @@ export function DemoWelcomeModal({ initialPath }: { initialPath: string }) {
     <Modal open={open} onClose={() => setDismissed(true)} title="Welcome to the Moolah demo" widthClass="max-w-md">
       <div className="space-y-4 text-sm text-muted">
         <p>
-          You&apos;re looking at a live demo. Feel free to click around - changes
-          are local only and reset on refresh.
+          You&apos;re looking at a live demo. Click around freely - nothing you
+          do is saved, and a refresh starts you over.
         </p>
         <p>
           Moolah is open source. Check out the project, the setup instructions,
