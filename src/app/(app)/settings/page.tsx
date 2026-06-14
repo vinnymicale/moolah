@@ -36,7 +36,7 @@ export default async function SettingsPage() {
         plaidClientId: true,
         plaidSecret: true,
         plaidEnv: true,
-        apiTokenHash: true,
+        apiTokenSelector: true,
         apiTokenCreatedAt: true,
       },
     }),
@@ -110,7 +110,7 @@ export default async function SettingsPage() {
           budget status, and upcoming bills over your network. The token grants read-only access.
         </p>
         <ApiTokenForm
-          hasToken={!!user.apiTokenHash}
+          hasToken={!!user.apiTokenSelector}
           createdAt={user.apiTokenCreatedAt ? user.apiTokenCreatedAt.toISOString() : null}
         />
       </section>

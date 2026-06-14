@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   generateApiToken,
-  hashApiToken,
+  parseApiToken,
+  hashApiTokenVerifier,
+  verifyApiTokenVerifier,
+  rateLimitKeyForToken,
   bearerFromHeader,
   authenticateApiRequest,
 } from "./api-auth";
@@ -13,17 +16,14 @@ vi.mock("@/lib/prisma", () => ({
 
 const findUnique = vi.mocked(prisma.user.findUnique);
 
-// hashApiToken keys its HMAC with the app secret, so the tests need one set.
-beforeEach(() => {
-  process.env.AUTH_SECRET = "test-secret-for-unit-tests";
-});
-
 describe("generateApiToken", () => {
-  it("produces a prefixed, high-entropy token", () => {
+  it("produces a prefixed selector.verifier token", () => {
     const t = generateApiToken();
     expect(t.startsWith("moolah_")).toBe(true);
-    // base64url of 24 bytes is 32 chars, plus the prefix.
-    expect(t.length).toBeGreaterThan(30);
+    const parsed = parseApiToken(t);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.selector.length).toBeGreaterThan(0);
+    expect(parsed!.verifier.length).toBeGreaterThan(0);
   });
 
   it("produces a different token each call", () => {
@@ -31,19 +31,53 @@ describe("generateApiToken", () => {
   });
 });
 
-describe("hashApiToken", () => {
-  it("is deterministic for the same input", () => {
-    const t = generateApiToken();
-    expect(hashApiToken(t)).toBe(hashApiToken(t));
+describe("parseApiToken", () => {
+  it("splits a well-formed token", () => {
+    expect(parseApiToken("moolah_sel.ver")).toEqual({ selector: "sel", verifier: "ver" });
   });
 
-  it("is a 64-char hex HMAC-SHA256 digest", () => {
-    expect(hashApiToken("anything")).toMatch(/^[0-9a-f]{64}$/);
+  it("returns null for a missing prefix, dot, or empty half", () => {
+    expect(parseApiToken("sel.ver")).toBeNull();
+    expect(parseApiToken("moolah_selver")).toBeNull();
+    expect(parseApiToken("moolah_.ver")).toBeNull();
+    expect(parseApiToken("moolah_sel.")).toBeNull();
+  });
+});
+
+describe("hashApiTokenVerifier / verifyApiTokenVerifier", () => {
+  it("verifies a verifier against its own hash", () => {
+    const hash = hashApiTokenVerifier("secret-verifier");
+    expect(verifyApiTokenVerifier("secret-verifier", hash)).toBe(true);
   });
 
-  it("never returns the raw token", () => {
+  it("rejects the wrong verifier", () => {
+    const hash = hashApiTokenVerifier("secret-verifier");
+    expect(verifyApiTokenVerifier("not-it", hash)).toBe(false);
+  });
+
+  it("salts each hash, so the same input hashes differently", () => {
+    expect(hashApiTokenVerifier("x")).not.toBe(hashApiTokenVerifier("x"));
+  });
+
+  it("stores salt:derivedKey hex and never the raw verifier", () => {
+    const hash = hashApiTokenVerifier("secret-verifier");
+    expect(hash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+    expect(hash).not.toContain("secret-verifier");
+  });
+
+  it("rejects a malformed stored hash", () => {
+    expect(verifyApiTokenVerifier("x", "garbage")).toBe(false);
+  });
+});
+
+describe("rateLimitKeyForToken", () => {
+  it("returns the selector for a valid token", () => {
     const t = generateApiToken();
-    expect(hashApiToken(t)).not.toContain(t);
+    expect(rateLimitKeyForToken(t)).toBe(parseApiToken(t)!.selector);
+  });
+
+  it("returns null for a malformed token", () => {
+    expect(rateLimitKeyForToken("nope")).toBeNull();
   });
 });
 
@@ -73,20 +107,37 @@ describe("authenticateApiRequest", () => {
 
   it("returns the user for a valid token", async () => {
     const token = generateApiToken();
-    const hash = hashApiToken(token);
-    findUnique.mockResolvedValue({ id: "u1" } as never);
+    const { selector, verifier } = parseApiToken(token)!;
+    findUnique.mockResolvedValue({
+      id: "u1",
+      apiTokenVerifierHash: hashApiTokenVerifier(verifier),
+    } as never);
 
     const result = await authenticateApiRequest(`Bearer ${token}`);
     expect(result).toEqual({ userId: "u1" });
-    // Looked up by the hash, never the raw token.
+    // Looked up by the non-secret selector, never the raw token.
     expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { apiTokenHash: hash } }),
+      expect.objectContaining({ where: { apiTokenSelector: selector } }),
     );
   });
 
-  it("returns null when no user matches the token", async () => {
+  it("returns null when the verifier doesn't match the stored hash", async () => {
+    const token = generateApiToken();
+    findUnique.mockResolvedValue({
+      id: "u1",
+      apiTokenVerifierHash: hashApiTokenVerifier("a-different-verifier"),
+    } as never);
+    expect(await authenticateApiRequest(`Bearer ${token}`)).toBeNull();
+  });
+
+  it("returns null when no user matches the selector", async () => {
     findUnique.mockResolvedValue(null);
     expect(await authenticateApiRequest(`Bearer ${generateApiToken()}`)).toBeNull();
+  });
+
+  it("returns null for a malformed token without hitting the DB", async () => {
+    expect(await authenticateApiRequest("Bearer not-a-real-token")).toBeNull();
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it("returns null when the header is missing", async () => {

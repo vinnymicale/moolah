@@ -34,11 +34,14 @@ model User {
   plaidSecret   String?
   plaidEnv      String?   // "sandbox" | "production"
 
-  // Read-only data API token. We store only a SHA-256 hash of the random token
-  // (shown once at generation); the raw value is never persisted. Null when the
-  // user hasn't generated one. apiTokenCreatedAt aids display/rotation.
-  apiTokenHash      String?   @unique
-  apiTokenCreatedAt DateTime?
+  // Read-only data API token, stored as a selector/verifier pair (shown once at
+  // generation; the raw value is never persisted). The selector is a non-secret
+  // random id used for an O(1) indexed lookup; the verifier half is kept as a
+  // slow (scrypt) hash so a DB dump can't be brute-forced back to a token. Both
+  // null when the user hasn't generated one. apiTokenCreatedAt aids rotation.
+  apiTokenSelector     String?   @unique
+  apiTokenVerifierHash String?
+  apiTokenCreatedAt    DateTime?
 
   accounts          Account[] // OAuth accounts (Auth.js)
   sessions          Session[]

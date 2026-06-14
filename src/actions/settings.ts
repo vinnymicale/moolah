@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/demo-guard";
 import { encryptSecret } from "@/lib/crypto";
-import { generateApiToken, hashApiToken } from "@/lib/api-auth";
+import { generateApiToken, parseApiToken, hashApiTokenVerifier } from "@/lib/api-auth";
 
 export async function updateAiConfigAction(provider: string, apiKey: string) {
   if (isDemoMode()) return { ok: true as const };
@@ -69,16 +69,23 @@ export async function clearAiConfigAction() {
 
 /**
  * Generate (or regenerate) the read-only API token. Returns the raw token once;
- * only its hash is stored. Regenerating invalidates any previous token.
+ * only its selector and a slow hash of its verifier are stored. Regenerating
+ * invalidates any previous token.
  */
 export async function generateApiTokenAction() {
   if (isDemoMode()) return { ok: false as const, error: "Not available in demo mode." };
   const session = await auth();
   if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
   const token = generateApiToken();
+  const parsed = parseApiToken(token);
+  if (!parsed) return { ok: false as const, error: "Failed to generate token." };
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { apiTokenHash: hashApiToken(token), apiTokenCreatedAt: new Date() },
+    data: {
+      apiTokenSelector: parsed.selector,
+      apiTokenVerifierHash: hashApiTokenVerifier(parsed.verifier),
+      apiTokenCreatedAt: new Date(),
+    },
   });
   revalidatePath("/settings");
   return { ok: true as const, token };
@@ -90,7 +97,7 @@ export async function revokeApiTokenAction() {
   if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { apiTokenHash: null, apiTokenCreatedAt: null },
+    data: { apiTokenSelector: null, apiTokenVerifierHash: null, apiTokenCreatedAt: null },
   });
   revalidatePath("/settings");
   return { ok: true as const };

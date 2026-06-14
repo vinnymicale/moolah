@@ -3,7 +3,7 @@
 // an error NextResponse to return as-is.
 
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateApiRequest, hashApiToken, bearerFromHeader } from "@/lib/api-auth";
+import { authenticateApiRequest, rateLimitKeyForToken, bearerFromHeader } from "@/lib/api-auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const RATE_MAX = 60; // requests
@@ -21,8 +21,9 @@ export async function requireApiUser(req: NextRequest): Promise<AuthOutcome> {
   // limiter's job is to blunt accidental loops and casual probing, and any
   // request without a valid token gets a 401 regardless.
   const raw = bearerFromHeader(authHeader);
+  const selector = raw ? rateLimitKeyForToken(raw) : null;
   const fwd = req.headers.get("x-forwarded-for")?.split(",")[0].trim();
-  const rlKey = raw ? `apiv1:${hashApiToken(raw)}` : `apiv1:anon:${fwd || "local"}`;
+  const rlKey = selector ? `apiv1:${selector}` : `apiv1:anon:${fwd || "local"}`;
   const rl = checkRateLimit(rlKey, RATE_MAX, RATE_WINDOW_MS);
   if (!rl.allowed) {
     return {
