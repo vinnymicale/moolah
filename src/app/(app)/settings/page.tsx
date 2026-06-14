@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
-import { ExportData, BackupData, AiConfigForm, PlaidConfigForm } from "./SettingsForm";
+import { ExportData, BackupData, AiConfigForm, PlaidConfigForm, ApiTokenForm } from "./SettingsForm";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -36,6 +36,8 @@ export default async function SettingsPage() {
         plaidClientId: true,
         plaidSecret: true,
         plaidEnv: true,
+        apiTokenHash: true,
+        apiTokenCreatedAt: true,
       },
     }),
     getAccounts(userId),
@@ -98,6 +100,18 @@ export default async function SettingsPage() {
         <AiConfigForm
           currentProvider={user.aiProvider}
           hasKey={!!user.aiApiKey}
+        />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Read-only API access</h2>
+        <p className="mb-3 text-sm text-muted">
+          Generate a personal token so external tools like Home Assistant can read your net worth,
+          budget status, and upcoming bills over your network. The token grants read-only access.
+        </p>
+        <ApiTokenForm
+          hasToken={!!user.apiTokenHash}
+          createdAt={user.apiTokenCreatedAt ? user.apiTokenCreatedAt.toISOString() : null}
         />
       </section>
     </div>

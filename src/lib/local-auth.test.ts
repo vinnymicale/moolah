@@ -42,6 +42,8 @@ function userRow(passwordHash: string | null) {
     plaidClientId: null,
     plaidSecret: null,
     plaidEnv: null,
+    apiTokenHash: null,
+    apiTokenCreatedAt: null,
   };
 }
 
