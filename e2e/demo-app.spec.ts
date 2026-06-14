@@ -56,10 +56,12 @@ test.describe("navigation", () => {
   }
 });
 
+// These exercise global chrome (search, theme, shortcuts) that's present on every
+// page, so they start from /transactions where the dashboard welcome modal never
+// mounts - no overlay to dismiss, no double-modal focus contention.
 test.describe("chrome interactions", () => {
   test("command palette opens with the keyboard shortcut", async ({ page }) => {
-    await page.goto("/");
-    await dismissWelcome(page);
+    await page.goto("/transactions");
     await page.keyboard.press("ControlOrMeta+k");
     await expect(page.getByPlaceholder(/Search all transactions/)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -67,8 +69,7 @@ test.describe("chrome interactions", () => {
   });
 
   test("theme toggle flips dark mode", async ({ page }) => {
-    await page.goto("/");
-    await dismissWelcome(page);
+    await page.goto("/transactions");
     const wasDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
     await page.getByRole("button", { name: "Toggle theme" }).click();
     await expect
@@ -77,8 +78,7 @@ test.describe("chrome interactions", () => {
   });
 
   test("keyboard shortcuts modal opens from the sidebar", async ({ page }) => {
-    await page.goto("/");
-    await dismissWelcome(page);
+    await page.goto("/transactions");
     await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
     await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
   });
@@ -100,8 +100,7 @@ test.describe("demo-mode guards", () => {
 
 test.describe("transaction modal", () => {
   test("opens from the sidebar and accepts a local-only entry", async ({ page }) => {
-    await page.goto("/");
-    await dismissWelcome(page);
+    await page.goto("/transactions");
     await page.getByRole("button", { name: "Add transaction" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
   });
