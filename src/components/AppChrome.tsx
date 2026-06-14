@@ -7,6 +7,7 @@ import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsModal } from "./ShortcutsModal";
+import { DemoWelcomeModal } from "./DemoWelcomeModal";
 import { ChatPanel } from "./ChatPanel";
 import { Sidebar } from "./Sidebar";
 import {
@@ -32,6 +33,10 @@ export function AppChrome({
   demoMode?: boolean;
 }) {
   const pathname = usePathname();
+  // The route the browser actually loaded, captured once at mount. A full reload
+  // remounts AppChrome and re-snapshots this; client-side navigation doesn't.
+  // The demo welcome modal keys off it so it only shows on a fresh dashboard load.
+  const [initialPath] = useState(pathname);
   const [navOpen, setNavOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -229,6 +234,7 @@ export function AppChrome({
       />
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      {demoMode && <DemoWelcomeModal initialPath={initialPath} />}
       {!demoMode && <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />}
 
       {/* Floating chat button — hidden in demo mode */}
