@@ -127,18 +127,28 @@ export async function importAllData(
     const { rows: schemaCols } = await client.query<{ table_name: string; column_name: string }>(
       "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'",
     );
-    const allowedCols = new Map<string, Set<string>>();
+    // Map each known identifier to its already-quoted, schema-derived literal.
+    // ident() looks the payload's name up here and returns the *stored* string,
+    // so the text that reaches the SQL below originates from the database, never
+    // from the uploaded file - no untrusted value is ever interpolated.
+    const tableLiteral = new Map<string, string>();
+    const colLiteral = new Map<string, Map<string, string>>();
     for (const { table_name, column_name } of schemaCols) {
-      if (!allowedCols.has(table_name)) allowedCols.set(table_name, new Set());
-      allowedCols.get(table_name)!.add(column_name);
+      tableLiteral.set(table_name, `"${table_name}"`);
+      if (!colLiteral.has(table_name)) colLiteral.set(table_name, new Map());
+      colLiteral.get(table_name)!.set(column_name, `"${column_name}"`);
     }
-    const ident = (table: string, col?: string): string => {
-      const cols = allowedCols.get(table);
-      if (!cols) throw new Error(`Backup references unknown table "${table}"`);
-      if (col !== undefined && !cols.has(col)) {
+    const tableIdentOf = (table: string): string => {
+      const lit = tableLiteral.get(table);
+      if (lit === undefined) throw new Error(`Backup references unknown table "${table}"`);
+      return lit;
+    };
+    const colIdentOf = (table: string, col: string): string => {
+      const lit = colLiteral.get(table)?.get(col);
+      if (lit === undefined) {
         throw new Error(`Backup references unknown column "${col}" on table "${table}"`);
       }
-      return col === undefined ? `"${table}"` : `"${col}"`;
+      return lit;
     };
 
     const { rows } = await client.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM "User"');
@@ -153,18 +163,18 @@ export async function importAllData(
     await client.query("SET session_replication_role = replica"); // disable FK checks during load
 
     if (hasData && opts.force) {
-      const names = tables.map((t) => ident(t.table)).join(", ");
+      const names = tables.map((t) => tableIdentOf(t.table)).join(", ");
       if (names) await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
     }
 
     let imported = 0;
     for (const { table, rows: tableRows } of tables) {
-      const tableIdent = ident(table);
+      const tableIdent = tableIdentOf(table);
       for (const row of tableRows) {
         const cols = Object.keys(row);
         if (cols.length === 0) continue;
         const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-        const colList = cols.map((c) => ident(table, c)).join(",");
+        const colList = cols.map((c) => colIdentOf(table, c)).join(",");
         const values = cols.map((c) => row[c]);
         await client.query(
           `INSERT INTO ${tableIdent} (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
