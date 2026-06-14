@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Sparkles, ChevronDown, CheckCircle2, Loader2, Info, ArrowRight } from "lucide-react";
 import { contributeGoalAction } from "@/actions/goals";
 import { formatUSD } from "@/lib/money";
+import { localMonthEndLabel } from "@/lib/dates";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { usePersistentState } from "@/lib/usePersistentState";
 import type { SafeTransferDTO, SavingsGoalDTO } from "@/lib/queries";
@@ -133,7 +134,7 @@ export function SafeTransferCard({
                 />
               </div>
               <p className="mt-1 text-[11px] leading-snug">
-                Recurring rules scheduled between today and {monthEndLabel()}, plus any
+                Recurring rules scheduled between today and {localMonthEndLabel()}, plus any
                 uncleared one-off expenses you&apos;ve already entered.
               </p>
             </div>
@@ -304,13 +305,6 @@ function BalanceShift({
       </span>
     </div>
   );
-}
-
-// Last day of the current month, e.g. "Jun 30".
-function monthEndLabel(): string {
-  const d = new Date();
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function Row({

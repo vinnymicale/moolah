@@ -22,6 +22,23 @@ export function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * "YYYY-MM-DD" for today in the *local* zone. For client-side form defaults
+ * where the user expects their own calendar day, not UTC. Server code wanting
+ * the user's day should use userTodayISO() (reads the tz cookie) instead.
+ */
+export function localTodayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Last day of the current local-zone month, e.g. "Jun 30". Client-side label. */
+export function localMonthEndLabel(): string {
+  const d = new Date();
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function addUTCDays(d: Date, n: number): Date {
   const r = new Date(d);
   r.setUTCDate(r.getUTCDate() + n);
