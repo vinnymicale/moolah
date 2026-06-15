@@ -249,31 +249,42 @@ have to build locally: `ghcr.io/vinnymicale/moolah:latest`.
 
 ### Unraid
 
-Use the bundled template so every field is pre-filled — Docker tab → **Add Container**,
-then paste this into **Template**:
+Use the bundled template so every field — image, WebUI link, port, and all variables — is
+pre-filled. The **Add Container** page's "Template" dropdown only lists templates Unraid already
+has on disk, so first drop the template file where it looks for them. On the Unraid box
+(**Tools → Web Terminal**):
 
+```bash
+wget -O /boot/config/plugins/dockerMan/templates-user/my-Moolah.xml \
+  https://raw.githubusercontent.com/vinnymicale/moolah/master/unraid-template.xml
 ```
-https://raw.githubusercontent.com/vinnymicale/moolah/master/unraid-template.xml
+
+Then **Docker → Add Container**, open the **Template** dropdown, and pick **my-Moolah** (under
+"User templates"). Every field populates. Set the three values that have no usable default
+(`DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` — see the table below), leave the rest, and click
+**Apply**. The app applies migrations on start, so an empty database is initialized
+automatically. Open the container's **WebUI** link, or `http://<unraid-ip>:<port>`.
+
+Before first launch, create the database in your Postgres container:
+
+```sql
+CREATE USER moolah WITH PASSWORD 'moolah';
+CREATE DATABASE moolah OWNER moolah;
 ```
 
-It sets the image, the WebUI link, the port, and all variables. You only edit two:
+#### Environment variables
 
-- **`DATABASE_URL`** — Moolah has no bundled database on Unraid; point this at your own
-  Postgres container. On the default `bridge` network use the **Unraid host IP + the
-  published Postgres port** (container-name DNS only works on a shared custom network),
-  e.g. `postgresql://moolah:moolah@192.168.1.10:5432/moolah`. Create the database first:
-  ```sql
-  CREATE USER moolah WITH PASSWORD 'moolah';
-  CREATE DATABASE moolah OWNER moolah;
-  ```
-- **`AUTH_SECRET`** — generate with `openssl rand -base64 33`.
-- **`AUTH_URL`** — set to the URL you reach the app at (e.g. `http://192.168.1.10:5555`).
-  This pins post-login redirects so they don't bounce to the container's internal hostname.
-
-Leave **`AUTH_BYPASS=false`**: the no-password auto sign-in only works over localhost, so a
-LAN-reachable container must use a password (you set one on first load). The app applies
-migrations on start, so the empty database is initialized automatically. Open the container's
-**WebUI** link, or `http://<unraid-ip>:<port>`.
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | **yes** | — | Connection string to your Postgres. On the default `bridge` network use the **Unraid host IP + published Postgres port** (container-name DNS only works on a shared custom network), e.g. `postgresql://moolah:moolah@192.168.1.10:5432/moolah`. |
+| `AUTH_SECRET` | **yes** | — | Signs session tokens. Generate with `openssl rand -base64 33`. Keep it stable across updates, or existing logins are invalidated. |
+| `AUTH_URL` | **yes** | — | The URL you reach the app at, e.g. `http://192.168.1.10:5555`. Pins post-login redirects so they don't bounce to the container's internal hostname. |
+| `AUTH_BYPASS` | no | `false` | Leave `false`. The no-password auto sign-in only works over localhost, so a LAN-reachable container must use a password (you set one on first load). |
+| `AUTH_TRUST_HOST` | no | `true` | Lets Auth.js trust the proxy/host header. Leave as-is unless you front the app with something that rewrites it. |
+| `DEMO_MODE` | no | `false` | `true` serves a seeded read-only sample dataset. Leave `false` for a real instance. |
+| `PLAID_CLIENT_ID` | no | — | Only if you want automatic bank sync. From your Plaid dashboard. |
+| `PLAID_SECRET` | no | — | Plaid API secret (matches `PLAID_ENV`). |
+| `PLAID_ENV` | no | `sandbox` | `sandbox`, `development`, or `production`. Set `production` for real bank data. |
 
 ---
 
