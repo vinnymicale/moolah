@@ -55,6 +55,18 @@ else
   log "build up to date — skipping."
 fi
 
-# 5) Web server in the foreground (this process tree is what stop.sh kills).
+# 5) Stage static assets into the standalone bundle. Next's `output: standalone`
+#    emits .next/standalone/server.js but does NOT copy .next/static or public/
+#    next to it; we have to do that ourselves or every chunk 404s.
+log "staging standalone assets…"
+mkdir -p .next/standalone/.next
+cp -r .next/static .next/standalone/.next/static
+[ -d public ] && cp -r public .next/standalone/public
+
+# 6) Web server in the foreground (this process tree is what stop.sh kills).
+#    Must run the standalone entrypoint, not `next start`, which is incompatible
+#    with output: standalone and renders a broken server. server.js binds to
+#    HOSTNAME, which defaults to 0.0.0.0 — pin it to localhost so post-login
+#    redirects don't send the browser to http://0.0.0.0:3000 (ERR_ADDRESS_INVALID).
 log "starting web server…"
-exec npm run start
+exec env HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js
