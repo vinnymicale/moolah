@@ -32,12 +32,10 @@ Planned improvements, roughly in priority order:
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
 
-Recently shipped: the [Net Worth page](#accounts--insight) (automatic daily snapshots on every
-sync, a history chart, and a 12-month forecast with low-balance warnings), [Docker
-support](#self-hosting-with-docker), the [read-only data API](#read-only-data-api), category
-splits (one charge across multiple categories), and [in-app backup
-restore](#backing-up-your-data-and-your-plaid-connections) (upload a full backup from Settings,
-not just the CLI).
+Recently shipped: the Net Worth page (automatic daily snapshots, a history chart, and a 12-month
+forecast), [Docker support](#self-hosting-with-docker), the [read-only data
+API](#read-only-data-api), category splits, and [in-app backup
+restore](#backing-up-your-data-and-your-plaid-connections).
 
 Have a request? Open an issue on GitHub.
 
@@ -120,57 +118,43 @@ Have a request? Open an issue on GitHub.
 
 ## Screenshots
 
-A tour of every page. _(Sample data - generated from the isolated `demo@example.com` account.)_
+A tour of the pages. _(Sample data - generated from the isolated `demo@example.com` account.)_
 
-### Money in & out
-
-**Monthly calendar** - each day shows its income/expense events and a projected end-of-day cash balance.
+**Calendar**
 ![Calendar](docs/screenshots/calendar.png)
 
-**Transactions** - search, multi-select filters (type, status, category, account), date ranges, and CSV export.
+**Transactions**
 ![Transactions](docs/screenshots/transactions.png)
 
-**Recurring** - paychecks, bills, and subscriptions that repeat automatically on the calendar.
+**Recurring**
 ![Recurring](docs/screenshots/recurring.png)
 
-### Planning
-
-**Budgets** - set a monthly limit per category and track spent-vs-remaining, with copy-from-last-month.
+**Budgets**
 ![Budgets](docs/screenshots/budgets.png)
 
-**Savings goals** - track progress toward targets (emergency fund, vacation, down payment) with contributions and target dates.
+**Savings goals**
 ![Savings goals](docs/screenshots/goals.png)
 
-**Debt payoff** - model **avalanche** or **snowball**, add an extra payment, and see your debt-free date, total interest, a balance-over-time chart, and per-debt payoff order.
+**Debt payoff**
 ![Debt payoff](docs/screenshots/debt.png)
 
-### Accounts & insight
-
-**Accounts & net worth** - assets vs. liabilities with a live net-worth total and per-account balance history.
+**Accounts & net worth**
 ![Accounts & net worth](docs/screenshots/accounts.png)
 
-**Net Worth** - assets, liabilities, and net worth over time with range toggles, a year-to-date change callout, and a dashed 12-month forecast from your recurring cash flow.
+**Net Worth**
 ![Net Worth](docs/screenshots/networth.png)
 
-**Trends** - net worth over time, income vs. expenses, spending by category, budget vs. actual, and month-over-month comparison.
+**Trends**
 ![Trends](docs/screenshots/trends.png)
 
-### Dark mode
-
-A built-in **dark theme** (toggle in the sidebar) carries across every page.
-![Dashboard in dark mode](docs/screenshots/dashboard-dark.png)
-
-### Setup & organization
-
-**Categories** - organize how you classify income and spending, each with its own icon and color.
+**Categories**
 ![Categories](docs/screenshots/categories.png)
 
-**Settings** - export data as CSV, download or restore a full backup, generate a read-only API token, manage Plaid keys, and connect the AI assistant.
+**Settings**
 ![Settings](docs/screenshots/settings.png)
 
-**Sign in** - simple name + password accounts, stored entirely in your own database.
-
-![Sign in](docs/screenshots/signin.png)
+**Dark mode** carries across every page.
+![Dashboard in dark mode](docs/screenshots/dashboard-dark.png)
 
 ---
 
@@ -285,7 +269,7 @@ CREATE DATABASE moolah OWNER moolah;
 | `DEMO_MODE` | no | `false` | `true` serves a seeded read-only sample dataset. Leave `false` for a real instance. |
 | `PLAID_CLIENT_ID` | no | — | Only if you want automatic bank sync. From your Plaid dashboard. |
 | `PLAID_SECRET` | no | — | Plaid API secret (matches `PLAID_ENV`). |
-| `PLAID_ENV` | no | `sandbox` | `sandbox`, `development`, or `production`. Set `production` for real bank data. |
+| `PLAID_ENV` | no | `sandbox` | `sandbox` for fake test data, `production` for real banks. |
 
 ---
 
@@ -318,42 +302,15 @@ Two ways to surface these numbers in Home Assistant:
 
 - **Dedicated integration** ([`hass-moolah`](https://github.com/vinnymicale/hass-moolah)) - a
   companion custom component (HACS-style) that you point at your Moolah URL and paste the read-only
-  token into during setup. It polls `/api/v1` and exposes sensors for net worth, assets,
-  liabilities, safe-to-transfer, budget limit/spent/remaining, and upcoming bills - ready to drop
-  onto a dashboard. Install it via HACS as a custom repository, or copy `custom_components/moolah`
-  into your Home Assistant config.
+  token into during setup. It polls `/api/v1` and exposes sensors for net worth (current and
+  12-month projection), assets, liabilities, safe-to-transfer, budget limit/spent/remaining, and
+  upcoming bills - ready to drop onto a dashboard. Install it via HACS as a custom repository, or
+  copy `custom_components/moolah` into your Home Assistant config.
 - **No-integration option** - a built-in [RESTful
   sensor](https://www.home-assistant.io/integrations/sensor.rest/) polling `/api/v1/summary` with
   the bearer token works without installing anything.
 
 ---
-
-## Sharing it with others (testers / collaborators)
-
-Each person runs their **own local copy** - there's no shared server, so everyone's data stays
-separate. To let someone test it:
-
-1. Add them as a **collaborator** on the repo (GitHub → **Settings → Collaborators**).
-2. They clone it and follow the **Quick start** above. With the shipped `.env.example`
-   (`AUTH_BYPASS="true"`), they're signed straight into their own empty copy - no credentials
-   needed to look around.
-3. To use it for real, set `AUTH_BYPASS="false"` - the sign-in screen shows a name + password
-   form to create their account. For bank sync, they paste their own Plaid keys into
-   **Settings → Plaid bank sync** after signing in (stored per-user, secret encrypted).
-
----
-
-## Desktop launcher (Windows + WSL, optional)
-
-`scripts/launch.sh` runs Moolah like a desktop app. One launch: it starts the database + production
-server, **applies pending migrations**, writes a **throttled automatic backup** (skips if one was
-made in the last 12h; keeps the 10 most recent), **rebuilds only if the source changed**, opens
-Moolah in a dedicated browser **app window**, and - when you close that window - shuts the whole
-stack down cleanly (`scripts/stop.sh` also does this, with a port-based safety net).
-
-On the maintainer's machine it's wired to a single **Moolah** desktop shortcut: a hidden `.vbs` that
-runs `wsl.exe … bash scripts/launch.sh`, opening an Edge `--app` window. The paths inside the
-scripts/shortcut are machine-specific - adapt them for your own setup.
 
 ## Connecting banks with Plaid (optional)
 
@@ -383,16 +340,15 @@ and CSV entry work without Plaid.
 
 ## Backing up your data (and your Plaid connections)
 
-When you run locally, **everything lives in one place**: the Postgres data directory `.pgdata/` in
-the project root. That includes your accounts, transactions, budgets, goals - **and your Plaid
-access tokens** (stored in the `PlaidItem.accessToken` column). If you lose `.pgdata/`, you have to
-re-link every bank, and on the **production** Plaid environment each re-link is a fresh, *billed*
-connection. So if you connect real banks, back this up.
+When you run locally, everything lives in the Postgres data directory `.pgdata/` in the project
+root: accounts, transactions, budgets, goals - **and your Plaid access tokens** (the
+`PlaidItem.accessToken` column). Lose `.pgdata/` and you have to re-link every bank, which on the
+**production** Plaid environment is a fresh, *billed* connection each time. So if you connect real
+banks, back this up.
 
-**The reassuring part:** a Plaid access token is tied to your `PLAID_CLIENT_ID` + `PLAID_SECRET` +
-`PLAID_ENV` - **not** to this computer or database. You can copy the token data to another machine
-(or a future packaged build) and keep using the same connections. **Restoring a saved token never
-costs a new Plaid item - only clicking "Connect a bank" does.**
+A Plaid access token is tied to your `PLAID_CLIENT_ID` + `PLAID_SECRET` + `PLAID_ENV`, not to this
+computer or database, so you can move it to another machine and keep the same connections.
+**Restoring a saved token never costs a new Plaid item - only clicking "Connect a bank" does.**
 
 ### Option A - one-command backup (recommended)
 
@@ -423,19 +379,15 @@ Your banks reconnect with **no new Plaid items** and no re-linking. (`db:restore
 empty database; pass `--force` to overwrite an existing one - the in-app restore always overwrites.)
 The `backups/` folder is gitignored.
 
-> ⚠️ **Moving to a new machine? The encryption key must travel with the backup.** Your Plaid
-> tokens (and any AI keys) are stored encrypted, keyed off `ENCRYPTION_KEY` — or `AUTH_SECRET` if
+> ⚠️ **Moving to a new machine? The encryption key must travel with the backup.** Your per-user
+> Plaid API keys and AI keys are stored encrypted, keyed off `ENCRYPTION_KEY` - or `AUTH_SECRET` if
 > you never set `ENCRYPTION_KEY`. Restore that data under a *different* key and decryption fails,
-> which surfaces as a "Something went wrong" error on the Accounts page (and anywhere Plaid is
-> touched). Before restoring on the new host, set the **same** value the source instance used:
-> ```bash
-> # on the source: find the key it encrypts with (ENCRYPTION_KEY wins; else AUTH_SECRET)
-> grep -E 'ENCRYPTION_KEY|AUTH_SECRET' .env
-> ```
-> Set both `AUTH_SECRET` and `ENCRYPTION_KEY` to that value on the new instance, restart it, **then**
-> restore. (Going forward, prefer a dedicated `ENCRYPTION_KEY` on both ends so `AUTH_SECRET` can
-> rotate freely.) If the original key is lost, the encrypted tokens are unrecoverable — clear them
-> and re-link Plaid from Settings.
+> surfacing as a "Something went wrong" error on the Accounts page (and anywhere Plaid is touched).
+> Before restoring on the new host, find the source's key (`grep -E 'ENCRYPTION_KEY|AUTH_SECRET'
+> .env`), set both `AUTH_SECRET` and `ENCRYPTION_KEY` to that value on the new instance, restart,
+> **then** restore. Setting a dedicated `ENCRYPTION_KEY` on both ends lets `AUTH_SECRET` rotate
+> independently. If the original key is lost, those secrets are unrecoverable - clear them and
+> re-enter your Plaid/AI keys from Settings.
 
 ### Option B - raw data-directory copy
 
