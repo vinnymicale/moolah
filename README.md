@@ -244,6 +244,37 @@ the `moolah-db` Docker volume, so it survives restarts and image rebuilds.
 The image is a multi-stage build producing Next.js [standalone](https://nextjs.org/docs/app/api-reference/config/next-config-js/output)
 output and runs as a non-root user. To update: `git pull && docker compose up -d --build`.
 
+A prebuilt image is also published to GHCR on every push to `master`, so you don't
+have to build locally: `ghcr.io/vinnymicale/moolah:latest`.
+
+### Unraid
+
+Use the bundled template so every field is pre-filled — Docker tab → **Add Container**,
+then paste this into **Template**:
+
+```
+https://raw.githubusercontent.com/vinnymicale/moolah/master/unraid-template.xml
+```
+
+It sets the image, the WebUI link, the port, and all variables. You only edit two:
+
+- **`DATABASE_URL`** — Moolah has no bundled database on Unraid; point this at your own
+  Postgres container. On the default `bridge` network use the **Unraid host IP + the
+  published Postgres port** (container-name DNS only works on a shared custom network),
+  e.g. `postgresql://moolah:moolah@192.168.1.10:5432/moolah`. Create the database first:
+  ```sql
+  CREATE USER moolah WITH PASSWORD 'moolah';
+  CREATE DATABASE moolah OWNER moolah;
+  ```
+- **`AUTH_SECRET`** — generate with `openssl rand -base64 33`.
+- **`AUTH_URL`** — set to the URL you reach the app at (e.g. `http://192.168.1.10:5555`).
+  This pins post-login redirects so they don't bounce to the container's internal hostname.
+
+Leave **`AUTH_BYPASS=false`**: the no-password auto sign-in only works over localhost, so a
+LAN-reachable container must use a password (you set one on first load). The app applies
+migrations on start, so the empty database is initialized automatically. Open the container's
+**WebUI** link, or `http://<unraid-ip>:<port>`.
+
 ---
 
 ## Read-only data API
