@@ -38,11 +38,15 @@ const SCHEMA_ROWS = [
 ];
 
 // Make the User COUNT(*) return `userCount`; the schema lookup returns
-// SCHEMA_ROWS; everything else resolves empty.
-function wireCount(userCount: number) {
+// SCHEMA_ROWS; the superuser probe returns `isSuper` (default true, the
+// session_replication_role fast path); everything else resolves empty.
+function wireCount(userCount: number, isSuper = true) {
   query.mockImplementation((sql: string) => {
     if (sql.includes("information_schema.columns")) {
       return Promise.resolve({ rows: SCHEMA_ROWS });
+    }
+    if (sql.includes("usesuper")) {
+      return Promise.resolve({ rows: [{ super: isSuper }] });
     }
     if (sql.includes('COUNT(*)') && sql.includes('"User"')) {
       return Promise.resolve({ rows: [{ n: userCount }] });
@@ -81,6 +85,36 @@ describe("importAllData", () => {
     expect(ran("COMMIT")).toBe(true);
     // Empty DB: no truncate.
     expect(ran("TRUNCATE")).toBe(false);
+  });
+
+  it("falls back to dependency-ordered inserts when not a superuser", async () => {
+    // Transaction depends on User (Transaction.userId -> User.id).
+    query.mockImplementation((sql: string) => {
+      if (sql.includes("information_schema.columns")) return Promise.resolve({ rows: SCHEMA_ROWS });
+      if (sql.includes("usesuper")) return Promise.resolve({ rows: [{ super: false }] });
+      if (sql.includes("constraint_type")) {
+        return Promise.resolve({ rows: [{ child: "Transaction", parent: "User" }] });
+      }
+      if (sql.includes('COUNT(*)') && sql.includes('"User"')) return Promise.resolve({ rows: [{ n: 0 }] });
+      return Promise.resolve({ rows: [] });
+    });
+
+    // Child listed first on purpose: only the topo sort can fix this.
+    const reversed: BackupPayload = { ...payload, tables: [...payload.tables].reverse() };
+    const res = await importAllData(reversed, "postgres://test");
+
+    expect(res).toEqual({ imported: 2, tables: 2 });
+    // No superuser-only FK toggle on this path.
+    expect(ran("session_replication_role")).toBe(false);
+    expect(ran("BEGIN")).toBe(true);
+    expect(ran("COMMIT")).toBe(true);
+    // Parent (User) inserted before child (Transaction), even though the backup
+    // and a naive order wouldn't guarantee it.
+    const order = sqls().filter((s) => s.startsWith("INSERT INTO"));
+    const userAt = order.findIndex((s) => s.includes('"User"'));
+    const txAt = order.findIndex((s) => s.includes('"Transaction"'));
+    expect(userAt).toBeGreaterThanOrEqual(0);
+    expect(txAt).toBeGreaterThan(userAt);
   });
 
   it("refuses a non-empty database unless force is set", async () => {
