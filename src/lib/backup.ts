@@ -105,10 +105,49 @@ export async function exportUserData(userId: string, databaseUrl?: string): Prom
 }
 
 /**
- * Load a backup into the database. FK checks are disabled for the load (so table
- * order doesn't matter) and it all runs in one transaction that rolls back on
+ * Order tables parents-before-children from the live FK graph, so inserting in
+ * this order never references a row that isn't loaded yet. Self-references and
+ * cycles are tolerated (a cyclic edge is just dropped from the ordering); paired
+ * with INSERT ... ON CONFLICT DO NOTHING that's good enough for a restore. Used
+ * only on the non-superuser path, where we can't disable FK checks outright.
+ */
+function topoSortTables(tables: string[], deps: Map<string, Set<string>>): string[] {
+  const remaining = new Set(tables);
+  const ordered: string[] = [];
+  while (remaining.size > 0) {
+    // A table is ready when all its parents are already placed (or absent from
+    // this backup). Pick the lexicographically first ready table for stable output.
+    const ready = [...remaining]
+      .filter((t) => {
+        const parents = deps.get(t);
+        if (!parents) return true;
+        return [...parents].every((p) => p === t || !remaining.has(p));
+      })
+      .sort();
+    if (ready.length === 0) {
+      // A cycle among the leftovers - append them in stable order and let
+      // ON CONFLICT / a single transaction sort out the rest.
+      ordered.push(...[...remaining].sort());
+      break;
+    }
+    for (const t of ready) {
+      ordered.push(t);
+      remaining.delete(t);
+    }
+  }
+  return ordered;
+}
+
+/**
+ * Load a backup into the database, all in one transaction that rolls back on
  * error. Refuses to run if the DB already has data unless `force` is set, which
  * truncates the backed-up tables first.
+ *
+ * FK checks are disabled for the load via `session_replication_role` so table
+ * order doesn't matter - but that's superuser-only. When the connecting role
+ * isn't a superuser (a self-hosted `moolah` user that merely owns its database,
+ * managed Postgres, etc.) we fall back to inserting tables in FK-dependency
+ * order instead, which needs no special privilege.
  */
 export async function importAllData(
   payload: BackupPayload | BackupTable[],
@@ -159,16 +198,50 @@ export async function importAllData(
       );
     }
 
+    // Only a superuser can flip session_replication_role to skip FK checks. Probe
+    // it (usesuper is null for non-superusers); if we can't, we'll order inserts
+    // by FK dependency instead so a child never lands before its parent.
+    const { rows: superRows } = await client.query<{ super: boolean }>(
+      "SELECT usesuper AS super FROM pg_user WHERE usename = current_user",
+    );
+    const canDisableFks = superRows[0]?.super === true;
+
+    // Insert order: arbitrary when FK checks are off, else parents-before-children.
+    let loadOrder = tables;
+    if (!canDisableFks) {
+      const { rows: fks } = await client.query<{ child: string; parent: string }>(
+        `SELECT tc.table_name AS child, ccu.table_name AS parent
+           FROM information_schema.table_constraints tc
+           JOIN information_schema.constraint_column_usage ccu
+             ON ccu.constraint_name = tc.constraint_name
+            AND ccu.table_schema = tc.table_schema
+          WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'`,
+      );
+      const deps = new Map<string, Set<string>>();
+      for (const { child, parent } of fks) {
+        if (!deps.has(child)) deps.set(child, new Set());
+        deps.get(child)!.add(parent);
+      }
+      const order = topoSortTables(
+        tables.map((t) => t.table),
+        deps,
+      );
+      const byName = new Map(tables.map((t) => [t.table, t]));
+      loadOrder = order.map((name) => byName.get(name)!).filter(Boolean);
+    }
+
     await client.query("BEGIN");
-    await client.query("SET session_replication_role = replica"); // disable FK checks during load
+    if (canDisableFks) await client.query("SET session_replication_role = replica");
 
     if (hasData && opts.force) {
+      // TRUNCATE ... CASCADE clears child rows regardless of order, so the raw
+      // table list is fine here even on the dependency-ordered path.
       const names = tables.map((t) => tableIdentOf(t.table)).join(", ");
       if (names) await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
     }
 
     let imported = 0;
-    for (const { table, rows: tableRows } of tables) {
+    for (const { table, rows: tableRows } of loadOrder) {
       const tableIdent = tableIdentOf(table);
       for (const row of tableRows) {
         const cols = Object.keys(row);
@@ -184,7 +257,7 @@ export async function importAllData(
       }
     }
 
-    await client.query("SET session_replication_role = DEFAULT");
+    if (canDisableFks) await client.query("SET session_replication_role = DEFAULT");
     await client.query("COMMIT");
     return { imported, tables: tables.length };
   } catch (e) {

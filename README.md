@@ -278,6 +278,7 @@ CREATE DATABASE moolah OWNER moolah;
 | --- | --- | --- | --- |
 | `DATABASE_URL` | **yes** | — | Connection string to your Postgres. On the default `bridge` network use the **Unraid host IP + published Postgres port** (container-name DNS only works on a shared custom network), e.g. `postgresql://moolah:moolah@192.168.1.10:5432/moolah`. |
 | `AUTH_SECRET` | **yes** | — | Signs session tokens. Generate with `openssl rand -base64 33`. Keep it stable across updates, or existing logins are invalidated. |
+| `ENCRYPTION_KEY` | no | _(uses `AUTH_SECRET`)_ | Key for encrypting stored Plaid/AI secrets. Optional, but **when restoring a backup from another instance it must match the source's key** (see [Backing up your data](#backing-up-your-data-and-your-plaid-connections)), or Plaid pages error. Setting a dedicated value lets `AUTH_SECRET` rotate independently. |
 | `AUTH_URL` | **yes** | — | The URL you reach the app at, e.g. `http://192.168.1.10:5555`. Pins post-login redirects so they don't bounce to the container's internal hostname. |
 | `AUTH_BYPASS` | no | `false` | Leave `false`. The no-password auto sign-in only works over localhost, so a LAN-reachable container must use a password (you set one on first load). |
 | `AUTH_TRUST_HOST` | no | `true` | Lets Auth.js trust the proxy/host header. Leave as-is unless you front the app with something that rewrites it. |
@@ -421,6 +422,20 @@ npm run db:restore -- ./path/to/moolah-backup-<timestamp>.json
 Your banks reconnect with **no new Plaid items** and no re-linking. (`db:restore` only writes into an
 empty database; pass `--force` to overwrite an existing one - the in-app restore always overwrites.)
 The `backups/` folder is gitignored.
+
+> ⚠️ **Moving to a new machine? The encryption key must travel with the backup.** Your Plaid
+> tokens (and any AI keys) are stored encrypted, keyed off `ENCRYPTION_KEY` — or `AUTH_SECRET` if
+> you never set `ENCRYPTION_KEY`. Restore that data under a *different* key and decryption fails,
+> which surfaces as a "Something went wrong" error on the Accounts page (and anywhere Plaid is
+> touched). Before restoring on the new host, set the **same** value the source instance used:
+> ```bash
+> # on the source: find the key it encrypts with (ENCRYPTION_KEY wins; else AUTH_SECRET)
+> grep -E 'ENCRYPTION_KEY|AUTH_SECRET' .env
+> ```
+> Set both `AUTH_SECRET` and `ENCRYPTION_KEY` to that value on the new instance, restart it, **then**
+> restore. (Going forward, prefer a dedicated `ENCRYPTION_KEY` on both ends so `AUTH_SECRET` can
+> rotate freely.) If the original key is lost, the encrypted tokens are unrecoverable — clear them
+> and re-link Plaid from Settings.
 
 ### Option B - raw data-directory copy
 
