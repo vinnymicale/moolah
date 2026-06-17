@@ -6,6 +6,7 @@ import { Amount } from "@/components/Amount";
 import type { CategoryDTO } from "@/lib/queries";
 import type { CalendarEvent, CcDueEvent } from "@/lib/calendar";
 import { daysUntilDate, formatMonthDay } from "@/lib/dates";
+import { isStatementPayment } from "./calendar-utils";
 
 export function DayEventsModal({
   iso,
@@ -26,7 +27,9 @@ export function DayEventsModal({
 }) {
   const catById = new Map(categories.map((c) => [c.id, c]));
   const income = events.filter((e) => e.type === "INCOME" && !e.isTransfer).reduce((s, e) => s + e.amount, 0);
-  const expense = events.filter((e) => e.type === "EXPENSE" && !e.isTransfer).reduce((s, e) => s + e.amount, 0);
+  const expense = events
+    .filter((e) => e.type === "EXPENSE" && (!e.isTransfer || isStatementPayment(e)))
+    .reduce((s, e) => s + e.amount, 0);
 
   return (
     <Modal open onClose={onClose} title={formatMonthDay(iso)} widthClass="max-w-sm">
@@ -84,7 +87,7 @@ export function DayEventsModal({
                   {cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
                 </p>
               </div>
-              <Amount type={e.type} amount={e.amount} isTransfer={e.isTransfer} className="shrink-0 text-sm font-semibold" />
+              <Amount type={e.type} amount={e.amount} isTransfer={e.isTransfer} asExpense={isStatementPayment(e)} className="shrink-0 text-sm font-semibold" />
             </button>
           );
         })}

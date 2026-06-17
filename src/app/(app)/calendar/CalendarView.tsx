@@ -7,10 +7,10 @@ import { TransactionModal } from "@/components/TransactionModal";
 import { formatUSD } from "@/lib/money";
 import { formatMonthDay, monthLabel } from "@/lib/dates";
 import { DEFAULT_CATEGORY_COLOR, INCOME_COLOR, TRANSFER_COLOR, categoryColor } from "@/lib/colors";
-import { toggleInSet } from "@/lib/collections";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import type { CalendarEvent, CalendarMonth, CcDueEvent } from "@/lib/calendar";
-import { WEEKDAYS, eventToTxn, eventIsActual } from "./calendar-utils";
+import { WEEKDAYS, eventToTxn, eventIsActual, isStatementPayment } from "./calendar-utils";
+import { AccountFilter } from "./AccountFilter";
 import { DayCell } from "./DayCell";
 import { DayEventsModal } from "./DayEventsModal";
 import { OccurrenceModal } from "./OccurrenceModal";
@@ -50,29 +50,30 @@ export function CalendarView({
   const [showExpense, setShowExpense] = useState(true);
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
   const monthNum = monthISO.slice(0, 7);
 
-  const allEnabled = enabledAccountIds.size === accounts.length;
-
-  const toggleAccount = (id: string) => setEnabledAccountIds((prev) => toggleInSet(prev, id));
-
-  const toggleAllAccounts = () => {
-    if (allEnabled) {
-      setEnabledAccountIds(new Set());
-    } else {
-      setEnabledAccountIds(new Set(accounts.map((a) => a.id)));
-    }
-  };
-
-  // Client-side filtered events and recomputed monthly totals. Each total is
-  // split into actual (cleared, on/before today) and a projected grand total
-  // (actual plus pending + virtual occurrences through month end), mirroring
-  // groupEventsByDay on the server.
-  const { filteredEventsByDay, monthIncome, monthExpense, monthIncomeActual, monthExpenseActual } = useMemo(() => {
+  // Client-side filtered events and recomputed monthly totals. Bank totals cover
+  // cash accounts only (so the projection stays a true cash-flow view, including
+  // statement payments leaving checking) while credit-card charges get their own
+  // accrual total. Each is split into actual (cleared, on/before today) and a
+  // projected grand total (actual plus pending + virtual occurrences through
+  // month end), mirroring groupEventsByDay on the server.
+  const {
+    filteredEventsByDay,
+    monthIncome,
+    monthExpense,
+    monthIncomeActual,
+    monthExpenseActual,
+    ccCharges,
+    ccChargesActual,
+  } = useMemo(() => {
     let income = 0;
     let expense = 0;
     let incomeActual = 0;
     let expenseActual = 0;
+    let cc = 0;
+    let ccActual = 0;
     const byDay: Record<string, CalendarEvent[]> = {};
 
     for (const [day, events] of Object.entries(data.eventsByDay)) {
@@ -86,8 +87,22 @@ export function CalendarView({
 
       if (day.startsWith(monthNum)) {
         for (const e of filtered) {
-          if (e.isTransfer) continue;
           const actual = eventIsActual(e, data.todayISO);
+          const isCredit = e.accountId && acctById.get(e.accountId)?.type === "CREDIT_CARD";
+          if (isCredit) {
+            // Credit-card charges are accrual-only - they never move cash, so
+            // they stay out of the bank totals and the projection. The CC-credit
+            // side of a statement payment is a transfer and is skipped here too.
+            if (e.type === "EXPENSE" && !e.isTransfer) {
+              cc += e.amount;
+              if (actual) ccActual += e.amount;
+            }
+            continue;
+          }
+          // A statement payment (transfer from a cash account whose peer is a
+          // credit card) is real cash leaving the bank, so it counts as a bank
+          // expense. Internal cash-to-cash transfers are still excluded.
+          if (e.isTransfer && !isStatementPayment(e)) continue;
           if (e.type === "INCOME") {
             income += e.amount;
             if (actual) incomeActual += e.amount;
@@ -105,8 +120,10 @@ export function CalendarView({
       monthExpense: expense,
       monthIncomeActual: incomeActual,
       monthExpenseActual: expenseActual,
+      ccCharges: cc,
+      ccChargesActual: ccActual,
     };
-  }, [data.eventsByDay, data.todayISO, enabledAccountIds, showIncome, showExpense, monthNum]);
+  }, [data.eventsByDay, data.todayISO, enabledAccountIds, showIncome, showExpense, monthNum, acctById]);
 
   const net = monthIncomeActual - monthExpenseActual;
   const endOfMonthBalance = data.projection.length ? data.projection[data.projection.length - 1].balance : data.anchorBalance;
@@ -115,9 +132,10 @@ export function CalendarView({
     data.projection[0] ?? { iso: "", balance: data.anchorBalance },
   );
   const hasCash = accounts.some((a) => a.includeInCash);
+  const hasCreditCard = accounts.some((a) => a.type === "CREDIT_CARD");
 
   const colorFor = (e: CalendarEvent) =>
-    e.isTransfer ? TRANSFER_COLOR
+    e.isTransfer && !isStatementPayment(e) ? TRANSFER_COLOR
     : e.categoryId ? categoryColor(catById.get(e.categoryId))
     : e.type === "INCOME" ? INCOME_COLOR : DEFAULT_CATEGORY_COLOR;
 
@@ -143,11 +161,50 @@ export function CalendarView({
       </div>
 
       {/* Summary */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard size="sm" label="Income" value={formatUSD(monthIncomeActual)} tone="income" hint={`${formatUSD(monthIncome)} projected`} />
-        <StatCard size="sm" label="Expenses" value={formatUSD(monthExpenseActual)} tone="expense" hint={`${formatUSD(monthExpense)} projected`} />
-        <StatCard size="sm" label="Net" value={formatUSD(net)} tone={net >= 0 ? "income" : "expense"} hint={`${formatUSD(monthIncome - monthExpense)} projected`} />
-        {hasCash && <StatCard size="sm" label="Projected end-of-month" value={formatUSD(endOfMonthBalance)} tone={endOfMonthBalance >= 0 ? "default" : "expense"} />}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <StatCard
+          size="sm"
+          label="Income"
+          value={formatUSD(monthIncomeActual)}
+          tone="income"
+          hint={`${formatUSD(monthIncome)} projected`}
+          info="Money that has landed in your bank accounts so far this month. The projected figure adds expected income through month end. Internal transfers between your accounts are excluded."
+        />
+        <StatCard
+          size="sm"
+          label="Expenses"
+          value={formatUSD(monthExpenseActual)}
+          tone="expense"
+          hint={`${formatUSD(monthExpense)} projected`}
+          info="Money that has left your bank accounts so far this month, including payments toward credit-card statements. The projected figure adds expected spending through month end. Credit-card charges and internal transfers are excluded."
+        />
+        <StatCard
+          size="sm"
+          label="Net"
+          value={formatUSD(net)}
+          tone={net >= 0 ? "income" : "expense"}
+          hint={`${formatUSD(monthIncome - monthExpense)} projected`}
+          info="Income minus expenses so far this month - how much your bank balances have changed on net. The projected figure uses the projected income and expenses."
+        />
+        {hasCreditCard && (
+          <StatCard
+            size="sm"
+            label="Credit card charges"
+            value={formatUSD(ccChargesActual)}
+            tone="expense"
+            hint={`${formatUSD(ccCharges)} projected`}
+            info="Charges made to your credit cards this month, counted when they post - not when you pay the statement. These do not affect your bank Expenses or projected balance until you make a payment."
+          />
+        )}
+        {hasCash && (
+          <StatCard
+            size="sm"
+            label="Projected end-of-month"
+            value={formatUSD(endOfMonthBalance)}
+            tone={endOfMonthBalance >= 0 ? "default" : "expense"}
+            info="Your expected total cash balance on the last day of the month - today's balance plus all projected income and expenses (including credit-card payments) through month end."
+          />
+        )}
       </div>
 
       {/* Account + type filters */}
@@ -179,35 +236,11 @@ export function CalendarView({
 
           <span className="mx-1 h-4 w-px bg-line" />
 
-          {/* All accounts toggle */}
-          <button
-            onClick={toggleAllAccounts}
-            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-              allEnabled
-                ? "border-brand/40 bg-brand/10 text-brand"
-                : "border-line bg-surface2 text-muted"
-            }`}
-          >
-            All accounts
-          </button>
-
-          {/* Per-account chips */}
-          {accounts.map((acct) => {
-            const on = enabledAccountIds.has(acct.id);
-            return (
-              <button
-                key={acct.id}
-                onClick={() => toggleAccount(acct.id)}
-                className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                  on ? "border-line" : "border-line bg-surface2 text-muted opacity-40"
-                }`}
-                style={on ? { borderColor: `${acct.color}66`, backgroundColor: `${acct.color}18`, color: acct.color } : undefined}
-                title={acct.name}
-              >
-                {acct.name}
-              </button>
-            );
-          })}
+          <AccountFilter
+            accounts={accounts}
+            enabledAccountIds={enabledAccountIds}
+            onChange={setEnabledAccountIds}
+          />
         </div>
       )}
 

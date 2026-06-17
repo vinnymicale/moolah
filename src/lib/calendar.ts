@@ -15,7 +15,7 @@ import { expandOccurrences } from "@/lib/recurrence";
 import { projectDailyBalances, type DayProjection, type ProjTxn } from "@/lib/projection";
 import { getAccounts } from "@/lib/queries";
 import { eventIsActual } from "@/app/(app)/calendar/calendar-utils";
-import type { TxnType } from "@/generated/prisma/enums";
+import type { TxnType, AccountType } from "@/generated/prisma/enums";
 
 export { eventIsActual };
 
@@ -38,6 +38,12 @@ export interface CalendarEvent {
    * Excluded from monthIncome / filtered totals.
    */
   isTransfer: boolean;
+  /**
+   * For a transfer, the account type of the paired transaction. Lets the client
+   * tell a statement payment (peer is a credit card - real cash leaving the
+   * bank) from an internal cash-to-cash move (peer is another cash account).
+   */
+  transferPeerType: AccountType | null;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
 }
@@ -250,6 +256,7 @@ export async function getCalendarMonth(
   const txnRows = await prisma.transaction.findMany({
     where: { userId, date: { gte: rangeStart, lte: rangeEnd } },
     orderBy: { date: "asc" },
+    include: { transferPeer: { select: { account: { select: { type: true } } } } },
   });
 
   const events: CalendarEvent[] = txnRows.map((t) => {
@@ -269,6 +276,7 @@ export async function getCalendarMonth(
       // unpaired rows: those credits are not real income - they reduce the CC
       // balance. The corresponding checking debit is the true cash outflow.
       isTransfer: t.isTransfer || (acct?.type === "CREDIT_CARD" && t.type === "INCOME"),
+      transferPeerType: t.transferPeer?.account?.type ?? null,
       recurringRuleId: t.recurringRuleId,
       plaidTransactionId: t.plaidTransactionId,
     };
@@ -318,6 +326,7 @@ export async function getCalendarMonth(
         cleared: false,
         isVirtual: true,
         isTransfer: ruleAcct?.type === "CREDIT_CARD" && rule.type === "INCOME",
+        transferPeerType: null,
         recurringRuleId: rule.id,
         plaidTransactionId: null,
       });

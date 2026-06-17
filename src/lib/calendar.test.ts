@@ -23,6 +23,7 @@ const event = (over: Partial<CalendarEvent>): CalendarEvent => ({
   cleared: false,
   isVirtual: false,
   isTransfer: false,
+  transferPeerType: null,
   recurringRuleId: null,
   plaidTransactionId: null,
   ...over,

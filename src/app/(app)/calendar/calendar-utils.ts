@@ -20,6 +20,18 @@ export function eventIsActual(
   return e.cleared && !e.isVirtual && e.date <= todayISO;
 }
 
+/**
+ * A credit-card statement payment: a transfer (EXPENSE) leaving a cash account
+ * whose paired transaction sits on a credit-card account. Unlike internal
+ * cash-to-cash transfers, this is real money leaving the bank, so it's counted
+ * and styled as an ordinary expense rather than a neutral transfer.
+ */
+export function isStatementPayment(
+  e: Pick<CalendarEvent, "isTransfer" | "type" | "transferPeerType">,
+): boolean {
+  return e.isTransfer && e.type === "EXPENSE" && e.transferPeerType === "CREDIT_CARD";
+}
+
 /** Compact currency for the tight calendar chips, e.g. "$1.2k". */
 export function compact(n: number): string {
   return n >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${n.toFixed(0)}`;

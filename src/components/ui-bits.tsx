@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Info } from "lucide-react";
 
 export type Tone = "default" | "income" | "expense" | "brand";
 
@@ -34,22 +35,52 @@ export function StatCard({
   label,
   value,
   hint,
+  info,
   tone = "default",
   size = "md",
 }: {
   label: string;
   value: React.ReactNode;
   hint?: React.ReactNode;
+  /** Explanatory text shown in a tooltip on an info icon next to the label. */
+  info?: React.ReactNode;
   tone?: Tone;
   size?: "sm" | "md";
 }) {
   const sm = size === "sm";
   return (
     <div className={`card ${sm ? "px-3 py-2" : "p-4"}`}>
-      <p className={`font-medium uppercase tracking-wide text-muted ${sm ? "text-[11px]" : "text-xs"}`}>{label}</p>
+      <p className={`flex items-center gap-1 font-medium uppercase tracking-wide text-muted ${sm ? "text-[11px]" : "text-xs"}`}>
+        <span>{label}</span>
+        {info && <InfoTip text={info} />}
+      </p>
       <p className={`font-semibold tabular-nums ${sm ? "text-lg" : "mt-1 text-2xl"} ${toneTextClass(tone)}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
+  );
+}
+
+/**
+ * A small info icon that reveals explanatory text on hover or keyboard focus.
+ * Pure CSS (group-hover/focus) so it needs no state or positioning library.
+ */
+export function InfoTip({ text }: { text: React.ReactNode }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        className="inline-flex text-muted/70 hover:text-text focus:text-text focus:outline-none"
+        aria-label="More info"
+      >
+        <Info size={13} />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute top-full left-1/2 z-40 mt-1.5 w-56 -translate-x-1/2 rounded-lg border border-line bg-surface p-2.5 text-xs font-normal normal-case tracking-normal text-text opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
   );
 }
 

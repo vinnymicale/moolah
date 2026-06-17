@@ -1,7 +1,7 @@
 import { CreditCard } from "lucide-react";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import type { CalendarEvent, CcDueEvent } from "@/lib/calendar";
-import { compact } from "./calendar-utils";
+import { compact, isStatementPayment } from "./calendar-utils";
 import { daysUntilDate } from "@/lib/dates";
 import { Amount } from "@/components/Amount";
 
@@ -94,7 +94,7 @@ export function DayCell({
           >
             <span className={`h-2 w-2 shrink-0 rounded-full ${!e.cleared && !e.isVirtual ? "opacity-50" : ""}`} style={{ backgroundColor: colorFor(e) }} />
             <span className="hidden flex-1 truncate sm:inline">{e.description}</span>
-            <Amount type={e.type} amount={e.amount} isTransfer={e.isTransfer} format={compact} className="ml-auto shrink-0" />
+            <Amount type={e.type} amount={e.amount} isTransfer={e.isTransfer} asExpense={isStatementPayment(e)} format={compact} className="ml-auto shrink-0" />
           </button>
         ))}
         {extra > 0 && (
