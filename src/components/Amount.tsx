@@ -10,16 +10,21 @@ export function Amount({
   type,
   amount,
   isTransfer = false,
+  asExpense = false,
   format = formatUSD,
   className = "",
 }: {
   type: "INCOME" | "EXPENSE";
   amount: number;
   isTransfer?: boolean;
+  /** Render a transfer with normal expense styling - used for credit-card
+   * statement payments, which are real cash leaving the bank. */
+  asExpense?: boolean;
   format?: (n: number) => string;
   className?: string;
 }) {
-  const tone = isTransfer ? "text-muted" : type === "INCOME" ? "text-income" : "text-expense";
-  const sign = isTransfer ? "" : type === "INCOME" ? "+" : "-";
+  const transferTone = isTransfer && !asExpense;
+  const tone = transferTone ? "text-muted" : type === "INCOME" ? "text-income" : "text-expense";
+  const sign = transferTone ? "" : type === "INCOME" ? "+" : "-";
   return <span className={`tabular-nums ${tone} ${className}`}>{sign}{format(amount)}</span>;
 }
