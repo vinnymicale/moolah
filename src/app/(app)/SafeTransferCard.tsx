@@ -139,7 +139,23 @@ export function SafeTransferCard({
               </p>
             </div>
 
-            {/* Step 3 - next-month buffer */}
+            {/* Step 3 - upcoming credit card statement payments */}
+            {data.upcomingCCDue > 0 && (
+              <div className="border-t border-line pt-2">
+                <Row
+                  label={`- Credit card payments due (${data.upcomingCCDueCount})`}
+                  value={`-${formatUSD(data.upcomingCCDue)}`}
+                  tone="expense"
+                  bold
+                />
+                <p className="mt-1 text-[11px] leading-snug">
+                  Statement balances for the credit card due dates showing on your calendar.
+                  We hold these back in full so the money is there when the payment posts.
+                </p>
+              </div>
+            )}
+
+            {/* Step 4 - next-month buffer */}
             <div className="border-t border-line pt-2">
               <Row label="- Next-month buffer" value={`-${formatUSD(data.nextMonthBuffer)}`} tone="expense" bold />
               <div className="mt-1 space-y-0.5 pl-3">
@@ -172,9 +188,10 @@ export function SafeTransferCard({
             {data.totalCCBalance > 0 && (
               <p className="border-t border-line pt-2 text-[11px] leading-snug">
                 Heads up: <span className="font-medium text-text">{formatUSD(data.totalCCBalance)}</span> is
-                outstanding on your credit cards. We don&apos;t subtract it here because the statement
-                payment shows up in your bank history and is already baked into the next-month buffer -
-                subtracting both would double-count it.
+                outstanding on your credit cards.
+                {data.upcomingCCDue > 0
+                  ? " We hold back the statement payments due soon (above); the rest isn't subtracted, since you'll pay it on a later statement that the next-month buffer already covers."
+                  : " We don't subtract it here because the statement payment shows up in your bank history and is already baked into the next-month buffer - subtracting both would double-count it."}
               </p>
             )}
           </div>

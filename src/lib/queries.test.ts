@@ -121,6 +121,84 @@ describe("getSafeToTransfer", () => {
     expect(res.remainingRecurring).toBe(0);
     expect(res.remainingRecurringCount).toBe(0);
   });
+
+  it("subtracts upcoming credit-card statement payments shown on the calendar", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 3000, isAsset: true },
+      // Due later this month with a $500 statement → counted.
+      {
+        id: "cc1", type: "CREDIT_CARD", currentBalance: -800, isAsset: false,
+        lastStatementBalance: 500, nextPaymentDueDate: new Date("2026-06-25T00:00:00Z"), isOverdue: false,
+      },
+      // Due in the past and not overdue → assumed paid, not counted.
+      {
+        id: "cc2", type: "CREDIT_CARD", currentBalance: -300, isAsset: false,
+        lastStatementBalance: 300, nextPaymentDueDate: new Date("2026-06-05T00:00:00Z"), isOverdue: false,
+      },
+      // Past but flagged overdue → still counted.
+      {
+        id: "cc3", type: "CREDIT_CARD", currentBalance: -150, isAsset: false,
+        lastStatementBalance: 150, nextPaymentDueDate: new Date("2026-06-02T00:00:00Z"), isOverdue: true,
+      },
+    ] as never);
+
+    txnFind
+      .mockResolvedValueOnce([] as never) // no one-off uncleared
+      .mockResolvedValueOnce([] as never); // no materialised links
+    ruleFind.mockResolvedValue([] as never);
+    txnAgg.mockResolvedValue({ _sum: { amount: 0 } } as never);
+
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+
+    // cc1 ($500) + cc3 ($150, overdue) counted; cc2 (past, paid) skipped.
+    expect(res.upcomingCCDue).toBe(650);
+    expect(res.upcomingCCDueCount).toBe(2);
+    // rawSafe = 3000 − 0 (remaining) − 650 (CC due) − 0 (buffer) = 2350 → floor 2350.
+    expect(res.rawSafe).toBeCloseTo(2350);
+    expect(res.safeAmount).toBe(2350);
+  });
+
+  it("ignores a credit card whose due date has no posted statement balance yet", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 3000, isAsset: true },
+      // Future due date but Plaid hasn't posted a statement balance.
+      {
+        id: "cc1", type: "CREDIT_CARD", currentBalance: -120, isAsset: false,
+        lastStatementBalance: null, nextPaymentDueDate: new Date("2026-06-25T00:00:00Z"), isOverdue: false,
+      },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+    txnAgg.mockResolvedValue({ _sum: { amount: 0 } } as never);
+
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+    expect(res.upcomingCCDue).toBe(0);
+    expect(res.upcomingCCDueCount).toBe(0);
+    expect(res.rawSafe).toBeCloseTo(3000);
+  });
+
+  it("hides itself when an upcoming statement payment drives the safe amount below $50", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 600, isAsset: true },
+      {
+        id: "cc1", type: "CREDIT_CARD", currentBalance: -580, isAsset: false,
+        lastStatementBalance: 580, nextPaymentDueDate: new Date("2026-06-25T00:00:00Z"), isOverdue: false,
+      },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+    txnAgg.mockResolvedValue({ _sum: { amount: 0 } } as never);
+
+    // rawSafe = 600 − 0 − 580 − 0 = 20 → floor $50 = 0 → below threshold, so the
+    // card hides and returns the zeroed "nothing" DTO.
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+    expect(res.show).toBe(false);
+    expect(res.safeAmount).toBe(0);
+  });
 });
 
 describe("getSpendingAnomalies", () => {

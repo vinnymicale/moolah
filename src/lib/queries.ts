@@ -462,6 +462,10 @@ export interface SafeTransferDTO {
   daysLeft: number;
   /** Total outstanding balance across all credit card accounts (informational). */
   totalCCBalance: number;
+  /** Sum of upcoming credit-card statement payments whose due date shows on the calendar. */
+  upcomingCCDue: number;
+  /** Number of credit cards with an upcoming statement payment counted in upcomingCCDue. */
+  upcomingCCDueCount: number;
 }
 
 const BUFFER_CUSHION_PCT = 15;
@@ -470,7 +474,12 @@ const BUFFER_CUSHION_PCT = 15;
  * Computes how much the user can safely move out of checking.
  *
  * Formula: checkingBalance - remaining uncleared expenses this month
+ *          - upcoming credit-card statement payments shown on the calendar
  *          - (earlyMonthAvg × 1.15 next-month buffer), rounded down to $50.
+ *
+ * The upcoming statement payments are subtracted in full on top of the buffer.
+ * That deliberately over-reserves (the buffer already reflects past statement
+ * payments), favouring the lowest chance of leaving checking short.
  *
  * Shown throughout the entire month (not gated on remaining days).
  * Returns show:false when no checking accounts exist or the safe amount < $50.
@@ -481,6 +490,7 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
     remainingExpenses: 0, remainingRecurring: 0, remainingRecurringCount: 0,
     remainingOneOff: 0, remainingOneOffCount: 0, nextMonthBuffer: 0, earlyMonthAvg: 0,
     bufferMonthsUsed: 0, bufferCushionPct: BUFFER_CUSHION_PCT, rawSafe: 0, daysLeft: 0, totalCCBalance: 0,
+    upcomingCCDue: 0, upcomingCCDueCount: 0,
   };
 
   const today = parseISODay(todayISO);
@@ -491,7 +501,10 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
   // Fetch all accounts once and derive typed subsets.
   const allAccounts = await prisma.financialAccount.findMany({
     where: { userId, archived: false },
-    select: { id: true, type: true, currentBalance: true, isAsset: true },
+    select: {
+      id: true, type: true, currentBalance: true, isAsset: true,
+      lastStatementBalance: true, nextPaymentDueDate: true, isOverdue: true,
+    },
   });
 
   const checkingAccounts = allAccounts.filter((a) => a.type === "CHECKING");
@@ -512,6 +525,24 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
   const totalCCBalance = allAccounts
     .filter((a) => ccIds.includes(a.id))
     .reduce((s, a) => s + toNumber(a.currentBalance), 0);
+
+  // Upcoming credit-card statement payments the user can see on the calendar.
+  // Same visibility rule as the calendar's due chips: a due date that's today
+  // or later, or a past date explicitly flagged overdue (a past date that isn't
+  // overdue usually means it was paid and Plaid hasn't rolled the date forward).
+  // The statement balance is the amount that will leave checking.
+  let upcomingCCDue = 0;
+  let upcomingCCDueCount = 0;
+  for (const a of allAccounts) {
+    if (!ccIds.includes(a.id) || !a.nextPaymentDueDate) continue;
+    const dueISO = isoDay(a.nextPaymentDueDate);
+    const isPast = parseISODay(dueISO).getTime() < today.getTime();
+    if (isPast && a.isOverdue !== true) continue;
+    const statement = toNumber(a.lastStatementBalance ?? 0);
+    if (statement <= 0) continue;
+    upcomingCCDue += statement;
+    upcomingCCDueCount++;
+  }
 
   // ── Remaining planned expenses this month ─────────────────────────────────
   // Uncleared DB rows from bank accounts only (CC account transactions are
@@ -589,7 +620,7 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
 
   const nextMonthBuffer = earlyMonthAvg * (1 + BUFFER_CUSHION_PCT / 100);
 
-  const rawSafe = anchorBalance - remainingExpenses - nextMonthBuffer;
+  const rawSafe = anchorBalance - remainingExpenses - upcomingCCDue - nextMonthBuffer;
   const safeAmount = Math.floor(rawSafe / 50) * 50;
 
   if (safeAmount < 50) return nothing;
@@ -599,6 +630,7 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
     remainingExpenses, remainingRecurring, remainingRecurringCount,
     remainingOneOff, remainingOneOffCount, nextMonthBuffer, earlyMonthAvg,
     bufferMonthsUsed, bufferCushionPct: BUFFER_CUSHION_PCT, rawSafe, daysLeft, totalCCBalance,
+    upcomingCCDue, upcomingCCDueCount,
   };
 }
 
