@@ -9,7 +9,7 @@ import { formatMonthDay, monthLabel } from "@/lib/dates";
 import { DEFAULT_CATEGORY_COLOR, INCOME_COLOR, TRANSFER_COLOR, categoryColor } from "@/lib/colors";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import type { CalendarEvent, CalendarMonth, CcDueEvent } from "@/lib/calendar";
-import { WEEKDAYS, eventToTxn, eventIsActual, isStatementPayment } from "./calendar-utils";
+import { WEEKDAYS, eventToTxn, isStatementPayment, computeFilteredTotals } from "./calendar-utils";
 import { AccountFilter } from "./AccountFilter";
 import { DayCell } from "./DayCell";
 import { DayEventsModal } from "./DayEventsModal";
@@ -50,15 +50,10 @@ export function CalendarView({
   const [showExpense, setShowExpense] = useState(true);
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
   const monthNum = monthISO.slice(0, 7);
 
-  // Client-side filtered events and recomputed monthly totals. Bank totals cover
-  // cash accounts only (so the projection stays a true cash-flow view, including
-  // statement payments leaving checking) while credit-card charges get their own
-  // accrual total. Each is split into actual (cleared, on/before today) and a
-  // projected grand total (actual plus pending + virtual occurrences through
-  // month end), mirroring groupEventsByDay on the server.
+  // Client-side filtered events and recomputed monthly totals. See
+  // computeFilteredTotals for the cash-vs-accrual and actual-vs-projected rules.
   const {
     filteredEventsByDay,
     monthIncome,
@@ -67,63 +62,18 @@ export function CalendarView({
     monthExpenseActual,
     ccCharges,
     ccChargesActual,
-  } = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    let incomeActual = 0;
-    let expenseActual = 0;
-    let cc = 0;
-    let ccActual = 0;
-    const byDay: Record<string, CalendarEvent[]> = {};
-
-    for (const [day, events] of Object.entries(data.eventsByDay)) {
-      const filtered = events.filter((e) => {
-        if (e.accountId && !enabledAccountIds.has(e.accountId)) return false;
-        if (e.type === "INCOME" && !showIncome) return false;
-        if (e.type === "EXPENSE" && !showExpense) return false;
-        return true;
-      });
-      byDay[day] = filtered;
-
-      if (day.startsWith(monthNum)) {
-        for (const e of filtered) {
-          const actual = eventIsActual(e, data.todayISO);
-          const isCredit = e.accountId && acctById.get(e.accountId)?.type === "CREDIT_CARD";
-          if (isCredit) {
-            // Credit-card charges are accrual-only - they never move cash, so
-            // they stay out of the bank totals and the projection. The CC-credit
-            // side of a statement payment is a transfer and is skipped here too.
-            if (e.type === "EXPENSE" && !e.isTransfer) {
-              cc += e.amount;
-              if (actual) ccActual += e.amount;
-            }
-            continue;
-          }
-          // A statement payment (transfer from a cash account whose peer is a
-          // credit card) is real cash leaving the bank, so it counts as a bank
-          // expense. Internal cash-to-cash transfers are still excluded.
-          if (e.isTransfer && !isStatementPayment(e)) continue;
-          if (e.type === "INCOME") {
-            income += e.amount;
-            if (actual) incomeActual += e.amount;
-          } else if (e.type === "EXPENSE") {
-            expense += e.amount;
-            if (actual) expenseActual += e.amount;
-          }
-        }
-      }
-    }
-
-    return {
-      filteredEventsByDay: byDay,
-      monthIncome: income,
-      monthExpense: expense,
-      monthIncomeActual: incomeActual,
-      monthExpenseActual: expenseActual,
-      ccCharges: cc,
-      ccChargesActual: ccActual,
-    };
-  }, [data.eventsByDay, data.todayISO, enabledAccountIds, showIncome, showExpense, monthNum, acctById]);
+  } = useMemo(
+    () =>
+      computeFilteredTotals(data.eventsByDay, {
+        accountTypeById: new Map(accounts.map((a) => [a.id, a.type])),
+        enabledAccountIds,
+        showIncome,
+        showExpense,
+        monthNum,
+        todayISO: data.todayISO,
+      }),
+    [data.eventsByDay, data.todayISO, enabledAccountIds, showIncome, showExpense, monthNum, accounts],
+  );
 
   const net = monthIncomeActual - monthExpenseActual;
   const endOfMonthBalance = data.projection.length ? data.projection[data.projection.length - 1].balance : data.anchorBalance;
