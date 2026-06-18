@@ -146,8 +146,8 @@ export function TransactionsList({
     return true;
   });
 
-  const income = filtered.filter((t) => t.type === "INCOME" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
-  const expense = filtered.filter((t) => t.type === "EXPENSE" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
+  const income = filtered.filter((t) => t.type === "INCOME" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
+  const expense = filtered.filter((t) => t.type === "EXPENSE" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
 
   // Preserve the account & category filters across range/month navigation by
   // serialising the selected sets as comma-separated query params.

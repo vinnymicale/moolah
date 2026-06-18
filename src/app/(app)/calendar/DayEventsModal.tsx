@@ -84,7 +84,9 @@ export function DayEventsModal({
                   )}
                 </p>
                 <p className="text-xs text-muted">
-                  {cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
+                  {e.isTransfer && !isStatementPayment(e)
+                    ? "Card payment · not counted as income"
+                    : cat?.name ?? (e.isVirtual ? "Expected" : "Uncategorized")}
                 </p>
               </div>
               <Amount type={e.type} amount={e.amount} isTransfer={e.isTransfer} asExpense={isStatementPayment(e)} className="shrink-0 text-sm font-semibold" />

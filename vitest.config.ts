@@ -9,12 +9,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "html", "lcov"],
-      include: ["src/lib/**/*.ts"],
-      exclude: ["src/lib/**/*.test.ts", "src/generated/**"],
+      include: ["src/lib/**/*.ts", "src/actions/**/*.ts"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/generated/**"],
     },
   },
 });

@@ -7,6 +7,7 @@ import {
 } from "@/lib/dates";
 import { getAccounts, getSnapshots, type AccountDTO, type SnapshotDTO } from "@/lib/queries";
 import { categoryParts, type SplitLike } from "@/lib/splits";
+import { isEffectiveTransfer } from "@/lib/transfers";
 
 export interface NetWorthPoint { label: string; value: number; }
 export interface IncomeExpensePoint { label: string; income: number; expense: number; net: number; }
@@ -65,7 +66,7 @@ export async function computeReports(userId: string, todayISO: string): Promise<
     prisma.category.findMany({ where: { userId } }),
     prisma.transaction.findMany({
       where: { userId, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
-      select: { type: true, amount: true, date: true, categoryId: true, splits: { select: { categoryId: true, amount: true } } },
+      select: { type: true, amount: true, date: true, categoryId: true, account: { select: { type: true } }, splits: { select: { categoryId: true, amount: true } } },
     }),
     prisma.budget.findMany({ where: { userId, month: monthStart } }),
   ]);
@@ -75,13 +76,18 @@ export async function computeReports(userId: string, todayISO: string): Promise<
     accounts,
     snapshots,
     categories,
-    txns: txnRows.map((t) => ({
-      type: t.type,
-      amount: toNumber(t.amount),
-      date: isoDay(t.date),
-      categoryId: t.categoryId,
-      splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
-    })),
+    // The DB filter drops explicitly-paired transfers; the predicate also drops
+    // unpaired CC payment credits (CC-account INCOME) so trends match the
+    // calendar and dashboard.
+    txns: txnRows
+      .filter((t) => !isEffectiveTransfer({ type: t.type, isTransfer: false, accountType: t.account?.type ?? null }))
+      .map((t) => ({
+        type: t.type,
+        amount: toNumber(t.amount),
+        date: isoDay(t.date),
+        categoryId: t.categoryId,
+        splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
+      })),
     budgets: budgetRows.map((b) => ({ categoryId: b.categoryId, limit: toNumber(b.limit) })),
   });
 }
