@@ -46,6 +46,20 @@ describe("summarizeDashboard", () => {
     expect(summarizeDashboard({ ...base, monthExpense: 50 }).spendDeltaPct).toBeNull();
   });
 
+  it("excludes effective transfers from last month's expense base", () => {
+    // A CC payment credit posts as INCOME and is marked effectiveTransfer; an
+    // expense leg that's an explicit transfer is likewise excluded. Only the
+    // real $100 expense should anchor the delta.
+    const ccCredit = { type: "INCOME", amount: 500, effectiveTransfer: true } as TransactionDTO;
+    const transferLeg = { type: "EXPENSE", amount: 500, effectiveTransfer: true } as TransactionDTO;
+    const s = summarizeDashboard({
+      ...base,
+      monthExpense: 120,
+      lastMonthTxns: [txn("EXPENSE", 100), ccCredit, transferLeg],
+    });
+    expect(s.spendDeltaPct).toBe(20);
+  });
+
   it("keeps only budgeted categories, ordered by largest limit, with totals", () => {
     const s = summarizeDashboard({
       ...base,

@@ -7,6 +7,7 @@ import { fromCents, toCents, toNumber, type MoneyInput } from "@/lib/money";
 import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { expandOccurrences } from "@/lib/recurrence";
 import { sumPartsByCategory, type SplittableTxn } from "@/lib/splits";
+import { isEffectiveTransfer } from "@/lib/transfers";
 import {
   detectRecurringCandidates,
   type RecurringSuggestion,
@@ -79,8 +80,14 @@ export interface TransactionDTO {
   accountId: string | null;
   categoryId: string | null;
   cleared: boolean;
-  /** Part of a transfer pair (e.g. CC payment) - excluded from income/expense totals. */
+  /** The stored transfer flag (explicit pairing only). */
   isTransfer: boolean;
+  /**
+   * Whether this counts as a transfer for income/expense totals: the stored
+   * flag OR the CC-payment-credit heuristic. Use this, not isTransfer, when
+   * summing - see {@link isEffectiveTransfer}.
+   */
+  effectiveTransfer: boolean;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
   /** Per-category split parts. Empty when the transaction has a single category. */
@@ -210,7 +217,7 @@ export async function getTransactionsBetween(
   const rows = await prisma.transaction.findMany({
     where: { userId, date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: { splits: true },
+    include: { splits: true, account: { select: { type: true } } },
   });
   return rows.map((t) => ({
     id: t.id,
@@ -223,6 +230,11 @@ export async function getTransactionsBetween(
     categoryId: t.categoryId,
     cleared: t.cleared,
     isTransfer: t.isTransfer,
+    effectiveTransfer: isEffectiveTransfer({
+      type: t.type,
+      isTransfer: t.isTransfer,
+      accountType: t.account?.type ?? null,
+    }),
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
     splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),

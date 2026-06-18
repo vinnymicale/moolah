@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start:all": "concurrently -k -n db,web -c blue,green \"npm:db:local\" \"npm:dev\"",
     "dev": "next dev",

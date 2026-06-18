@@ -223,8 +223,8 @@ async function executeTool(
         const now = new Date();
         const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
         const txns = await getTransactionsBetween(userId, monthStart, today);
-        const income = txns.filter((t) => t.type === "INCOME" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
-        const expenses = txns.filter((t) => t.type === "EXPENSE" && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
+        const income = txns.filter((t) => t.type === "INCOME" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
+        const expenses = txns.filter((t) => t.type === "EXPENSE" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
         return JSON.stringify({
           net_worth: netWorth.net,
           assets: netWorth.assets,
@@ -443,6 +443,14 @@ async function executeTool(
 // Provider adapters — all return a plain string reply
 // ---------------------------------------------------------------------------
 
+// Each provider runs the same agentic loop: send the conversation, run any
+// tool calls the model asks for, feed results back, repeat until it answers.
+// The wire formats differ per provider, but the cap and exhaustion message
+// are shared.
+const MAX_TOOL_ROUNDS = 10;
+const TOOL_LOOP_EXHAUSTED =
+  "I was unable to complete the request after several tool calls. Please try again.";
+
 async function callAnthropic(
   apiKey: string,
   systemPrompt: string,
@@ -470,7 +478,7 @@ async function callAnthropic(
     content: m.content,
   }));
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -532,7 +540,7 @@ async function callAnthropic(
     return textBlock?.text ?? "";
   }
 
-  return "I was unable to complete the request after several tool calls. Please try again.";
+  return TOOL_LOOP_EXHAUSTED;
 }
 
 async function callOpenAI(
@@ -557,7 +565,7 @@ async function callOpenAI(
     ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
   ];
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -629,7 +637,7 @@ async function callOpenAI(
     return choice.message.content ?? "";
   }
 
-  return "I was unable to complete the request after several tool calls. Please try again.";
+  return TOOL_LOOP_EXHAUSTED;
 }
 
 async function callGemini(
@@ -660,7 +668,7 @@ async function callGemini(
     parts: [{ text: m.content }],
   }));
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
@@ -712,7 +720,7 @@ async function callGemini(
     convMessages.push({ role: "user", parts: responseParts });
   }
 
-  return "I was unable to complete the request after several tool calls. Please try again.";
+  return TOOL_LOOP_EXHAUSTED;
 }
 
 // ---------------------------------------------------------------------------

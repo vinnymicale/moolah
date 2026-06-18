@@ -328,6 +328,7 @@ function txn(
     categoryId,
     cleared,
     isTransfer: false,
+    effectiveTransfer: false,
     recurringRuleId,
     plaidTransactionId: null,
     splits: [],

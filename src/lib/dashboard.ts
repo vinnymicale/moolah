@@ -29,7 +29,7 @@ export interface DashboardSummary {
 }
 
 const sumExpenses = (txns: TransactionDTO[]) =>
-  txns.filter((t) => t.type === "EXPENSE" && !t.isTransfer).reduce((sum, t) => sum + t.amount, 0);
+  txns.filter((t) => t.type === "EXPENSE" && !t.effectiveTransfer).reduce((sum, t) => sum + t.amount, 0);
 
 /** Derives every figure the dashboard renders from the raw query results. */
 export function summarizeDashboard(input: DashboardSummaryInput): DashboardSummary {
