@@ -31,6 +31,10 @@ Planned improvements, roughly in priority order:
 - **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
+- **Rules & automation center** - one place to define rules (description contains, amount range,
+  account, type) that auto-categorize transactions, mark transfers, split by ratio, or clean up
+  messy payee names, with a dry-run preview and a "run on existing transactions" backfill.
+  Builds on the category rules and automatic transfer pairing that already run at import/sync time.
 
 Recently shipped: the Net Worth page (automatic daily snapshots, a history chart, and a 12-month
 forecast), [Docker support](#self-hosting-with-docker), the [read-only data

@@ -14,6 +14,7 @@ import {
 import { expandOccurrences } from "@/lib/recurrence";
 import { projectDailyBalances, type DayProjection, type ProjTxn } from "@/lib/projection";
 import { getAccounts } from "@/lib/queries";
+import { isEffectiveTransfer } from "@/lib/transfers";
 import { eventIsActual } from "@/app/(app)/calendar/calendar-utils";
 import type { TxnType, AccountType } from "@/generated/prisma/enums";
 
@@ -188,10 +189,17 @@ export async function getUpcoming(
 
   const items: UpcomingItem[] = [];
 
+  const accounts = await getAccounts(userId);
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+
   const pending = await prisma.transaction.findMany({
     where: { userId, cleared: false, date: { gte: start, lte: end } },
   });
   for (const t of pending) {
+    const acct = t.accountId ? accountById.get(t.accountId) : null;
+    if (isEffectiveTransfer({ type: t.type, isTransfer: t.isTransfer, accountType: acct?.type ?? null })) {
+      continue;
+    }
     items.push({
       date: isoDay(t.date),
       description: t.description,
@@ -210,6 +218,10 @@ export async function getUpcoming(
     })).map((t) => `${t.recurringRuleId}|${isoDay(t.date)}`),
   );
   for (const rule of rules) {
+    const ruleAcct = rule.accountId ? accountById.get(rule.accountId) : null;
+    if (isEffectiveTransfer({ type: rule.type, isTransfer: false, accountType: ruleAcct?.type ?? null })) {
+      continue;
+    }
     for (const occ of expandOccurrences(
       { frequency: rule.frequency, interval: rule.interval, startDate: rule.startDate, endDate: rule.endDate, dayOfMonth: rule.dayOfMonth, weekday: rule.weekday },
       start,
@@ -272,10 +284,11 @@ export async function getCalendarMonth(
       accountId: t.accountId,
       cleared: t.cleared,
       isVirtual: false,
-      // Explicitly paired transfers, plus the CC-payment-credit heuristic for
-      // unpaired rows: those credits are not real income - they reduce the CC
-      // balance. The corresponding checking debit is the true cash outflow.
-      isTransfer: t.isTransfer || (acct?.type === "CREDIT_CARD" && t.type === "INCOME"),
+      isTransfer: isEffectiveTransfer({
+        type: t.type,
+        isTransfer: t.isTransfer,
+        accountType: acct?.type ?? null,
+      }),
       transferPeerType: t.transferPeer?.account?.type ?? null,
       recurringRuleId: t.recurringRuleId,
       plaidTransactionId: t.plaidTransactionId,
@@ -325,7 +338,11 @@ export async function getCalendarMonth(
         accountId: rule.accountId,
         cleared: false,
         isVirtual: true,
-        isTransfer: ruleAcct?.type === "CREDIT_CARD" && rule.type === "INCOME",
+        isTransfer: isEffectiveTransfer({
+          type: rule.type,
+          isTransfer: false,
+          accountType: ruleAcct?.type ?? null,
+        }),
         transferPeerType: null,
         recurringRuleId: rule.id,
         plaidTransactionId: null,

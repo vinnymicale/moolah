@@ -147,7 +147,9 @@ export function eventToTxn(e: CalendarEvent): TransactionDTO {
     accountId: e.accountId,
     categoryId: e.categoryId,
     cleared: e.cleared,
+    // CalendarEvent.isTransfer is already the effective classification.
     isTransfer: e.isTransfer,
+    effectiveTransfer: e.isTransfer,
     recurringRuleId: e.recurringRuleId,
     plaidTransactionId: e.plaidTransactionId,
     // Calendar events are single-category; the editor seeds an unsplit form.
