@@ -208,3 +208,44 @@ describe("GET /api/v1/summary", () => {
     expect(body.safeToTransfer).toBe(0);
   });
 });
+
+describe("GET /api/v1 discovery root", () => {
+  it("lists every endpoint with no auth required", async () => {
+    const mod = await import("./route");
+    const res = mod.GET();
+    const body = await res.json();
+
+    expect(body.version).toBe("1");
+    expect(body.auth).toMatch(/Bearer/);
+    const paths = body.endpoints.map((e: { path: string }) => e.path);
+    expect(paths).toEqual([
+      "/api/v1/summary",
+      "/api/v1/net-worth",
+      "/api/v1/accounts",
+      "/api/v1/budget",
+      "/api/v1/upcoming",
+    ]);
+    // It never touches the auth gate - it's a public map, no data.
+    expect(auth).not.toHaveBeenCalled();
+  });
+});
+
+describe("response envelope", () => {
+  it("stamps the version header and forbids caching", async () => {
+    accounts.mockResolvedValue([] as unknown as Awaited<ReturnType<typeof getAccounts>>);
+    const { GET } = await import("./accounts/route");
+    const res = await GET(req());
+    expect(res.headers.get("X-Api-Version")).toBe("1");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+describe("read-only method guard", () => {
+  it("returns a JSON 405 with an Allow header for write methods", async () => {
+    const { POST } = await import("./summary/route");
+    const res = POST();
+    expect(res.status).toBe(405);
+    expect(res.headers.get("Allow")).toBe("GET");
+    expect(await res.json()).toEqual({ error: "Method not allowed" });
+  });
+});

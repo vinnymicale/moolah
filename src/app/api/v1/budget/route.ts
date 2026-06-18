@@ -3,7 +3,7 @@
 // in UTC.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson } from "../_auth";
+import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
 import { getBudgetMonth } from "@/lib/queries";
 import { todayInZone } from "@/lib/user-tz";
 import { sumMoney } from "@/lib/money";
@@ -38,3 +38,5 @@ export async function GET(req: NextRequest) {
     })),
   });
 }
+
+export const { POST, PUT, PATCH, DELETE } = readOnlyMethods;

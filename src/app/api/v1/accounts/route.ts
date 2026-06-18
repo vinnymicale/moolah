@@ -1,7 +1,7 @@
 // GET /api/v1/accounts — all non-archived accounts with balances.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson } from "../_auth";
+import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
 import { getAccounts } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -24,3 +24,5 @@ export async function GET(req: NextRequest) {
     })),
   });
 }
+
+export const { POST, PUT, PATCH, DELETE } = readOnlyMethods;
