@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toNumber, toCents, fromCents, sumMoney, formatUSD, formatSigned } from "./money";
+import { toNumber, toCents, fromCents, sumMoney, addMoney, formatUSD, formatUSDWhole, formatSigned } from "./money";
 
 describe("toNumber", () => {
   it("passes numbers through", () => {
@@ -30,6 +30,13 @@ describe("sumMoney", () => {
   });
 });
 
+describe("addMoney", () => {
+  it("adds variadic values without float drift", () => {
+    expect(addMoney(0.1, 0.2)).toBe(0.3);
+    expect(addMoney(10, "5.50", null)).toBe(15.5);
+  });
+});
+
 describe("toCents / fromCents", () => {
   it("rounds to the nearest cent", () => {
     expect(toCents(10.005)).toBe(1001);
@@ -42,6 +49,12 @@ describe("formatting", () => {
   it("formats USD", () => {
     expect(formatUSD(1234.56)).toBe("$1,234.56");
     expect(formatUSD(-1234.56)).toBe("-$1,234.56");
+  });
+
+  it("formats whole-dollar amounts, rounding the cents away", () => {
+    expect(formatUSDWhole(1234.56)).toBe("$1,235");
+    expect(formatUSDWhole(1234.4)).toBe("$1,234");
+    expect(formatUSDWhole(-99.9)).toBe("-$100");
   });
 
   it("formats signed deltas with explicit +/-", () => {

@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { afterEach, vi } from "vitest";
 import {
-  parseISODay, isoDay, toUTCDay, addUTCMonths, addUTCYears,
-  daysInMonth, startOfUTCMonth, endOfUTCMonth, daysBetween, monthGrid,
-  formatMonthDay, formatMonthDayYear,
+  parseISODay, isoDay, toUTCDay, addUTCDays, addUTCMonths, addUTCYears,
+  daysInMonth, startOfUTCMonth, endOfUTCMonth, daysBetween, daysUntilDate, monthGrid,
+  sameUTCDay, isBefore, isAfter, withinRange, monthLabel,
+  formatMonthDay, formatMonthDayYear, formatWeekdayMonthDay, formatWeekdayMonthDayYear,
 } from "./dates";
 
 describe("parseISODay / isoDay", () => {
@@ -66,9 +68,69 @@ describe("monthGrid", () => {
   });
 });
 
+describe("addUTCDays", () => {
+  it("adds and subtracts, crossing month boundaries", () => {
+    expect(isoDay(addUTCDays(parseISODay("2026-06-30"), 2))).toBe("2026-07-02");
+    expect(isoDay(addUTCDays(parseISODay("2026-06-01"), -1))).toBe("2026-05-31");
+  });
+});
+
+describe("comparisons", () => {
+  const a = parseISODay("2026-06-01");
+  const b = parseISODay("2026-06-09");
+
+  it("sameUTCDay ignores time-of-day", () => {
+    expect(sameUTCDay(new Date("2026-06-09T00:00:00Z"), new Date("2026-06-09T23:59:59Z"))).toBe(true);
+    expect(sameUTCDay(a, b)).toBe(false);
+  });
+
+  it("isBefore / isAfter order two days", () => {
+    expect(isBefore(a, b)).toBe(true);
+    expect(isBefore(b, a)).toBe(false);
+    expect(isAfter(b, a)).toBe(true);
+    expect(isAfter(a, b)).toBe(false);
+  });
+
+  it("withinRange is inclusive on both ends", () => {
+    expect(withinRange(a, a, b)).toBe(true);
+    expect(withinRange(b, a, b)).toBe(true);
+    expect(withinRange(parseISODay("2026-06-05"), a, b)).toBe(true);
+    expect(withinRange(parseISODay("2026-05-31"), a, b)).toBe(false);
+    expect(withinRange(parseISODay("2026-06-10"), a, b)).toBe(false);
+  });
+});
+
+describe("daysUntilDate", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("is positive for the future, negative once past", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-09T12:00:00Z"));
+    expect(daysUntilDate("2026-06-12")).toBe(3);
+    expect(daysUntilDate("2026-06-05")).toBe(-4);
+  });
+});
+
+describe("monthLabel", () => {
+  it("renders the UTC month and year", () => {
+    expect(monthLabel(parseISODay("2026-06-09"))).toBe("June 2026");
+    expect(monthLabel(parseISODay("2026-01-01"))).toBe("January 2026");
+  });
+});
+
 describe("formatters render the stored day regardless of zone", () => {
   it("formats month/day and full date", () => {
     expect(formatMonthDay("2026-06-09")).toBe("Jun 9");
     expect(formatMonthDayYear("2026-06-09")).toBe("Jun 9, 2026");
+  });
+
+  it("formats weekday variants", () => {
+    expect(formatWeekdayMonthDay("2026-06-09")).toBe("Tue, Jun 9");
+    expect(formatWeekdayMonthDayYear("2026-06-09")).toBe("Tue, Jun 9, 2026");
+  });
+
+  it("returns an empty string for an empty input", () => {
+    expect(formatMonthDay("")).toBe("");
+    expect(formatWeekdayMonthDayYear("")).toBe("");
   });
 });
