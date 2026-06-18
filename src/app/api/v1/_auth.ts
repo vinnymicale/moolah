@@ -48,7 +48,41 @@ export async function requireApiUser(req: NextRequest): Promise<AuthOutcome> {
   return { ok: true, userId: user.userId };
 }
 
-/** Consistent JSON envelope so consumers can rely on a stable shape. */
+/** Current API version, surfaced on every response and the discovery root. */
+export const API_VERSION = "1";
+
+/**
+ * Consistent JSON envelope so consumers can rely on a stable shape. Stamps every
+ * response with the API version and forbids caching - this is live financial
+ * data, and a poller (e.g. Home Assistant) should always see current balances.
+ */
 export function apiJson(data: unknown, init?: ResponseInit): NextResponse {
-  return NextResponse.json(data, init);
+  const res = NextResponse.json(data, init);
+  res.headers.set("X-Api-Version", API_VERSION);
+  res.headers.set("Cache-Control", "no-store");
+  return res;
 }
+
+/**
+ * JSON 405 for a read-only route that was hit with a write method. Advertises
+ * the allowed method so a consumer gets a clean, machine-readable rejection
+ * instead of Next's default HTML error page.
+ */
+export function methodNotAllowed(allow = "GET"): NextResponse {
+  return apiJson(
+    { error: "Method not allowed" },
+    { status: 405, headers: { Allow: allow } },
+  );
+}
+
+/**
+ * Write-method handlers for a GET-only route. Spread into a route module
+ * (`export const { POST, PUT, PATCH, DELETE } = readOnlyMethods;`) so a write
+ * attempt gets a clean JSON 405 instead of Next's HTML 405.
+ */
+export const readOnlyMethods = {
+  POST: () => methodNotAllowed(),
+  PUT: () => methodNotAllowed(),
+  PATCH: () => methodNotAllowed(),
+  DELETE: () => methodNotAllowed(),
+};
