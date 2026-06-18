@@ -5,7 +5,7 @@
 // to UTC.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson } from "../_auth";
+import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
 import { getNetWorth, getSafeToTransfer, getBudgetMonth } from "@/lib/queries";
 import { getUpcoming } from "@/lib/calendar";
 import { todayInZone } from "@/lib/user-tz";
@@ -51,3 +51,5 @@ export async function GET(req: NextRequest) {
     })),
   });
 }
+
+export const { POST, PUT, PATCH, DELETE } = readOnlyMethods;

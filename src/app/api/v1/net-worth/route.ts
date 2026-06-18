@@ -7,7 +7,7 @@
 //   ?tz=America/...    anchor "today" for the history/forecast windows.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson } from "../_auth";
+import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
 import { getNetWorth } from "@/lib/queries";
 import { getNetWorthHistory } from "@/lib/snapshots";
 import { forecastNetWorth } from "@/lib/networth-forecast";
@@ -53,3 +53,5 @@ export async function GET(req: NextRequest) {
 
   return apiJson(body);
 }
+
+export const { POST, PUT, PATCH, DELETE } = readOnlyMethods;
