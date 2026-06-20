@@ -2,7 +2,8 @@ import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
-import { ExportData, BackupData, RestoreData, AiConfigForm, PlaidConfigForm, ApiTokenForm } from "./SettingsForm";
+import { ExportData, BackupData, RestoreData, AiConfigForm, PlaidConfigForm, ApiTokenForm, ScheduledBackupForm } from "./SettingsForm";
+import { scheduleFromCron } from "@/lib/backup/schedule";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
@@ -44,6 +45,19 @@ export default async function SettingsPage() {
     getCategories(userId),
   ]);
   if (!user) return null;
+
+  const backupConfig = await prisma.backupConfig.findUnique({ where: { userId } });
+  const backupProps = {
+    enabled: backupConfig?.enabled ?? false,
+    destination: backupConfig?.destination ?? "local",
+    schedule: scheduleFromCron(backupConfig?.cron ?? "0 3 * * *"),
+    keepCount: backupConfig?.keepCount ?? 7,
+    gdriveConnected: !!backupConfig?.credentials,
+    lastRunAt: backupConfig?.lastRunAt ? backupConfig.lastRunAt.toISOString() : null,
+    lastStatus: backupConfig?.lastStatus ?? null,
+    lastError: backupConfig?.lastError ?? null,
+    lastBackupName: backupConfig?.lastBackupName ?? null,
+  };
 
   const envFallback = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
 
@@ -98,6 +112,16 @@ export default async function SettingsPage() {
           <code className="rounded bg-surface2 px-1 py-0.5 text-text">npm run db:restore -- &lt;file&gt;</code>{" "}
           against an empty database.
         </p>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Scheduled backups</h2>
+        <p className="mb-3 text-sm text-muted">
+          Run full backups automatically on a schedule and keep a rolling number of copies. This runs
+          on the server itself, so it&apos;s meant for an always-on / self-hosted setup rather than
+          serverless.
+        </p>
+        <ScheduledBackupForm config={backupProps} />
       </section>
 
       <section className="card p-5">

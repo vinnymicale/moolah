@@ -114,6 +114,10 @@ Have a request? Open an issue on GitHub.
   your Plaid access tokens) and restore it later - both from the CLI and directly in **Settings**.
   Restoring re-uses your existing Plaid connections, so moving to a new machine or Docker host
   costs no new billed bank links.
+- **Scheduled backups** - on an always-on / self-hosted instance, run full backups automatically
+  daily or weekly, keep a rolling number of copies (the oldest is pruned), and store them in a
+  local folder (or mounted volume) or **Google Drive**. Configure it all from **Settings**, with a
+  "Run backup now" button and last-run status.
 
 ### Polished
 - **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and dates that
@@ -276,6 +280,7 @@ CREATE DATABASE moolah OWNER moolah;
 | `PLAID_CLIENT_ID` | no | — | Only if you want automatic bank sync. From your Plaid dashboard. |
 | `PLAID_SECRET` | no | — | Plaid API secret (matches `PLAID_ENV`). |
 | `PLAID_ENV` | no | `sandbox` | `sandbox` for fake test data, `production` for real banks. |
+| `BACKUP_LOCAL_DIR` | no | `backups` | Where scheduled backups land for the **local** destination. Point it at a mounted volume to keep backups off the container's disk, e.g. `/backups`. Ignored for the Google Drive destination. |
 
 ---
 
@@ -414,6 +419,43 @@ For a full cold copy you can also just back up the database folder itself:
 > access to your bank data. Keep them somewhere private.
 
 > Never run `npm run db:reset` or delete `.pgdata/` without a current backup - both wipe your tokens.
+
+### Option C - scheduled automatic backups
+
+If your instance stays running (self-hosted Docker, Unraid, or `npm start`), it can take the Option A
+backup for you on a schedule. Go to **Settings → Scheduled backups** and set:
+
+- **Destination** - a local folder/mounted volume, or **Google Drive**.
+- **Frequency** - daily or weekly, at a chosen hour (server local time).
+- **Copies to keep** - retention. Once a new backup pushes the count over this, the oldest is
+  deleted. "Keep 5" with a daily schedule means a rolling 5-day window.
+
+A **Run backup now** button takes one on demand, and the section shows the last run's time and
+result. The backups are the exact same JSON snapshot as Option A, so any of them can be restored via
+**Settings → Restore from a backup** or `npm run db:restore`.
+
+This runs inside the app process, so it only fires while the server is up - it's meant for an
+always-on host, not serverless. It's disabled in demo mode.
+
+**Local destination:** backups are written to `BACKUP_LOCAL_DIR` (default `./backups`). In Docker,
+set it to a mounted volume like `/backups` so copies survive container rebuilds.
+
+**Google Drive destination:** uses an OAuth refresh token rather than a browser sign-in at backup
+time, so it works headless. One-time setup:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/apis/credentials), create an OAuth
+   client of type **Desktop app** and note its **client ID** and **client secret**.
+2. Authorize the `https://www.googleapis.com/auth/drive.file` scope once and exchange the resulting
+   code for a **refresh token** (e.g. via the [OAuth Playground](https://developers.google.com/oauthplayground/)
+   using your own client).
+3. Create a folder in Drive for the backups and copy its **folder ID** (the last segment of the
+   folder's URL).
+4. Paste the client ID, client secret, refresh token, and folder ID into **Settings → Scheduled
+   backups → Google Drive**. They're encrypted at rest with `ENCRYPTION_KEY` and never sent back to
+   the browser.
+
+Backups are uploaded into that folder, and retention only prunes Moolah's own
+`moolah-backup-*.json` files there - anything else in the folder is left alone.
 
 ---
 

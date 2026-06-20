@@ -53,6 +53,7 @@ model User {
   savingsGoals      SavingsGoal[]
   plaidItems        PlaidItem[]
   rules             Rule[]
+  backupConfig      BackupConfig?
 }
 
 // Auth.js OAuth account link
@@ -419,4 +420,39 @@ model PlaidLinkedAccount {
   updatedAt          DateTime @updatedAt
 
   @@index([plaidItemId])
+}
+
+// ── Automated backups ─────────────────────────────────────────────────────────
+
+// Per-user configuration for scheduled, retention-managed backups to a chosen
+// destination (local volume, Dropbox, Google Drive). One row per user. The
+// destination credentials (OAuth refresh token, folder path/id) are stored
+// encrypted with ENCRYPTION_KEY in the same format as Plaid/AI secrets.
+model BackupConfig {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  enabled     Boolean  @default(false)
+  // Where backups are written: "local" | "dropbox" | "gdrive".
+  destination String   @default("local")
+  // How often the scheduler runs, stored as a standard cron expression. The UI
+  // edits this through friendly presets (daily/weekly + time of day).
+  cron        String   @default("0 3 * * *")
+  // Retention: keep at most this many backups at the destination; older ones are
+  // pruned after each successful run.
+  keepCount   Int      @default(7)
+
+  // Destination-specific settings as an encrypted JSON blob (refresh token,
+  // folder id/path, etc.). Null for "local", which needs no credentials.
+  credentials String?
+
+  // Last-run status for the Settings UI.
+  lastRunAt   DateTime?
+  lastStatus  String?   // "success" | "error" | "running"
+  lastError   String?
+  lastBackupName String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

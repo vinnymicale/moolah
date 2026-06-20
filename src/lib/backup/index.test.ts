@@ -17,7 +17,7 @@ vi.mock("pg", () => ({
   },
 }));
 
-import { exportUserData } from "./backup";
+import { exportUserData } from "./index";
 
 // pg_tables and information_schema lookups come first, in source order. The
 // per-table SELECTs follow. We drive responses by matching on the SQL text so
