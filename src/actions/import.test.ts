@@ -19,7 +19,7 @@ vi.mock("@/lib/prisma", () => ({
     transaction: { findMany: vi.fn(), createMany: vi.fn() },
     recurringRule: { findMany: vi.fn() },
     category: { findMany: vi.fn() },
-    categoryRule: { findMany: vi.fn() },
+    rule: { findMany: vi.fn() },
     financialAccount: { findFirst: vi.fn() },
   },
 }));
@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.mocked(prisma.transaction.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.recurringRule.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.category.findMany).mockResolvedValue([] as never);
-  vi.mocked(prisma.categoryRule.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.rule.findMany).mockResolvedValue([] as never);
 });
 
 describe("analyzeImportAction", () => {
@@ -101,12 +101,18 @@ describe("analyzeImportAction", () => {
     expect(res.rows[0].duplicateReason).toBe("Matches a recurring rule");
   });
 
-  it("prefers a user category rule over the keyword guesser", async () => {
+  it("prefers a user rule over the keyword guesser", async () => {
     vi.mocked(prisma.category.findMany).mockResolvedValue([
       { id: "cat-rules", name: "Subscriptions", kind: "EXPENSE" },
     ] as never);
-    vi.mocked(prisma.categoryRule.findMany).mockResolvedValue([
-      { pattern: "netflix", categoryId: "cat-rules" },
+    vi.mocked(prisma.rule.findMany).mockResolvedValue([
+      {
+        id: "r1",
+        priority: 0,
+        enabled: true,
+        conditions: [{ type: "descriptionContains", value: "netflix" }],
+        actions: [{ type: "setCategory", categoryId: "cat-rules" }],
+      },
     ] as never);
 
     const res = await analyzeImportAction([

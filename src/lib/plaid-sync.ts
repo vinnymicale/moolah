@@ -10,7 +10,7 @@ import { prisma } from "./prisma";
 import { parseISODay, isoDay } from "./dates";
 import { expandOccurrences } from "./recurrence";
 import { findTransferPairs, type MatchableTxn } from "./transfer-match";
-import { matchCategoryRule } from "./category-rules";
+import { evaluateRules, type RuleAction, type RuleCondition, type RuleLike } from "./rules";
 import { captureNetWorthSnapshot } from "./snapshots";
 import { toCents } from "./money";
 import type { TxnType } from "@/generated/prisma/enums";
@@ -191,8 +191,17 @@ export async function syncPlaidItem(
   const categories = await prisma.category.findMany({ where: { userId: item.userId } });
   const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
 
-  // User-defined rules beat Plaid's generic category mapping.
-  const categoryRules = await prisma.categoryRule.findMany({ where: { userId: item.userId } });
+  // User-defined rules beat Plaid's generic category mapping. Split actions are
+  // left to the explicit "apply to existing" backfill (they need a follow-up
+  // write keyed on the new row id); sync applies category, rename, and transfer.
+  const ruleRows = await prisma.rule.findMany({ where: { userId: item.userId }, orderBy: { priority: "asc" } });
+  const automationRules: RuleLike[] = ruleRows.map((r) => ({
+    id: r.id,
+    priority: r.priority,
+    enabled: r.enabled,
+    conditions: r.conditions as unknown as RuleCondition[],
+    actions: r.actions as unknown as RuleAction[],
+  }));
 
   // Load recurring rules for matching. When a Plaid transaction lands on (or
   // within 2 days of) a rule's scheduled occurrence, we link the transaction
@@ -236,25 +245,32 @@ export async function syncPlaidItem(
       const primaryCat = txn.personal_finance_category?.primary ?? "";
       const detailCat = txn.personal_finance_category?.detailed ?? "";
       const catName = plaidCategoryToName(primaryCat, detailCat);
-      const description0 = txn.merchant_name ?? txn.name;
-      const categoryId = matchCategoryRule(description0, categoryRules)
+      const rawDescription = txn.merchant_name ?? txn.name;
+
+      const effect = evaluateRules(
+        { description: rawDescription, amountDollars: amount, accountId: linked.financialAccountId, type },
+        automationRules,
+      );
+      const description = effect.description ?? rawDescription;
+      const categoryId = effect.categoryId
         ?? (catName ? catByName.get(catName.toLowerCase())?.id ?? null : null);
+      const isTransfer = effect.markTransfer ?? false;
 
       // Use authorized_date when available - it's when the user actually made
       // the purchase, vs. date which is the posting date for settled txns.
       const txnDate = parseISODay(txn.authorized_date ?? txn.date);
-      const description = txn.merchant_name ?? txn.name;
       const recurringRuleId = matchRule(type, txnDate, amount, description);
 
       await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
         update: opts?.recategorizeOnly
           ? { amount, description, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
-          : { amount, description, date: txnDate, type, categoryId, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
+          : { amount, description, date: txnDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
         create: {
           userId: item.userId,
           accountId: linked.financialAccountId,
           categoryId,
+          isTransfer,
           type,
           amount,
           date: txnDate,
@@ -304,16 +320,22 @@ export async function syncPlaidItem(
       const detailCat = txn.personal_finance_category?.detailed ?? "";
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const modDate = parseISODay(txn.authorized_date ?? txn.date);
-      const modDesc = txn.merchant_name ?? txn.name;
-      const categoryId = matchCategoryRule(modDesc, categoryRules)
+      const rawModDesc = txn.merchant_name ?? txn.name;
+      const modEffect = evaluateRules(
+        { description: rawModDesc, amountDollars: amount, accountId: linked.financialAccountId, type },
+        automationRules,
+      );
+      const modDesc = modEffect.description ?? rawModDesc;
+      const categoryId = modEffect.categoryId
         ?? (catName ? catByName.get(catName.toLowerCase())?.id ?? null : null);
+      const isTransfer = modEffect.markTransfer ?? false;
       const modRuleId = matchRule(type, modDate, amount, modDesc);
 
       await prisma.transaction.updateMany({
         where: { plaidTransactionId: txn.transaction_id, userId: item.userId },
         data: opts?.recategorizeOnly
           ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
-          : { amount, description: modDesc, date: modDate, type, categoryId, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
+          : { amount, description: modDesc, date: modDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
       });
 
       // Same pending→posted reconciliation as in the added loop: drop the

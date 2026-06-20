@@ -31,14 +31,13 @@ Planned improvements, roughly in priority order:
 - **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
-- **Rules & automation center** - one place to define rules (description contains, amount range,
-  account, type) that auto-categorize transactions, mark transfers, split by ratio, or clean up
-  messy payee names, with a dry-run preview and a "run on existing transactions" backfill.
-  Builds on the category rules and automatic transfer pairing that already run at import/sync time.
 
-Recently shipped: the Net Worth page (automatic daily snapshots, a history chart, and a 12-month
-forecast), [Docker support](#self-hosting-with-docker), the [read-only data
-API](#read-only-data-api), category splits, and [in-app backup
+Recently shipped: the **rules & automation center** (one place to define rules — description
+contains, amount range, account, type — that auto-categorize, mark transfers, split by ratio, or
+clean up messy payee names, with a dry-run preview and a "run on existing transactions" backfill),
+the Net Worth page (automatic daily snapshots, a history chart, and a 12-month forecast),
+[Docker support](#self-hosting-with-docker), the [read-only data API](#read-only-data-api),
+category splits, and [in-app backup
 restore](#backing-up-your-data-and-your-plaid-connections).
 
 Have a request? Open an issue on GitHub.
@@ -58,9 +57,12 @@ Have a request? Open an issue on GitHub.
   and posted transactions sync automatically and are auto-categorised using the bank's own
   category data (with a one-click "fix categories" re-run). If a bank connection breaks, a
   **Reconnect** button re-authenticates it in place - same Plaid item, so no new billed connection.
-- **Auto-categorization rules** - "description contains *costco* → Groceries". Your rules run on
-  every bank sync and CSV import (beating the generic mappers), and a one-click backfill
-  categorizes existing uncategorized history. Managed on the Categories page.
+- **Rules & automation** - define rules from conditions (description contains, amount range,
+  account, type, combined with AND) that auto-categorize, rewrite messy payee names, mark
+  transfers, or split a charge by ratio. Rules run on every bank sync and CSV import (beating the
+  generic mappers); a dry-run preview shows what would change before you commit, and a one-click
+  backfill applies them across existing history (never overwriting a category you set by hand).
+  Managed on the Categories page.
 - **Transfer matching** - credit-card payments are detected automatically (the checking debit and
   the card credit are linked as a pair) and excluded from income/spending totals, so paying your
   card never counts as "spending" twice. Pairs can also be linked/unlinked by hand.

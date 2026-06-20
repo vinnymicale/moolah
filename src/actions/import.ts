@@ -8,7 +8,7 @@ import { parseISODay, isoDay } from "@/lib/dates";
 import { toCents } from "@/lib/money";
 import { expandOccurrences } from "@/lib/recurrence";
 import { guessCategoryName, type ImportType } from "@/lib/csv-import";
-import { matchCategoryRule } from "@/lib/category-rules";
+import { evaluateRules, type RuleAction, type RuleCondition, type RuleLike } from "@/lib/rules";
 import { matchTransfers } from "@/lib/plaid-sync";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -29,6 +29,8 @@ export interface AnalyzedRow extends ParsedRowInput {
   duplicateReason: string | null;
   /** Suggested category id, if a keyword matched. */
   suggestedCategoryId: string | null;
+  /** Suggested cleaned-up description from a rename rule, if any. */
+  suggestedDescription: string | null;
 }
 
 /** Stable key for matching by direction + day + amount. */
@@ -69,11 +71,11 @@ export async function analyzeImportAction(
 
     // Projected recurring occurrences in range (a rule yields at most one per
     // day, so a set is enough).
-    const rules = await prisma.recurringRule.findMany({
+    const recurringRules = await prisma.recurringRule.findMany({
       where: { userId, archived: false },
     });
     const recurringKeys = new Set<string>();
-    for (const rule of rules) {
+    for (const rule of recurringRules) {
       const occ = expandOccurrences(
         {
           frequency: rule.frequency,
@@ -97,8 +99,16 @@ export async function analyzeImportAction(
     });
     const catByName = new Map(categories.map((c) => [`${c.kind}|${c.name.toLowerCase()}`, c.id]));
 
-    // User-defined rules beat the built-in keyword guesser.
-    const categoryRules = await prisma.categoryRule.findMany({ where: { userId } });
+    // User-defined rules beat the built-in keyword guesser. The import account
+    // isn't chosen until commit, so account-scoped conditions can't fire here.
+    const ruleRows = await prisma.rule.findMany({ where: { userId }, orderBy: { priority: "asc" } });
+    const rules: RuleLike[] = ruleRows.map((rl) => ({
+      id: rl.id,
+      priority: rl.priority,
+      enabled: rl.enabled,
+      conditions: rl.conditions as unknown as RuleCondition[],
+      actions: rl.actions as unknown as RuleAction[],
+    }));
 
     const analyzed: AnalyzedRow[] = rows.map((r) => {
       const cents = toCents(r.amount);
@@ -116,12 +126,18 @@ export async function analyzeImportAction(
         duplicateReason = "Matches a recurring rule";
       }
 
+      const effect = evaluateRules(
+        { description: r.description, amountDollars: r.amount, accountId: null, type: r.type },
+        rules,
+      );
       const guessedName = guessCategoryName(r.description, r.type);
       const suggestedCategoryId =
-        matchCategoryRule(r.description, categoryRules) ??
+        effect.categoryId ??
         (guessedName ? catByName.get(`${r.type}|${guessedName.toLowerCase()}`) ?? null : null);
+      const suggestedDescription =
+        effect.description && effect.description !== r.description ? effect.description : null;
 
-      return { ...r, duplicate, duplicateReason, suggestedCategoryId };
+      return { ...r, duplicate, duplicateReason, suggestedCategoryId, suggestedDescription };
     });
 
     return { ok: true, rows: analyzed };

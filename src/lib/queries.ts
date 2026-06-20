@@ -8,6 +8,7 @@ import { addUTCMonths, endOfUTCMonth, isoDay, parseISODay, startOfUTCMonth } fro
 import { expandOccurrences } from "@/lib/recurrence";
 import { sumPartsByCategory, type SplittableTxn } from "@/lib/splits";
 import { isEffectiveTransfer } from "@/lib/transfers";
+import type { RuleAction, RuleCondition } from "@/lib/rules";
 import {
   detectRecurringCandidates,
   type RecurringSuggestion,
@@ -176,18 +177,28 @@ export async function getRecurringRules(userId: string, includeArchived = false)
   }));
 }
 
-export interface CategoryRuleDTO {
+export interface RuleDTO {
   id: string;
-  pattern: string;
-  categoryId: string;
+  name: string | null;
+  enabled: boolean;
+  priority: number;
+  conditions: RuleCondition[];
+  actions: RuleAction[];
 }
 
-export async function getCategoryRules(userId: string): Promise<CategoryRuleDTO[]> {
-  const rows = await prisma.categoryRule.findMany({
+export async function getRules(userId: string): Promise<RuleDTO[]> {
+  const rows = await prisma.rule.findMany({
     where: { userId },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
   });
-  return rows.map((r) => ({ id: r.id, pattern: r.pattern, categoryId: r.categoryId }));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    enabled: r.enabled,
+    priority: r.priority,
+    conditions: r.conditions as unknown as RuleCondition[],
+    actions: r.actions as unknown as RuleAction[],
+  }));
 }
 
 export interface NetWorth {

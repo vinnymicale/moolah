@@ -52,7 +52,7 @@ model User {
   budgets           Budget[]
   savingsGoals      SavingsGoal[]
   plaidItems        PlaidItem[]
-  categoryRules     CategoryRule[]
+  rules             Rule[]
 }
 
 // Auth.js OAuth account link
@@ -205,25 +205,33 @@ model Category {
   transactions Transaction[]
   recurring    RecurringRule[]
   budgets      Budget[]
-  rules        CategoryRule[]
   splits       TransactionSplit[]
 
   @@index([userId])
 }
 
-// User-defined auto-categorization: when a transaction description contains
-// `pattern` (case-insensitive), assign `categoryId`. Applied on Plaid sync and
-// CSV import; rules take precedence over Plaid's generic category mapping.
-model CategoryRule {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+// User-defined automation. A rule matches a transaction when all of its
+// `conditions` hold (AND) and applies its `actions`: set a category, rewrite a
+// messy payee description, mark it a transfer, or split it across categories by
+// ratio. Applied on Plaid sync and CSV import, and via the "apply to existing"
+// backfill. Rules take precedence over Plaid's generic category mapping.
+//
+// conditions/actions are stored as typed JSON (validated by Zod on write); the
+// shapes are heterogeneous and never queried by their inner fields, so child
+// tables would add joins for no benefit. See src/lib/rules.ts for the types.
+model Rule {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  pattern     String
-  categoryId  String
-  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String?  // optional label; falls back to a generated summary
+  enabled    Boolean  @default(true)
+  priority   Int      @default(0) // lower runs first
+  conditions Json     // RuleCondition[]
+  actions    Json     // RuleAction[]
 
-  createdAt   DateTime  @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([userId])
 }
