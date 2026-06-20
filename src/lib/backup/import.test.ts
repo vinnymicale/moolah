@@ -17,7 +17,7 @@ vi.mock("pg", () => ({
   },
 }));
 
-import { importAllData, type BackupPayload } from "./backup";
+import { importAllData, type BackupPayload } from "./index";
 
 // All issued SQL strings, in call order, trimmed for matching.
 function sqls(): string[] {
