@@ -23,6 +23,11 @@ describe("splitCsv", () => {
     const grid = splitCsv("a,b\n\n1,2\n");
     expect(grid).toHaveLength(2);
   });
+
+  it("unescapes doubled quotes inside a quoted field", () => {
+    const grid = splitCsv(`a\n"She said ""hi"""`);
+    expect(grid[1]).toEqual([`She said "hi"`]);
+  });
 });
 
 describe("parseAmountCell", () => {
@@ -88,7 +93,49 @@ describe("parseBankCsv - single signed amount format", () => {
   });
 });
 
+describe("parseBankCsv - type indicator column", () => {
+  // A single signed amount plus an explicit Type column: the indicator wins over
+  // the sign, so a positive amount marked "Withdrawal" is still an expense.
+  const csv = `Date,Description,Amount,Type
+2026-02-01,Refund,25.00,Deposit
+2026-02-02,Store,40.00,Withdrawal`;
+  const result = parseBankCsv(csv);
+
+  it("uses the indicator to set direction regardless of sign", () => {
+    expect(result.rows).toEqual([
+      { date: "2026-02-01", description: "Refund", amount: 25, type: "INCOME" },
+      { date: "2026-02-02", description: "Store", amount: 40, type: "EXPENSE" },
+    ]);
+  });
+
+  it("falls back to the sign when the indicator is unrecognised", () => {
+    const csv = `Date,Description,Amount,Type
+2026-02-03,Mystery,-9.00,Adjustment`;
+    expect(parseBankCsv(csv).rows).toEqual([
+      { date: "2026-02-03", description: "Mystery", amount: 9, type: "EXPENSE" },
+    ]);
+  });
+});
+
+describe("parseBankCsv - single debit/credit column", () => {
+  const csv = `Date,Description,Withdrawal
+2026-03-01,ATM,20.00`;
+  const result = parseBankCsv(csv);
+
+  it("labels the format and classifies a lone withdrawal column as expense", () => {
+    expect(result.format).toBe("Single debit/credit column");
+    expect(result.rows).toEqual([
+      { date: "2026-03-01", description: "ATM", amount: 20, type: "EXPENSE" },
+    ]);
+  });
+});
+
 describe("parseBankCsv - error handling", () => {
+  it("reports an empty file", () => {
+    expect(parseBankCsv("")).toEqual({ rows: [], skipped: [], format: "Empty file" });
+  });
+
+
   it("skips rows with bad dates or no amount", () => {
     const csv = `Transaction Date,Transaction Description,Debit,Credit
 not-a-date,Bad row,$5.00 ,0

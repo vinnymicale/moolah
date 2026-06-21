@@ -36,6 +36,7 @@ export function StatCard({
   value,
   hint,
   info,
+  href,
   tone = "default",
   size = "md",
 }: {
@@ -44,20 +45,31 @@ export function StatCard({
   hint?: React.ReactNode;
   /** Explanatory text shown in a tooltip on an info icon next to the label. */
   info?: React.ReactNode;
+  /** When set, the whole card becomes a link to a drill-through view. */
+  href?: string;
   tone?: Tone;
   size?: "sm" | "md";
 }) {
   const sm = size === "sm";
-  return (
-    <div className={`card ${sm ? "px-3 py-2" : "p-4"}`}>
+  const body = (
+    <>
       <p className={`flex items-center gap-1 font-medium uppercase tracking-wide text-muted ${sm ? "text-[11px]" : "text-xs"}`}>
         <span>{label}</span>
         {info && <InfoTip text={info} />}
       </p>
       <p className={`font-semibold tabular-nums ${sm ? "text-lg" : "mt-1 text-2xl"} ${toneTextClass(tone)}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
-    </div>
+    </>
   );
+  const cls = `card ${sm ? "px-3 py-2" : "p-4"}`;
+  if (href) {
+    return (
+      <Link href={href} className={`${cls} block transition-colors hover:border-brand/40 hover:bg-surface2`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={cls}>{body}</div>;
 }
 
 /**

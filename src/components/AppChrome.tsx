@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Plus, Menu, FileSpreadsheet, Search, Bot } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Plus, Menu, FileSpreadsheet, Search, Bot, Upload, Keyboard } from "lucide-react";
+import type { Command } from "@/lib/commands";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
 import { CommandPalette } from "./CommandPalette";
@@ -11,7 +12,7 @@ import { DemoWelcomeModal } from "./DemoWelcomeModal";
 import { ChatPanel } from "./ChatPanel";
 import { Sidebar } from "./Sidebar";
 import {
-  NAV_ORDER_KEY, NAV_COLLAPSED_KEY, DEFAULT_ORDER, NAV_BY_HREF, mergeNavOrder, type NavItem,
+  NAV, NAV_ORDER_KEY, NAV_COLLAPSED_KEY, DEFAULT_ORDER, NAV_BY_HREF, mergeNavOrder, type NavItem,
 } from "./app-nav";
 import { usePersistentState } from "@/lib/usePersistentState";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
@@ -33,6 +34,7 @@ export function AppChrome({
   demoMode?: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   // The route the browser actually loaded, captured once at mount. A full reload
   // remounts AppChrome and re-snapshots this; client-side navigation doesn't.
   // The demo welcome modal keys off it so it only shows on a fresh dashboard load.
@@ -152,6 +154,28 @@ export function AppChrome({
     };
   }, []);
 
+  // Command-palette entries: jump to any page, or run the same quick actions the
+  // sidebar/shortcuts expose. The palette closes itself before calling `run`.
+  const commands = useMemo<Command[]>(() => {
+    const nav: Command[] = NAV.map((item) => ({
+      id: `nav:${item.href}`,
+      label: item.label,
+      keywords: `go to open ${item.label}`,
+      hint: "Page",
+      icon: item.icon,
+      run: () => router.push(item.href),
+    }));
+    const actions: Command[] = [
+      { id: "act:add", label: "New transaction", keywords: "add create expense income", icon: Plus, run: () => setAddOpen(true) },
+      { id: "act:import", label: "Import CSV", keywords: "upload bank statement", icon: Upload, run: () => fileInputRef.current?.click() },
+      { id: "act:shortcuts", label: "Keyboard shortcuts", keywords: "help keys hotkeys", icon: Keyboard, run: () => setShortcutsOpen(true) },
+      ...(demoMode
+        ? []
+        : [{ id: "act:chat", label: "Finance assistant", keywords: "chat ai ask bot", icon: Bot, run: () => setChatOpen(true) } as Command]),
+    ];
+    return [...actions, ...nav];
+  }, [router, demoMode]);
+
   const sidebarProps = {
     user,
     authBypass,
@@ -211,7 +235,7 @@ export function AppChrome({
       </div>
 
       {searchOpen && (
-        <CommandPalette onClose={() => setSearchOpen(false)} categories={categories} accounts={accounts} />
+        <CommandPalette onClose={() => setSearchOpen(false)} commands={commands} categories={categories} accounts={accounts} />
       )}
 
       <TransactionModal open={addOpen} onClose={() => setAddOpen(false)} accounts={accounts} categories={categories} />

@@ -317,17 +317,19 @@ export default async function DashboardPage() {
       <MilestonesBanner milestones={milestones} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
+        <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" href="/networth" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
         <StatCard
           label="Income this month"
           value={formatUSD(calendar.monthIncomeActual)}
           tone="income"
+          href={`/transactions?m=${monthISO.slice(0, 7)}`}
           hint={`${formatUSD(calendar.monthIncome)} projected by month end`}
         />
         <StatCard
           label="Spent this month"
           value={formatUSD(calendar.monthExpenseActual)}
           tone="expense"
+          href={`/transactions?m=${monthISO.slice(0, 7)}`}
           hint={
             <>
               <span>{formatUSD(calendar.monthExpense)} projected by month end</span>
@@ -343,6 +345,7 @@ export default async function DashboardPage() {
           label="Savings rate"
           value={savingsRate === null ? "-" : `${savingsRate}%`}
           tone={savingsRate !== null && savingsRate >= 0 ? "income" : "expense"}
+          href="/trends"
           hint={`Net ${formatUSD(net)}`}
         />
       </div>
