@@ -450,10 +450,17 @@ set it to a mounted volume like `/backups` so copies survive container rebuilds.
 time, so it works headless. One-time setup:
 
 1. In the [Google Cloud console](https://console.cloud.google.com/apis/credentials), create an OAuth
-   client of type **Desktop app** and note its **client ID** and **client secret**.
-2. Authorize the `https://www.googleapis.com/auth/drive.file` scope once and exchange the resulting
-   code for a **refresh token** (e.g. via the [OAuth Playground](https://developers.google.com/oauthplayground/)
-   using your own client).
+   client of type **Web application** and add `https://developers.google.com/oauthplayground` as an
+   **authorized redirect URI**. Note its **client ID** and **client secret**. Also enable the
+   **Google Drive API** for the project, and add your own Google account under **Test users** on the
+   OAuth consent screen (otherwise the authorization is rejected).
+2. Get a **refresh token** for that client via the
+   [OAuth Playground](https://developers.google.com/oauthplayground/): open the gear menu, tick
+   **Use your own OAuth credentials**, and paste your client ID/secret. In step 1, select the
+   `https://www.googleapis.com/auth/drive.file` scope and **Authorize APIs**; in step 2,
+   **Exchange authorization code for tokens**. Copy the **refresh token** from the response (it
+   starts with `1//`). A Web-application client is needed here rather than a Desktop one because the
+   Playground signs in through that redirect URI.
 3. Create a folder in Drive for the backups and copy its **folder ID** (the last segment of the
    folder's URL).
 4. Paste the client ID, client secret, refresh token, and folder ID into **Settings → Scheduled
