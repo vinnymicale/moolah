@@ -63,9 +63,9 @@ test.describe("chrome interactions", () => {
   test("command palette opens with the keyboard shortcut", async ({ page }) => {
     await page.goto("/transactions");
     await page.keyboard.press("ControlOrMeta+k");
-    await expect(page.getByPlaceholder(/Search all transactions/)).toBeVisible();
+    await expect(page.getByPlaceholder(/run an action, or search transactions/)).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByPlaceholder(/Search all transactions/)).not.toBeVisible();
+    await expect(page.getByPlaceholder(/run an action, or search transactions/)).not.toBeVisible();
   });
 
   test("theme toggle flips dark mode", async ({ page }) => {
