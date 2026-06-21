@@ -101,9 +101,10 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
     if (!rule) throw new UserError("Recurring rule not found");
 
     const sep = suggestionKey.indexOf("|");
+    if (sep < 0) throw new UserError("Invalid suggestion");
     const type = suggestionKey.slice(0, sep);
     const normalized = suggestionKey.slice(sep + 1);
-    if (sep < 0 || (type !== "INCOME" && type !== "EXPENSE") || !normalized) {
+    if ((type !== "INCOME" && type !== "EXPENSE") || !normalized) {
       throw new UserError("Invalid suggestion");
     }
 

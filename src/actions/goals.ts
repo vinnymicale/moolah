@@ -12,7 +12,9 @@ import { isDemoMode } from "@/lib/demo-guard";
 const goalSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
   targetAmount: z.coerce.number().positive("Target must be greater than zero"),
-  currentAmount: z.coerce.number().min(0).optional().default(0),
+  // Optional with no default: an omitted value stays undefined so update can
+  // fall back to the goal's existing balance instead of resetting it to 0.
+  currentAmount: z.coerce.number().min(0).optional(),
   targetDate: z.string().optional().nullable(),
   color: z.string().max(20).optional(),
   icon: z.string().max(40).optional(),
