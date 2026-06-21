@@ -259,6 +259,12 @@ Then **Docker → Add Container**, open the **Template** dropdown, and pick **my
 **Apply**. The app applies migrations on start, so an empty database is initialized
 automatically. Open the container's **WebUI** link, or `http://<unraid-ip>:<port>`.
 
+If you plan to use [scheduled backups](#backing-up-your-data-and-your-plaid-connections) to a local
+folder, point the **Backups** path at a real share (it defaults to
+`/mnt/user/appdata/moolah/backups`). It maps to `/backups` inside the container, where
+`BACKUP_LOCAL_DIR` already points, so backups land on the host and survive container rebuilds. All of
+this is editable later from the container's **Edit** screen.
+
 Before first launch, create the database in your Postgres container:
 
 ```sql
@@ -280,7 +286,7 @@ CREATE DATABASE moolah OWNER moolah;
 | `PLAID_CLIENT_ID` | no | — | Only if you want automatic bank sync. From your Plaid dashboard. |
 | `PLAID_SECRET` | no | — | Plaid API secret (matches `PLAID_ENV`). |
 | `PLAID_ENV` | no | `sandbox` | `sandbox` for fake test data, `production` for real banks. |
-| `BACKUP_LOCAL_DIR` | no | `backups` | Where scheduled backups land for the **local** destination. Point it at a mounted volume to keep backups off the container's disk, e.g. `/backups`. Ignored for the Google Drive destination. |
+| `BACKUP_LOCAL_DIR` | no | `/backups` | Where scheduled backups land for the **local** destination. The template pre-sets this to `/backups` and mounts it from the host via the **Backups** path, so leave it as-is unless you also change that mapping. Ignored for the Google Drive destination. |
 
 ---
 
