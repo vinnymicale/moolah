@@ -35,8 +35,13 @@ services:
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       # Auth.js needs the public origin to build callback URLs behind a proxy.
       AUTH_TRUST_HOST: "true"
+      # Scheduled local backups land here; the bind mount below keeps them on the
+      # host so they survive container rebuilds.
+      BACKUP_LOCAL_DIR: /backups
     ports:
       - "${APP_PORT:-3000}:3000"
+    volumes:
+      - ${BACKUP_HOST_DIR:-./backups}:/backups
 
 volumes:
   moolah-db:
