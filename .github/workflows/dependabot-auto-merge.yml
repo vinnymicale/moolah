@@ -1,8 +1,9 @@
 name: Dependabot auto-merge
 
-# Flags Dependabot's minor/patch PRs for auto-merge; GitHub then merges them
-# once the required CI checks pass (enforced by branch protection on master).
-# Major bumps are left for manual review.
+# Flags Dependabot PRs for auto-merge; GitHub then merges them once the
+# required CI checks pass (enforced by branch protection on master).
+# npm minor/patch and all github-actions bumps auto-merge; npm majors are
+# left for manual review since they can carry breaking API changes.
 
 on: pull_request
 
@@ -21,8 +22,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for minor/patch updates
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+      - name: Enable auto-merge
+        # Everything except npm major bumps: npm minor/patch and all
+        # github-actions updates (majors there are just action tag bumps,
+        # gated by CI anyway).
+        if: >-
+          steps.meta.outputs.package-ecosystem == 'github_actions' ||
+          steps.meta.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
