@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSafeToTransfer, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
@@ -11,7 +11,8 @@ import {
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 import { addUTCMonths, endOfUTCMonth, formatWeekdayMonthDay, isoDay, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { formatUSD } from "@/lib/money";
-import { INCOME_COLOR, NEGATIVE_COLOR, categoryColor } from "@/lib/colors";
+import { categoryColor } from "@/lib/colors";
+import { budgetStatus } from "@/lib/reports";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { Amount } from "@/components/Amount";
 import { PageHeader, StatCard, toneTextClass, type Tone } from "@/components/ui-bits";
@@ -155,19 +156,23 @@ export default async function DashboardPage() {
               <ul className="space-y-2.5">
                 {budgeted.slice(0, 4).map((b) => {
                   const pct = b.limit > 0 ? Math.min(100, (b.actual / b.limit) * 100) : 0;
-                  const over = b.actual > b.limit;
+                  const status = budgetStatus(b.actual, b.limit);
+                  const fill = status === "over" ? "var(--expense)" : status === "near" ? "var(--warning)" : b.color;
                   return (
                     <li key={b.categoryId}>
                       <div className="mb-1 flex justify-between text-xs">
-                        <Link href={`/transactions?category=${b.categoryId}`} className="font-medium hover:text-brand hover:underline">
+                        <Link href={`/transactions?category=${b.categoryId}`} className="flex items-center gap-1.5 font-medium hover:text-brand hover:underline">
+                          {status === "over" && <AlertTriangle size={11} className="text-expense" />}
                           {b.name}
                         </Link>
-                        <span className={`tabular-nums ${over ? "text-expense" : "text-muted"}`}>
-                          {formatUSD(b.actual)} / {formatUSD(b.limit)}
+                        <span className={`tabular-nums ${status === "over" ? "text-expense" : status === "near" ? "text-warning" : "text-muted"}`}>
+                          {status === "over"
+                            ? `over by ${formatUSD(b.actual - b.limit)}`
+                            : `${formatUSD(b.actual)} / ${formatUSD(b.limit)}`}
                         </span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? NEGATIVE_COLOR : b.color }} />
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }} />
                       </div>
                     </li>
                   );
@@ -258,7 +263,10 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                         <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? INCOME_COLOR : g.color }} />
+                          {(() => {
+                            const fill = complete ? "var(--income)" : g.color;
+                            return <div className="h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }} />;
+                          })()}
                         </div>
                       </li>
                     );

@@ -226,7 +226,7 @@ export async function getTransactionsBetween(
   endISO: string,
 ): Promise<TransactionDTO[]> {
   const rows = await prisma.transaction.findMany({
-    where: { userId, date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) } },
+    where: { userId, deletedAt: null, date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: { splits: true, account: { select: { type: true } } },
   });
@@ -249,6 +249,41 @@ export async function getTransactionsBetween(
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
     splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
+  }));
+}
+
+export interface DeletedTransactionDTO {
+  id: string;
+  type: TxnType;
+  amount: number;
+  date: string; // ISO day
+  description: string;
+  accountId: string | null;
+  categoryId: string | null;
+  /** When the row was deleted, as a full ISO timestamp. */
+  deletedAt: string;
+}
+
+/**
+ * Recently soft-deleted transactions, newest deletion first. Powers the trash
+ * view where rows can be restored or purged. Capped so the list stays bounded.
+ */
+export async function getDeletedTransactions(userId: string, limit = 200): Promise<DeletedTransactionDTO[]> {
+  const rows = await prisma.transaction.findMany({
+    where: { userId, deletedAt: { not: null } },
+    orderBy: { deletedAt: "desc" },
+    take: limit,
+    select: { id: true, type: true, amount: true, date: true, description: true, accountId: true, categoryId: true, deletedAt: true },
+  });
+  return rows.map((t) => ({
+    id: t.id,
+    type: t.type,
+    amount: toNumber(t.amount),
+    date: isoDay(t.date),
+    description: t.description,
+    accountId: t.accountId,
+    categoryId: t.categoryId,
+    deletedAt: t.deletedAt!.toISOString(),
   }));
 }
 
@@ -276,7 +311,7 @@ export async function getBudgetMonth(userId: string, monthISO: string): Promise<
     prisma.category.findMany({ where: { userId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
     prisma.budget.findMany({ where: { userId, month: monthStart } }),
     prisma.transaction.findMany({
-      where: { userId, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
+      where: { userId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
       select: { categoryId: true, amount: true, splits: { select: { categoryId: true, amount: true } } },
     }),
   ]);
@@ -303,7 +338,7 @@ export async function getRecurringSuggestions(userId: string, todayISO: string):
 
   const [txns, rules] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: since } },
+      where: { userId, deletedAt: null, date: { gte: since } },
       select: { date: true, description: true, amount: true, type: true, categoryId: true, accountId: true, recurringRuleId: true },
       orderBy: { date: "asc" },
     }),
@@ -352,7 +387,7 @@ export async function getBudgetYear(userId: string, year: number): Promise<Budge
   const [budgets, txns] = await Promise.all([
     prisma.budget.findMany({ where: { userId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
     prisma.transaction.findMany({
-      where: { userId, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
+      where: { userId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
       select: { date: true, amount: true },
     }),
   ]);
@@ -575,6 +610,7 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
     prisma.transaction.findMany({
       where: {
         userId,
+        deletedAt: null,
         type: "EXPENSE",
         cleared: false,
         date: { gte: today, lte: monthEnd },
@@ -585,7 +621,7 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
     }),
     prisma.recurringRule.findMany({ where: { userId, type: "EXPENSE", archived: false } }),
     prisma.transaction.findMany({
-      where: { userId, recurringRuleId: { not: null }, date: { gte: today, lte: monthEnd } },
+      where: { userId, deletedAt: null, recurringRuleId: { not: null }, date: { gte: today, lte: monthEnd } },
       select: { recurringRuleId: true, date: true },
     }),
   ]);
@@ -625,6 +661,7 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
     const agg = await prisma.transaction.aggregate({
       where: {
         userId,
+        deletedAt: null,
         type: "EXPENSE",
         cleared: true,
         date: { gte: pastStart, lte: pastMid },
@@ -690,6 +727,7 @@ export async function getSpendingAnomalies(
   const currentTxns = await prisma.transaction.findMany({
     where: {
       userId,
+      deletedAt: null,
       type: "EXPENSE",
       cleared: true,
       isTransfer: false,
@@ -709,6 +747,7 @@ export async function getSpendingAnomalies(
     const hist = await prisma.transaction.findMany({
       where: {
         userId,
+        deletedAt: null,
         type: "EXPENSE",
         cleared: true,
         isTransfer: false,
@@ -782,6 +821,7 @@ export async function getTopMerchants(
   const txns = await prisma.transaction.findMany({
     where: {
       userId,
+      deletedAt: null,
       type: "EXPENSE",
       cleared: true,
       isTransfer: false,

@@ -64,7 +64,7 @@ export function StatCard({
   const cls = `card ${sm ? "px-3 py-2" : "p-4"}`;
   if (href) {
     return (
-      <Link href={href} className={`${cls} block transition-colors hover:border-brand/40 hover:bg-surface2`}>
+      <Link href={href} className={`${cls} card-hover block hover:border-brand/40`}>
         {body}
       </Link>
     );

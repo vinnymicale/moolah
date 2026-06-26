@@ -7,8 +7,11 @@ import {
 import { TrendingDown, Snowflake, Mountain, AlertTriangle, ArrowRight } from "lucide-react";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import { simulatePayoff, monthsToLabel, type Strategy, type DebtInput } from "@/lib/debt-payoff";
-import { BRAND_COLOR, CHART_AXIS_COLOR } from "@/lib/colors";
 import { toggleInSet } from "@/lib/collections";
+import { ChartSkeleton } from "@/components/ChartSkeleton";
+import { useChartTheme } from "@/lib/useChartTheme";
+import { useMounted } from "@/lib/useMounted";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import type { AccountDTO } from "@/lib/queries";
 import { StrategyButton } from "./StrategyButton";
 import { StatCard } from "@/components/ui-bits";
@@ -20,6 +23,9 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
   const [strategy, setStrategy] = useState<Strategy>("avalanche");
   const [extra, setExtra] = useState("0");
   const [cascade, setCascade] = useState(true);
+  const theme = useChartTheme();
+  const reducedMotion = usePrefersReducedMotion();
+  const mounted = useMounted();
   // Per-account inclusion - all enabled by default.
   const [included, setIncluded] = useState<Set<string>>(() => new Set(debts.map((d) => d.id)));
 
@@ -179,25 +185,27 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                   <TrendingDown size={16} className="text-brand" /> Balance over time
                 </h2>
+                {!mounted ? <ChartSkeleton height={220} /> : (
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={chartData} margin={{ left: 8, right: 8, top: 8 }}>
-                    <CartesianGrid stroke="rgba(148,163,184,0.2)" vertical={false} />
+                    <CartesianGrid stroke={theme.grid} vertical={false} />
                     <XAxis
                       dataKey="month"
-                      tick={{ fill: CHART_AXIS_COLOR, fontSize: 12 }}
+                      tick={{ fill: theme.axis, fontSize: 12 }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(m) => (m % 12 === 0 ? `${m / 12}y` : "")}
                     />
-                    <YAxis tick={{ fill: CHART_AXIS_COLOR, fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
+                    <YAxis tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
                     <Tooltip
                       contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12 }}
                       labelFormatter={(m) => `Month ${m}`}
                       formatter={(v) => [formatUSD(Number(v)), "Balance"]}
                     />
-                    <Line type="monotone" dataKey="balance" stroke={BRAND_COLOR} strokeWidth={2.5} dot={false} />
+                    <Line type="monotone" dataKey="balance" stroke={theme.brand} strokeWidth={2.5} dot={false} isAnimationActive={!reducedMotion} />
                   </LineChart>
                 </ResponsiveContainer>
+                )}
               </div>
 
               {/* Per-debt payoff order */}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateReports, type ReportInput } from "./reports";
+import { aggregateReports, budgetStatus, capCategorySlices, OTHER_SLICE_COLOR, type CategorySlice, type ReportInput } from "./reports";
 import type { AccountDTO, SnapshotDTO } from "./queries";
 
 const account = (over: Partial<AccountDTO>): AccountDTO =>
@@ -209,5 +209,52 @@ describe("aggregateReports budgets and savings", () => {
 
   it("returns a null savings rate with no income", () => {
     expect(aggregateReports(base).savingsRate).toBeNull();
+  });
+});
+
+describe("capCategorySlices", () => {
+  const slice = (name: string, value: number): CategorySlice => ({ id: name, name, value, color: "#000" });
+
+  it("returns a copy unchanged when at or under the cap", () => {
+    const input = [slice("a", 5), slice("b", 3)];
+    const out = capCategorySlices(input, 5);
+    expect(out).toEqual(input);
+    expect(out).not.toBe(input); // never mutates the input
+  });
+
+  it("rolls the tail into a single Other slice past the cap", () => {
+    const input = [slice("a", 10), slice("b", 8), slice("c", 3), slice("d", 2), slice("e", 1)];
+    const out = capCategorySlices(input, 3);
+    expect(out).toHaveLength(4);
+    expect(out.slice(0, 3)).toEqual(input.slice(0, 3));
+    expect(out[3]).toEqual({ id: null, name: "Other (2)", value: 3, color: OTHER_SLICE_COLOR });
+  });
+
+  it("drops the Other slice when the rolled-up value is zero", () => {
+    const input = [slice("a", 10), slice("b", 8), slice("c", 0), slice("d", 0)];
+    const out = capCategorySlices(input, 2);
+    expect(out).toEqual(input.slice(0, 2));
+  });
+});
+
+describe("budgetStatus", () => {
+  it("treats a zero or negative limit as under", () => {
+    expect(budgetStatus(50, 0)).toBe("under");
+    expect(budgetStatus(50, -10)).toBe("under");
+  });
+
+  it("is over only when actual exceeds the limit", () => {
+    expect(budgetStatus(101, 100)).toBe("over");
+    expect(budgetStatus(100, 100)).toBe("near"); // at the limit is not over
+  });
+
+  it("is near at or above the warn threshold but not over", () => {
+    expect(budgetStatus(90, 100)).toBe("near"); // default warnAt 0.9
+    expect(budgetStatus(89.99, 100)).toBe("under");
+    expect(budgetStatus(80, 100, 0.8)).toBe("near"); // custom threshold
+  });
+
+  it("is under when comfortably below the threshold", () => {
+    expect(budgetStatus(10, 100)).toBe("under");
   });
 });

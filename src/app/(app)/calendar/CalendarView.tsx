@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Plus, TrendingUp, TrendingDown } from "lucid
 import { TransactionModal } from "@/components/TransactionModal";
 import { formatUSD } from "@/lib/money";
 import { formatMonthDay, monthLabel } from "@/lib/dates";
-import { DEFAULT_CATEGORY_COLOR, INCOME_COLOR, TRANSFER_COLOR, categoryColor } from "@/lib/colors";
+import { DEFAULT_CATEGORY_COLOR, TRANSFER_COLOR, categoryColor } from "@/lib/colors";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import type { CalendarEvent, CalendarMonth, CcDueEvent } from "@/lib/calendar";
 import { WEEKDAYS, eventToTxn, isStatementPayment, computeFilteredTotals } from "./calendar-utils";
@@ -87,7 +87,7 @@ export function CalendarView({
   const colorFor = (e: CalendarEvent) =>
     e.isTransfer && !isStatementPayment(e) ? TRANSFER_COLOR
     : e.categoryId ? categoryColor(catById.get(e.categoryId))
-    : e.type === "INCOME" ? INCOME_COLOR : DEFAULT_CATEGORY_COLOR;
+    : e.type === "INCOME" ? "var(--income)" : DEFAULT_CATEGORY_COLOR;
 
   return (
     <div>

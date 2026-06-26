@@ -123,8 +123,8 @@ export function CommandPalette({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-2xl">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-md" onClick={onClose} />
+      <div className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-surface shadow-overlay">
         {/* Search input */}
         <div className="flex items-center gap-2 border-b border-line px-4">
           {pending ? (

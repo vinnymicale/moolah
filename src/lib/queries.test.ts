@@ -19,7 +19,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { getSafeToTransfer, getSpendingAnomalies } from "./queries";
+import { getSafeToTransfer, getSpendingAnomalies, getTransactionsBetween } from "./queries";
 
 const acctFind = vi.mocked(prisma.financialAccount.findMany);
 const txnFind = vi.mocked(prisma.transaction.findMany);
@@ -293,5 +293,33 @@ describe("getSpendingAnomalies", () => {
     expect(res).toEqual([]);
     // Short-circuits before querying history or categories.
     expect(catFind).not.toHaveBeenCalled();
+  });
+});
+
+describe("soft-delete exclusion", () => {
+  // Reads must never surface trashed rows. Each transaction.findMany call these
+  // getters make has to carry deletedAt: null in its where-clause, otherwise a
+  // soft-deleted transaction would leak back into balances and totals.
+  it("getTransactionsBetween scopes its query to non-deleted rows", async () => {
+    txnFind.mockResolvedValueOnce([] as never);
+    await getTransactionsBetween("u1", "2026-06-01", "2026-06-30");
+    expect(txnFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: "u1", deletedAt: null }),
+      }),
+    );
+  });
+
+  it("getSpendingAnomalies excludes deleted rows from every month it sums", async () => {
+    // current month + three history months = 4 findMany calls.
+    txnFind.mockResolvedValue([] as never);
+    await getSpendingAnomalies("u1", "2026-06");
+    for (const call of txnFind.mock.calls) {
+      expect(call[0]).toEqual(
+        expect.objectContaining({
+          where: expect.objectContaining({ deletedAt: null }),
+        }),
+      );
+    }
   });
 });

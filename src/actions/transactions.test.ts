@@ -38,6 +38,8 @@ import {
   pairTransfersAction,
   unpairTransferAction,
   searchTransactionsAction,
+  scanDuplicateTransactionsAction,
+  removeDuplicateTransactionsAction,
 } from "./transactions";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -71,7 +73,7 @@ describe("demo-mode guard", () => {
 
   it("deleteTransactionAction is a no-op success in demo mode", async () => {
     expect(await deleteTransactionAction("t1")).toEqual({ ok: true });
-    expect(txn.delete).not.toHaveBeenCalled();
+    expect(txn.update).not.toHaveBeenCalled();
   });
 
   it("setClearedAction is a no-op success in demo mode", async () => {
@@ -88,6 +90,18 @@ describe("demo-mode guard", () => {
     expect(await searchTransactionsAction("rent")).toEqual([]);
     expect(txn.findMany).not.toHaveBeenCalled();
   });
+
+  it("scanDuplicateTransactionsAction returns an empty scan in demo mode", async () => {
+    expect(await scanDuplicateTransactionsAction()).toEqual({ groups: [], removableCount: 0 });
+    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(txn.findMany).not.toHaveBeenCalled();
+  });
+
+  it("removeDuplicateTransactionsAction is a no-op success in demo mode", async () => {
+    expect(await removeDuplicateTransactionsAction("hard")).toEqual({ ok: true });
+    expect(txn.deleteMany).not.toHaveBeenCalled();
+    expect(txn.updateMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("existence / ownership checks", () => {
@@ -95,9 +109,9 @@ describe("existence / ownership checks", () => {
     txn.findFirst.mockResolvedValue(null);
     const result = await deleteTransactionAction("t1");
     expect(result).toEqual({ ok: false, error: "Transaction not found" });
-    expect(txn.delete).not.toHaveBeenCalled();
-    // Lookup is scoped to the caller.
-    expect(txn.findFirst).toHaveBeenCalledWith({ where: { id: "t1", userId: "u1" } });
+    expect(txn.update).not.toHaveBeenCalled();
+    // Lookup is scoped to the caller and ignores already-trashed rows.
+    expect(txn.findFirst).toHaveBeenCalledWith({ where: { id: "t1", userId: "u1", deletedAt: null } });
   });
 
   it("setClearedAction updates only after confirming ownership", async () => {

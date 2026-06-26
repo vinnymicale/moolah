@@ -277,12 +277,19 @@ model Transaction {
   // amounts sum to `amount`. No splits = the single categoryId applies.
   splits          TransactionSplit[]
 
+  // Soft delete: set when the user deletes a transaction. Deleted rows are
+  // hidden everywhere but kept so they can be restored from the trash, and so a
+  // re-imported Plaid charge can be matched by plaidTransactionId rather than
+  // duplicated.
+  deletedAt       DateTime?
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([userId, date])
   @@index([accountId])
   @@index([categoryId])
+  @@index([userId, deletedAt])
 }
 
 // One slice of a split transaction: part of the parent's amount attributed to a

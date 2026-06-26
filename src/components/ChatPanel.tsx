@@ -87,13 +87,13 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
     <>
       {/* Backdrop (mobile) */}
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-md md:hidden"
         onClick={onClose}
         aria-hidden
       />
 
       {/* Panel */}
-      <aside className="fixed bottom-0 right-0 top-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-2xl md:w-96">
+      <aside className="fixed bottom-0 right-0 top-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-overlay md:w-96">
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-line px-4 py-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-brand-fg">

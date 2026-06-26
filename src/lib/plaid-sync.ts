@@ -261,6 +261,40 @@ export async function syncPlaidItem(
       const txnDate = parseISODay(txn.authorized_date ?? txn.date);
       const recurringRuleId = matchRule(type, txnDate, amount, description);
 
+      // A full re-pull (recategorizeOnly resets the cursor) can return charges
+      // we already have under a brand-new transaction_id - Plaid does not keep
+      // ids stable across a cursor reset. The upsert keys on plaidTransactionId,
+      // so a reissued id would slip through as a fresh row and duplicate the
+      // charge. Guard against that: if no row matches the id but an existing
+      // non-deleted row matches the charge by content, adopt that row (rebind
+      // its plaidTransactionId) instead of creating a duplicate.
+      if (opts?.recategorizeOnly) {
+        const byId = await prisma.transaction.findUnique({
+          where: { plaidTransactionId: txn.transaction_id },
+          select: { id: true },
+        });
+        if (!byId) {
+          const twin = await prisma.transaction.findFirst({
+            where: {
+              userId: item.userId,
+              deletedAt: null,
+              accountId: linked.financialAccountId,
+              date: txnDate,
+              amount,
+              type,
+              description,
+            },
+            select: { id: true },
+          });
+          if (twin) {
+            await prisma.transaction.update({
+              where: { id: twin.id },
+              data: { plaidTransactionId: txn.transaction_id },
+            });
+          }
+        }
+      }
+
       await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
         update: opts?.recategorizeOnly
@@ -462,7 +496,7 @@ export async function matchTransfers(userId: string): Promise<number> {
       select: { id: true, type: true },
     }),
     prisma.transaction.findMany({
-      where: { userId, date: { gte: since } },
+      where: { userId, deletedAt: null, date: { gte: since } },
       select: { id: true, type: true, amount: true, date: true, accountId: true, isTransfer: true, transferPeerId: true },
     }),
   ]);

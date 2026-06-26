@@ -17,18 +17,38 @@
   --warning: #d97706;
 }
 
+:root {
+  /* Elevation scale. Light mode leans on layered shadows; dark mode mostly on
+     a lighter surface step (shadows read as nothing on black), so .dark
+     overrides these to be much subtler. */
+  --elev-rest: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --elev-raised: 0 2px 4px rgba(0, 0, 0, 0.05), 0 6px 16px rgba(0, 0, 0, 0.06);
+  --elev-overlay: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --elev-floating: 0 12px 32px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12);
+  /* The surface a hovered/raised card lifts to. */
+  --surface-raised: #ffffff;
+}
+
 .dark {
   --bg: #000000;
   --surface: #111111;
   --surface-2: #1c1c1c;
+  /* A rung above --surface, used to convey elevation where shadow can't. */
+  --surface-raised: #1a1a1a;
   --line: #2e2e2e;
   --text: #fafafa;
-  --muted: #8a8a8a;
+  /* Bumped from #8a8a8a (~3.7:1 on --surface) to clear WCAG AA 4.5:1. */
+  --muted: #9ca3af;
   --brand: #ffffff;
   --brand-fg: #000000;
   --income: #4ade80;
   --expense: #f87171;
   --warning: #fbbf24;
+  /* Dark shadows are faint; elevation comes mostly from --surface-raised. */
+  --elev-rest: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-raised: 0 2px 6px rgba(0, 0, 0, 0.45);
+  --elev-overlay: 0 8px 28px rgba(0, 0, 0, 0.6);
+  --elev-floating: 0 12px 36px rgba(0, 0, 0, 0.7);
 }
 
 @theme inline {
@@ -43,6 +63,11 @@
   --color-income: var(--income);
   --color-expense: var(--expense);
   --color-warning: var(--warning);
+  --color-surface-raised: var(--surface-raised);
+  --shadow-rest: var(--elev-rest);
+  --shadow-raised: var(--elev-raised);
+  --shadow-overlay: var(--elev-overlay);
+  --shadow-floating: var(--elev-floating);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -60,26 +85,39 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Shared button base. A @utility (not an @layer class) so the button variants
+   below can @apply it - Tailwind v4 only lets @apply pull in utilities. */
+@utility btn-base {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
+    transition-colors disabled:opacity-50 disabled:pointer-events-none;
+}
+
 /* Reusable component classes (kept small; most styling is utility-first). */
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-surface shadow-sm;
+    @apply rounded-xl border border-line bg-surface shadow-rest;
   }
+  /* Opt-in lift for interactive cards/rows: a small rise + raised shadow on
+     hover. Disabled under prefers-reduced-motion (see media block below). */
+  .card-hover {
+    @apply transition-[transform,box-shadow,background-color,border-color] duration-200;
+  }
+  .card-hover:hover {
+    @apply -translate-y-0.5 bg-surface-raised shadow-raised;
+  }
+  /* Tailwind v4 can't @apply a custom component class, so the shared base lives
+     in a @utility (which @apply does accept) and each variant pulls it in. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
-      transition-colors disabled:opacity-50 disabled:pointer-events-none;
+    @apply btn-base;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
-      transition-colors disabled:opacity-50 disabled:pointer-events-none bg-brand text-brand-fg hover:opacity-90;
+    @apply btn-base bg-brand text-brand-fg hover:opacity-90;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
-      transition-colors disabled:opacity-50 disabled:pointer-events-none border border-line bg-surface hover:bg-surface2 text-text;
+    @apply btn-base border border-line bg-surface hover:bg-surface2 text-text;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
-      transition-colors disabled:opacity-50 disabled:pointer-events-none border border-expense/40 text-expense hover:bg-expense/10;
+    @apply btn-base border border-expense/40 text-expense hover:bg-expense/10;
   }
   .input {
     @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-text
@@ -102,6 +140,16 @@ summary,
 select:not(:disabled) {
   cursor: pointer;
 }
+/* A single visible focus ring for every interactive control, matching the
+   .input treatment. Keyboard-only via :focus-visible so mouse clicks stay
+   clean. Covers .btn* and the raw range/segmented buttons alike. */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--brand, #4f46e5);
+}
 button:disabled,
 [role="button"][aria-disabled="true"],
 select:disabled {
@@ -112,4 +160,31 @@ select:disabled {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
+}
+
+/* Honor the OS "reduce motion" setting: collapse transitions/animations and
+   neutralize the hover-lift so nothing slides or scales. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .card-hover:hover {
+    transform: none;
+  }
 }

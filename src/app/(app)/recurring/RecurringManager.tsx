@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2 } from "lucide-react";
+import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { describeFrequency } from "@/lib/recurrence";
@@ -160,6 +161,10 @@ function SuggestionRow({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
+  // The rule the user picked from the dropdown, held until they confirm. Linking
+  // is irreversible (there's no unlink UI), so a wrong pick shouldn't fire on
+  // the change event.
+  const [chosenRuleId, setChosenRuleId] = useState("");
 
   // Only same-type rules can plausibly be the same series.
   const linkableRules = rules.filter((r) => r.type === s.type);
@@ -212,7 +217,7 @@ function SuggestionRow({
           </button>
           {linkableRules.length > 0 && (
             <button
-              onClick={() => setLinking((v) => !v)}
+              onClick={() => { setLinking((v) => !v); setChosenRuleId(""); }}
               disabled={pending}
               className={`btn-ghost h-8 w-8 p-0! ${linking ? "text-brand" : ""}`}
               title="Already a recurring item? Link it to that rule"
@@ -232,10 +237,10 @@ function SuggestionRow({
           <span className="text-xs text-muted">Already tracked by:</span>
           <select
             className="input h-8 w-auto text-xs"
-            defaultValue=""
+            value={chosenRuleId}
             disabled={pending}
             aria-label="Choose the existing recurring rule"
-            onChange={(e) => { if (e.target.value) linkTo(e.target.value); }}
+            onChange={(e) => setChosenRuleId(e.target.value)}
           >
             <option value="" disabled>Choose a rule…</option>
             {linkableRules.map((r) => (
@@ -244,12 +249,24 @@ function SuggestionRow({
               </option>
             ))}
           </select>
-          {pending && <Loader2 size={14} className="animate-spin text-muted" />}
-          <button onClick={() => setLinking(false)} disabled={pending} className="btn-ghost h-8 text-xs">
+          <button
+            onClick={() => linkTo(chosenRuleId)}
+            disabled={pending || !chosenRuleId}
+            className="btn-primary h-8 text-xs"
+            title="Link the matching transactions to this rule"
+          >
+            {pending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Link
+          </button>
+          <button
+            onClick={() => { setLinking(false); setChosenRuleId(""); }}
+            disabled={pending}
+            className="btn-ghost h-8 text-xs"
+          >
             Cancel
           </button>
           <p className="w-full text-[11px] text-muted">
-            Links the {s.count} matching transactions to that rule so this stops being suggested.
+            Links the {s.count} matching transactions to the chosen rule so this stops being
+            suggested. This can&apos;t be undone here, so check the rule before linking.
           </p>
         </div>
       )}
@@ -305,6 +322,8 @@ function RecurringForm({
       await deleteRecurringAction(rule.id, false);
       onClose();
     });
+
+  const confirmRemove = useConfirmAction(remove);
 
   return (
     <Modal open onClose={onClose} title={editing ? "Edit recurring" : "Add recurring"}>
@@ -373,8 +392,8 @@ function RecurringForm({
 
         <div className="flex items-center justify-between pt-1">
           {editing ? (
-            <button onClick={remove} disabled={pending} className="btn-danger">
-              <Trash2 size={14} /> Delete
+            <button onClick={confirmRemove.trigger} disabled={pending} className="btn-danger">
+              <Trash2 size={14} /> {confirmRemove.armed ? "Click to confirm" : "Delete"}
             </button>
           ) : (
             <span />
