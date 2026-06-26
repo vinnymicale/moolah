@@ -6,12 +6,14 @@ import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
 import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2, DownloadCloud, Copy } from "lucide-react";
 import { formatUSD } from "@/lib/money";
 import { Modal } from "@/components/Modal";
+import { useToast } from "@/components/Toast";
 import type { PlaidItemDTO } from "@/lib/queries";
 import {
   scanDuplicateTransactionsAction,
   removeDuplicateTransactionsAction,
 } from "@/actions/transactions";
 import type { DedupScan } from "@/lib/dedup-transactions";
+import { useConfirmAction } from "@/lib/useConfirmAction";
 
 // Owns the single usePlaidLink instance for the page. Only mounted when we
 // have an active token, so the Plaid script is never embedded more than once.
@@ -88,7 +90,7 @@ export function PlaidConnectButton() {
         Connect a bank
       </button>
       {error && (
-        <p className="mt-2 text-sm text-expense">{error}</p>
+        <p role="alert" className="mt-2 text-sm text-expense">{error}</p>
       )}
     </div>
   );
@@ -154,7 +156,7 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
         {loading ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
         Reconnect
       </button>
-      {error && <p className="mt-1 text-xs text-expense">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-xs text-expense">{error}</p>}
     </div>
   );
 }
@@ -169,9 +171,9 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
   const [confirmDisconnect, setConfirmDisconnect] = useState<PlaidItemDTO | null>(null);
   const [confirmReimport, setConfirmReimport] = useState(false);
   const [reimporting, setReimporting] = useState(false);
-  const [reimportNote, setReimportNote] = useState<string | null>(null);
   const [dedupOpen, setDedupOpen] = useState(false);
   const [, start] = useTransition();
+  const { toast } = useToast();
 
   const sync = async (itemId: string) => {
     setSyncing(itemId);
@@ -194,17 +196,16 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
     setConfirmReimport(false);
     setReimporting(true);
     setError(null);
-    setReimportNote(null);
     try {
       const res = await fetch("/api/plaid/reimport-all", { method: "POST" });
       const json = await res.json() as { ok?: boolean; error?: string; added?: number; failed?: number };
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Re-import failed");
       const added = json.added ?? 0;
-      setReimportNote(
-        added > 0
+      toast({
+        message: added > 0
           ? `Re-import complete. Restored ${added} transaction${added === 1 ? "" : "s"} that were missing.`
           : "Re-import complete. Everything was already up to date.",
-      );
+      });
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Re-import failed");
@@ -256,14 +257,8 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 border-b border-expense/30 bg-expense/5 px-4 py-2 text-sm text-expense">
-          <AlertTriangle size={14} /> {error}
-        </div>
-      )}
-
-      {reimportNote && (
-        <div className="border-b border-line bg-surface2/50 px-4 py-2 text-sm text-muted">
-          {reimportNote}
+        <div role="alert" className="flex items-center gap-2 border-b border-expense/30 bg-expense/5 px-4 py-2 text-sm text-expense">
+          <AlertTriangle size={14} aria-hidden /> {error}
         </div>
       )}
 
@@ -301,6 +296,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                   onClick={() => setConfirmDisconnect(item)}
                   disabled={disconnecting === item.id}
                   className="btn-ghost h-8 text-xs text-muted hover:text-expense"
+                  aria-label={`Disconnect ${item.institutionName ?? "bank"}`}
                   title="Remove Plaid connection"
                 >
                   {disconnecting === item.id
@@ -421,6 +417,10 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
     onChanged();
   };
 
+  // Bulk hard-delete can drop many rows at once, so it gets the same two-click
+  // arm-then-confirm guard used for single-row purges in the trash.
+  const confirmHardDelete = useConfirmAction(() => void remove("hard"));
+
   return (
     <Modal open onClose={onClose} title="Find duplicate transactions" widthClass="max-w-lg">
       <div className="space-y-4">
@@ -461,21 +461,25 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
           </>
         ) : null}
 
-        {error && <p className="text-sm text-expense">{error}</p>}
+        {error && <p role="alert" className="text-sm text-expense">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center gap-2">
           {done || (scan && scan.removableCount === 0) ? (
-            <button onClick={onClose} className="btn-ghost">Done</button>
+            <button onClick={onClose} className="btn-ghost ml-auto">Done</button>
           ) : scan && scan.removableCount > 0 ? (
             <>
               <button onClick={onClose} disabled={busy} className="btn-ghost">Cancel</button>
-              <button onClick={() => void remove("soft")} disabled={busy} className="btn-ghost">
+              <button onClick={() => void remove("soft")} disabled={busy} className="btn-ghost ml-auto">
                 {busy ? <Loader2 size={14} className="animate-spin" /> : null}
                 Move to trash
               </button>
-              <button onClick={() => void remove("hard")} disabled={busy} className="btn-danger">
+              <button
+                onClick={confirmHardDelete.trigger}
+                disabled={busy}
+                className="btn-danger"
+              >
                 {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-                Delete duplicates
+                {confirmHardDelete.armed ? "Click to confirm" : "Delete duplicates"}
               </button>
             </>
           ) : null}
