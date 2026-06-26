@@ -90,6 +90,7 @@ export function TrashDrawer({
                     return;
                   }
                   setRows((cur) => cur?.filter((x) => x.id !== r.id) ?? cur);
+                  toast({ message: "Permanently deleted." });
                 })
               }
             />
@@ -140,8 +141,9 @@ function TrashRow({
         onClick={confirmPurge.trigger}
         disabled={pending}
         className={`btn-ghost h-8 shrink-0 text-expense ${
-          confirmPurge.armed ? "text-xs font-medium" : "w-8 !p-0"
+          confirmPurge.armed ? "text-xs font-medium" : "w-8 p-0!"
         }`}
+        aria-label={confirmPurge.armed ? "Click to permanently delete" : "Delete permanently"}
         title={confirmPurge.armed ? "Click to permanently delete" : "Delete permanently"}
       >
         {confirmPurge.armed ? (
