@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon, CATEGORY_ICON_NAMES } from "@/components/CategoryIcon";
 import type { CategoryDTO } from "@/lib/queries";
@@ -89,6 +90,8 @@ function CategoryForm({ category, onClose }: { category: CategoryDTO | null; onC
       onClose();
     });
 
+  const confirmRemove = useConfirmAction(remove);
+
   return (
     <Modal open onClose={onClose} title={editing ? "Edit category" : "Add category"}>
       <div className="space-y-4">
@@ -136,8 +139,8 @@ function CategoryForm({ category, onClose }: { category: CategoryDTO | null; onC
 
         <div className="flex items-center justify-between pt-1">
           {editing ? (
-            <button onClick={remove} disabled={pending} className="btn-danger">
-              <Trash2 size={14} /> Delete
+            <button onClick={confirmRemove.trigger} disabled={pending} className="btn-danger">
+              <Trash2 size={14} /> {confirmRemove.armed ? "Click to confirm" : "Delete"}
             </button>
           ) : (
             <span />

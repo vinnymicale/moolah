@@ -198,7 +198,7 @@ export async function previewRulesAction(): Promise<RulePreview | { ok: false; e
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
     const txns = await prisma.transaction.findMany({
-      where: { userId, date: { gte: since } },
+      where: { userId, deletedAt: null, date: { gte: since } },
       select: { description: true, amount: true, accountId: true, type: true, categoryId: true },
       orderBy: { date: "desc" },
     });
@@ -269,7 +269,7 @@ export async function applyRulesAction(): Promise<ApplyResult | { ok: false; err
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
     const txns = await prisma.transaction.findMany({
-      where: { userId, date: { gte: since } },
+      where: { userId, deletedAt: null, date: { gte: since } },
       select: {
         id: true,
         description: true,

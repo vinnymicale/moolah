@@ -1,19 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { useMemo } from "react";
+import { TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, PieChart, Pie, Cell,
 } from "recharts";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
-import type { Reports } from "@/lib/reports";
+import { ChartSkeleton } from "@/components/ChartSkeleton";
+import { capCategorySlices, budgetStatus, type Reports } from "@/lib/reports-shared";
+import { useChartTheme } from "@/lib/useChartTheme";
+import { useMounted } from "@/lib/useMounted";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
-import { BRAND_COLOR, CHART_AXIS_COLOR, INCOME_COLOR, NEGATIVE_COLOR, categoryColor } from "@/lib/colors";
-const AXIS = CHART_AXIS_COLOR;
-const GRID = "rgba(148,163,184,0.2)";
+import { categoryColor } from "@/lib/colors";
 
-import type { CategorySlice } from "@/lib/reports";
+import type { CategorySlice } from "@/lib/reports-shared";
 
 function CategoryMoMTable({ current, last }: { current: CategorySlice[]; last: CategorySlice[] }) {
   const lastByName = new Map(last.map((s) => [s.name, s.value]));
@@ -122,50 +125,64 @@ function MoneyTooltip({ active, payload, label }: { active?: boolean; payload?: 
 export function TrendsCharts({ reports }: { reports: Reports }) {
   const { netWorthSeries, incomeExpenseSeries, categorySpending, categoryLastMonth, budgetVsActual } = reports;
   const hasSpending = categorySpending.length > 0;
+  const theme = useChartTheme();
+  const reducedMotion = usePrefersReducedMotion();
+  // Hold each chart's height with a skeleton until the client mounts, so charts
+  // fade in rather than popping in over an empty box.
+  const mounted = useMounted();
+  // Cap the pie to its biggest slices + a rolled-up "Other" so it stays legible
+  // and the chart matches its legend.
+  const pieData = useMemo(() => capCategorySlices(categorySpending), [categorySpending]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="lg:col-span-2">
         <ChartCard title="Net worth over time">
+          {!mounted ? <ChartSkeleton height={260} /> : (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={netWorthSeries} margin={{ left: 8, right: 8, top: 8 }}>
-              <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} width={70}
+              <CartesianGrid stroke={theme.grid} vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false} width={70}
                 tickFormatter={(v) => formatUSDWhole(v)} />
               <Tooltip content={<MoneyTooltip />} />
-              <Line type="monotone" dataKey="value" name="Net worth" stroke={BRAND_COLOR} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="value" name="Net worth" stroke={theme.brand} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={!reducedMotion} />
             </LineChart>
           </ResponsiveContainer>
+          )}
         </ChartCard>
       </div>
 
       <ChartCard title="Income vs. expenses (6 months)">
+        {!mounted ? <ChartSkeleton height={240} /> : (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={incomeExpenseSeries} margin={{ left: 8, right: 8, top: 8 }}>
-            <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="label" tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
-            <Tooltip content={<MoneyTooltip />} cursor={{ fill: "rgba(148,163,184,0.1)" }} />
-            <Bar dataKey="income" name="Income" fill={INCOME_COLOR} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expense" name="Expenses" fill={NEGATIVE_COLOR} radius={[4, 4, 0, 0]} />
+            <CartesianGrid stroke={theme.grid} vertical={false} />
+            <XAxis dataKey="label" tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => formatUSDWhole(v)} />
+            <Tooltip content={<MoneyTooltip />} cursor={{ fill: theme.grid }} />
+            <Bar dataKey="income" name="Income" fill={theme.income} radius={[4, 4, 0, 0]} isAnimationActive={!reducedMotion} />
+            <Bar dataKey="expense" name="Expenses" fill={theme.expense} radius={[4, 4, 0, 0]} isAnimationActive={!reducedMotion} />
           </BarChart>
         </ResponsiveContainer>
+        )}
       </ChartCard>
 
       <ChartCard title="Spending by category (this month)">
         {hasSpending ? (
           <div className="flex items-center gap-4">
+            {!mounted ? <div className="w-1/2"><ChartSkeleton height={220} /></div> : (
             <ResponsiveContainer width="50%" height={220}>
               <PieChart>
-                <Pie data={categorySpending} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={88} paddingAngle={2}>
-                  {categorySpending.map((s) => (
+                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={88} paddingAngle={2} isAnimationActive={!reducedMotion}>
+                  {pieData.map((s) => (
                     <Cell key={s.name} fill={s.color} stroke="transparent" />
                   ))}
                 </Pie>
                 <Tooltip content={<MoneyTooltip />} />
               </PieChart>
             </ResponsiveContainer>
+            )}
             <ul className="flex-1 space-y-1.5 overflow-y-auto" style={{ maxHeight: 220 }}>
               {categorySpending.slice(0, 8).map((s) => (
                 <li key={s.name}>
@@ -200,17 +217,33 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
           <div className="space-y-3 py-1">
             {budgetVsActual.map((b) => {
               const pct = b.budget > 0 ? Math.min(100, (b.actual / b.budget) * 100) : 0;
-              const over = b.actual > b.budget;
+              const status = budgetStatus(b.actual, b.budget);
+              // Color carries meaning but never alone: "over" pairs with an icon
+              // and an "over by" amount, so it reads without relying on red.
+              const fill = status === "over"
+                ? "var(--expense)"
+                : status === "near"
+                ? "var(--warning)"
+                : b.color;
               return (
                 <div key={b.name}>
                   <div className="mb-1 flex justify-between text-sm">
-                    <span className="font-medium">{b.name}</span>
-                    <span className={`tabular-nums ${over ? "text-expense" : "text-muted"}`}>
-                      {formatUSD(b.actual)} / {formatUSD(b.budget)}
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {status === "over" && <AlertTriangle size={13} className="text-expense" />}
+                      {b.name}
+                    </span>
+                    <span className={`tabular-nums ${status === "over" ? "text-expense" : status === "near" ? "text-warning" : "text-muted"}`}>
+                      {status === "over"
+                        ? `over by ${formatUSD(b.actual - b.budget)}`
+                        : `${formatUSD(b.actual)} / ${formatUSD(b.budget)}`}
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-surface2">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? NEGATIVE_COLOR : b.color }} />
+                    {/* Subtle same-hue gradient gives the fill a little depth. */}
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }}
+                    />
                   </div>
                 </div>
               );

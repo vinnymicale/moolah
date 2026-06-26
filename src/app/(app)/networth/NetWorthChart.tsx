@@ -6,12 +6,13 @@ import {
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
-import { BRAND_COLOR, CHART_AXIS_COLOR, INCOME_COLOR, NEGATIVE_COLOR } from "@/lib/colors";
+import { ChartSkeleton } from "@/components/ChartSkeleton";
+import { useChartTheme } from "@/lib/useChartTheme";
+import { useMounted } from "@/lib/useMounted";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import type { NetWorthPoint } from "@/lib/snapshots";
 import type { ForecastPoint } from "@/lib/networth-forecast";
 
-const AXIS = CHART_AXIS_COLOR;
-const GRID = "rgba(148,163,184,0.2)";
 const FORECAST_COLOR = "#a855f7";
 
 type Range = "3M" | "1Y" | "ALL";
@@ -74,6 +75,11 @@ export function NetWorthChart({
 }) {
   const [range, setRange] = useState<Range>("1Y");
   const [showForecast, setShowForecast] = useState(true);
+  const theme = useChartTheme();
+  const reducedMotion = usePrefersReducedMotion();
+  // Hold the chart's height with a skeleton until the client has mounted, so the
+  // chart fades in rather than popping in over an empty box.
+  const mounted = useMounted();
 
   const data = useMemo<Row[]>(() => {
     const days = RANGES.find((r) => r.key === range)!.days;
@@ -127,7 +133,7 @@ export function NetWorthChart({
               <button
                 key={r.key}
                 onClick={() => setRange(r.key)}
-                className={`px-2.5 py-1 ${range === r.key ? "bg-brand text-white" : "hover:bg-surface2"}`}
+                className={`px-2.5 py-1 ${range === r.key ? "bg-brand text-brand-fg" : "hover:bg-surface2"}`}
               >
                 {r.label}
               </button>
@@ -137,25 +143,30 @@ export function NetWorthChart({
       </div>
 
       {hasHistory ? (
+        !mounted ? (
+          <ChartSkeleton height={320} />
+        ) : (
         <ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={data} margin={{ left: 8, right: 8, top: 8 }}>
-            <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="date" tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false}
+            <CartesianGrid stroke={theme.grid} vertical={false} />
+            <XAxis dataKey="date" tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false}
               tickFormatter={shortDate} minTickGap={40} />
-            <YAxis tick={{ fill: AXIS, fontSize: 12 }} tickLine={false} axisLine={false} width={70}
+            <YAxis tick={{ fill: theme.axis, fontSize: 12 }} tickLine={false} axisLine={false} width={70}
               tickFormatter={(v) => formatUSDWhole(v)} />
             <Tooltip content={<NetWorthTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="assets" name="Assets" stroke={INCOME_COLOR}
-              fill={INCOME_COLOR} fillOpacity={0.12} strokeWidth={1.5} dot={false} />
-            <Area type="monotone" dataKey="liabilities" name="Liabilities" stroke={NEGATIVE_COLOR}
-              fill={NEGATIVE_COLOR} fillOpacity={0.12} strokeWidth={1.5} dot={false} />
-            <Line type="monotone" dataKey="net" name="Net worth" stroke={BRAND_COLOR}
-              strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+            <Area type="monotone" dataKey="assets" name="Assets" stroke={theme.income}
+              fill={theme.income} fillOpacity={0.12} strokeWidth={1.5} dot={false} isAnimationActive={!reducedMotion} />
+            {/* Dashed so Liabilities is distinguishable from Assets without relying on color. */}
+            <Area type="monotone" dataKey="liabilities" name="Liabilities" stroke={theme.expense}
+              fill={theme.expense} fillOpacity={0.12} strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={!reducedMotion} />
+            <Line type="monotone" dataKey="net" name="Net worth" stroke={theme.brand}
+              strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} isAnimationActive={!reducedMotion} />
             <Line type="monotone" dataKey="projected" name="Forecast" stroke={FORECAST_COLOR}
-              strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+              strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={!reducedMotion} />
           </ComposedChart>
         </ResponsiveContainer>
+        )
       ) : (
         <p className="py-16 text-center text-sm text-muted">
           No history yet. Snapshots are recorded each time your accounts sync - check back after your

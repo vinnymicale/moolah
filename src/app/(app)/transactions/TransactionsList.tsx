@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Search, Plus, Download, Clock,
-  CheckSquare, Square, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight,
+  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight,
 } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
+import { TrashDrawer } from "./TrashDrawer";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { MultiSelect } from "@/components/MultiSelect";
 import { formatUSD } from "@/lib/money";
@@ -79,6 +80,7 @@ export function TransactionsList({
   const [acctFilter, setAcctFilter] = useState<Set<string>>(() => toSet(initialAccountId));
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
   const [adding, setAdding] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -262,6 +264,9 @@ export function TransactionsList({
           )}
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setTrashOpen(true)} className="btn-ghost h-9 w-9 !p-0" title="Recently deleted">
+            <Trash size={15} />
+          </button>
           <button onClick={exportCsv} className="btn-ghost h-9" title="Export CSV">
             <Download size={15} /> <span className="hidden sm:inline">Export</span>
           </button>
@@ -510,6 +515,7 @@ export function TransactionsList({
 
       {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} />}
       {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} />}
+      <TrashDrawer open={trashOpen} onClose={() => setTrashOpen(false)} accounts={accounts} categories={categories} />
     </div>
   );
 }

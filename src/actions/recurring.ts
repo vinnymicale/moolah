@@ -110,7 +110,7 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
 
     // The normalized grouping isn't expressible in SQL, so match in memory.
     const candidates = await prisma.transaction.findMany({
-      where: { userId, type: type as TxnType, recurringRuleId: null },
+      where: { userId, deletedAt: null, type: type as TxnType, recurringRuleId: null },
       select: { id: true, description: true },
     });
     const ids = candidates

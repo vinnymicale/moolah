@@ -114,10 +114,12 @@ export function Sidebar({
         </button>
       </div>
       <nav className={`flex-1 space-y-0.5 overflow-y-auto py-2 ${compact ? "px-2" : "px-3"}`}>
-        {nav.map((item) => {
+        {nav.map((item, i) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           const isOver = dragOverHref === item.href;
+          const prev = nav[i - 1]?.href;
+          const next = nav[i + 1]?.href;
           return (
             <div
               key={item.href}
@@ -136,6 +138,14 @@ export function Sidebar({
                 href={item.href}
                 onClick={onNavigate}
                 title={compact ? item.label : undefined}
+                // Keyboard alternative to drag-and-drop reordering: Alt+Arrow
+                // swaps this item with its neighbor (a11y keyboard-shortcuts).
+                aria-keyshortcuts={compact ? undefined : "Alt+ArrowUp Alt+ArrowDown"}
+                onKeyDown={(e) => {
+                  if (compact || !e.altKey) return;
+                  if (e.key === "ArrowUp" && prev) { e.preventDefault(); onReorder(item.href, prev); }
+                  else if (e.key === "ArrowDown" && next) { e.preventDefault(); onReorder(item.href, next); }
+                }}
                 className={`flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${compact ? "justify-center px-2" : "gap-3 px-3"
                   } ${active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"}`}
               >

@@ -3,10 +3,15 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2 } from "lucide-react";
+import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2, DownloadCloud, Copy } from "lucide-react";
 import { formatUSD } from "@/lib/money";
 import { Modal } from "@/components/Modal";
 import type { PlaidItemDTO } from "@/lib/queries";
+import {
+  scanDuplicateTransactionsAction,
+  removeDuplicateTransactionsAction,
+} from "@/actions/transactions";
+import type { DedupScan } from "@/lib/dedup-transactions";
 
 // Owns the single usePlaidLink instance for the page. Only mounted when we
 // have an active token, so the Plaid script is never embedded more than once.
@@ -162,6 +167,10 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<PlaidItemDTO | null>(null);
+  const [confirmReimport, setConfirmReimport] = useState(false);
+  const [reimporting, setReimporting] = useState(false);
+  const [reimportNote, setReimportNote] = useState<string | null>(null);
+  const [dedupOpen, setDedupOpen] = useState(false);
   const [, start] = useTransition();
 
   const sync = async (itemId: string) => {
@@ -176,6 +185,31 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
       setError(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setSyncing(null);
+    }
+  };
+
+  // Re-pull full history for every connected bank. Recovers transactions that
+  // were deleted locally without creating any new Plaid connection.
+  const reimportAll = async () => {
+    setConfirmReimport(false);
+    setReimporting(true);
+    setError(null);
+    setReimportNote(null);
+    try {
+      const res = await fetch("/api/plaid/reimport-all", { method: "POST" });
+      const json = await res.json() as { ok?: boolean; error?: string; added?: number; failed?: number };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Re-import failed");
+      const added = json.added ?? 0;
+      setReimportNote(
+        added > 0
+          ? `Re-import complete. Restored ${added} transaction${added === 1 ? "" : "s"} that were missing.`
+          : "Re-import complete. Everything was already up to date.",
+      );
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Re-import failed");
+    } finally {
+      setReimporting(false);
     }
   };
 
@@ -202,11 +236,34 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <Building2 size={18} className="text-brand" />
         <h2 className="font-semibold">Connected banks</h2>
+        <button
+          onClick={() => setDedupOpen(true)}
+          className="btn-ghost ml-auto h-8 text-xs"
+          title="Find and remove duplicate transactions"
+        >
+          <Copy size={14} />
+          Find duplicates
+        </button>
+        <button
+          onClick={() => setConfirmReimport(true)}
+          disabled={reimporting}
+          className="btn-ghost h-8 text-xs"
+          title="Re-pull all transactions from your connected banks"
+        >
+          {reimporting ? <Loader2 size={14} className="animate-spin" /> : <DownloadCloud size={14} />}
+          Re-import all
+        </button>
       </div>
 
       {error && (
         <div className="flex items-center gap-2 border-b border-expense/30 bg-expense/5 px-4 py-2 text-sm text-expense">
           <AlertTriangle size={14} /> {error}
+        </div>
+      )}
+
+      {reimportNote && (
+        <div className="border-b border-line bg-surface2/50 px-4 py-2 text-sm text-muted">
+          {reimportNote}
         </div>
       )}
 
@@ -278,6 +335,33 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
         ))}
       </ul>
 
+      {confirmReimport && (
+        <Modal open onClose={() => setConfirmReimport(false)} title="Re-import all transactions?" widthClass="max-w-sm">
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              This re-pulls the full history from every connected bank using the
+              links you already have - it won&apos;t add a new connection. Existing
+              transactions are matched and updated in place, so nothing is
+              duplicated. Anything that was deleted but still exists at your bank
+              comes back.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmReimport(false)} className="btn-ghost">Cancel</button>
+              <button onClick={() => void reimportAll()} className="btn-primary">
+                Re-import all
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {dedupOpen && (
+        <DedupModal
+          onClose={() => setDedupOpen(false)}
+          onChanged={() => router.refresh()}
+        />
+      )}
+
       {confirmDisconnect && (
         <Modal open onClose={() => setConfirmDisconnect(null)} title="Disconnect bank?" widthClass="max-w-sm">
           <div className="space-y-4">
@@ -294,5 +378,109 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
         </Modal>
       )}
     </div>
+  );
+}
+
+// ── Duplicate finder ─────────────────────────────────────────────────────────
+
+// Scans for transactions that share an account, date, amount, type, and
+// description but exist as more than one row - the trail left by a re-import
+// that re-created charges the bank handed back under a fresh id. The oldest
+// copy in each group is kept; the user removes the rest, to the trash or for
+// good. This is the self-serve path on a self-hosted box with no DB access.
+function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const [scan, setScan] = useState<DedupScan | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    scanDuplicateTransactionsAction()
+      .then((r) => { if (active) setScan(r); })
+      .catch(() => { if (active) setError("Couldn't scan for duplicates."); });
+    return () => { active = false; };
+  }, []);
+
+  const remove = async (mode: "soft" | "hard") => {
+    setBusy(true);
+    setError(null);
+    const removable = scan?.removableCount ?? 0;
+    const res = await removeDuplicateTransactionsAction(mode);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? "Couldn't remove the duplicates.");
+      return;
+    }
+    setScan({ groups: [], removableCount: 0 });
+    setDone(
+      mode === "hard"
+        ? `Deleted ${removable} duplicate${removable === 1 ? "" : "s"}.`
+        : `Moved ${removable} duplicate${removable === 1 ? "" : "s"} to the trash.`,
+    );
+    onChanged();
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Find duplicate transactions" widthClass="max-w-lg">
+      <div className="space-y-4">
+        {scan === null && !error ? (
+          <p className="flex items-center gap-2 py-6 text-sm text-muted">
+            <Loader2 size={14} className="animate-spin" /> Scanning…
+          </p>
+        ) : done ? (
+          <p className="py-6 text-center text-sm text-muted">{done}</p>
+        ) : scan && scan.removableCount === 0 ? (
+          <p className="py-6 text-center text-sm text-muted">No duplicates found.</p>
+        ) : scan ? (
+          <>
+            <p className="text-sm text-muted">
+              Found <strong>{scan.removableCount}</strong> duplicate
+              {scan.removableCount === 1 ? "" : "s"} across {scan.groups.length} charge
+              {scan.groups.length === 1 ? "" : "s"}. The oldest copy of each is kept.
+            </p>
+            <ul className="max-h-[40vh] space-y-1 overflow-y-auto">
+              {scan.groups.map((g) => (
+                <li
+                  key={g.keepId}
+                  className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{g.description || "(no description)"}</p>
+                    <p className="truncate text-xs text-muted">
+                      {[g.date, g.accountName].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 tabular-nums ${g.type === "INCOME" ? "text-income" : "text-expense"}`}>
+                    {g.type === "INCOME" ? "+" : "−"}{formatUSD(g.amount)}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted">×{g.removeIds.length + 1}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+
+        {error && <p className="text-sm text-expense">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          {done || (scan && scan.removableCount === 0) ? (
+            <button onClick={onClose} className="btn-ghost">Done</button>
+          ) : scan && scan.removableCount > 0 ? (
+            <>
+              <button onClick={onClose} disabled={busy} className="btn-ghost">Cancel</button>
+              <button onClick={() => void remove("soft")} disabled={busy} className="btn-ghost">
+                {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+                Move to trash
+              </button>
+              <button onClick={() => void remove("hard")} disabled={busy} className="btn-danger">
+                {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+                Delete duplicates
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </Modal>
   );
 }

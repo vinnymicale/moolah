@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getDeletedTransactions, type DeletedTransactionDTO } from "@/lib/queries";
+import {
+  scanDuplicateTransactions,
+  removeDuplicateTransactions,
+  type DedupScan,
+} from "@/lib/dedup-transactions";
 import { requireUser } from "@/lib/session";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
@@ -182,9 +188,63 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { userId } = await requireUser();
-    const existing = await prisma.transaction.findFirst({ where: { id, userId } });
+    const existing = await prisma.transaction.findFirst({ where: { id, userId, deletedAt: null } });
+    if (!existing) throw new UserError("Transaction not found");
+    // Soft delete: keep the row so it can be restored from the trash and so a
+    // re-imported Plaid charge matches on plaidTransactionId instead of
+    // duplicating.
+    await prisma.transaction.update({ where: { id }, data: { deletedAt: new Date() } });
+    revalidateAll();
+  });
+}
+
+export async function restoreTransactionAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const existing = await prisma.transaction.findFirst({ where: { id, userId, deletedAt: { not: null } } });
+    if (!existing) throw new UserError("Transaction not found");
+    await prisma.transaction.update({ where: { id }, data: { deletedAt: null } });
+    revalidateAll();
+  });
+}
+
+export async function permanentDeleteTransactionAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const existing = await prisma.transaction.findFirst({ where: { id, userId, deletedAt: { not: null } } });
     if (!existing) throw new UserError("Transaction not found");
     await prisma.transaction.delete({ where: { id } });
+    revalidateAll();
+  });
+}
+
+// Load the recently-deleted transactions for the trash view. Demo mode has no
+// trash (deletes are no-ops there), so it always comes back empty.
+export async function listDeletedTransactionsAction(): Promise<DeletedTransactionDTO[]> {
+  if (isDemoMode()) return [];
+  const { userId } = await requireUser();
+  return getDeletedTransactions(userId);
+}
+
+// Scan for duplicate Plaid transactions (same account/date/amount/type/
+// description, kept as more than one non-deleted row) and report what could be
+// removed. This is the self-serve path for a self-hosted box where there's no
+// shell access to the DB. Demo mode has nothing to dedup.
+export async function scanDuplicateTransactionsAction(): Promise<DedupScan> {
+  if (isDemoMode()) return { groups: [], removableCount: 0 };
+  const { userId } = await requireUser();
+  return scanDuplicateTransactions(userId);
+}
+
+// Remove the duplicate copies found above, keeping the oldest in each group.
+// Soft sends them to the trash (recoverable); hard deletes them outright.
+export async function removeDuplicateTransactionsAction(mode: "soft" | "hard"): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    await removeDuplicateTransactions(userId, mode);
     revalidateAll();
   });
 }
@@ -255,7 +315,10 @@ export async function bulkDeleteTransactionsAction(ids: string[]): Promise<Actio
   return run(async () => {
     const { userId } = await requireUser();
     const list = idsSchema.parse(ids);
-    await prisma.transaction.deleteMany({ where: { userId, id: { in: list } } });
+    await prisma.transaction.updateMany({
+      where: { userId, id: { in: list }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
     revalidateAll();
   });
 }
@@ -420,6 +483,7 @@ export async function searchTransactionsAction(query: string): Promise<SearchHit
   const rows = await prisma.transaction.findMany({
     where: {
       userId,
+      deletedAt: null,
       OR: [
         { description: { contains: q, mode: "insensitive" } },
         { note: { contains: q, mode: "insensitive" } },

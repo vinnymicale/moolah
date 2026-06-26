@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus, Trash2, Check, Loader2 } from "lucide-react";
+import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon, CATEGORY_ICON_NAMES } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/ui-bits";
@@ -86,7 +87,7 @@ function GoalCard({ goal, onEdit, onContribute }: { goal: SavingsGoalDTO; onEdit
         <span className="text-xs text-muted">of {formatUSD(goal.targetAmount)} · {Math.round(pct)}%</span>
       </div>
       <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface2">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: complete ? INCOME_COLOR : goal.color }} />
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: complete ? "var(--income)" : goal.color }} />
       </div>
     </div>
   );
@@ -173,6 +174,8 @@ function GoalForm({ goal, onClose }: { goal: SavingsGoalDTO | null; onClose: () 
       onClose();
     });
 
+  const confirmRemove = useConfirmAction(remove);
+
   return (
     <Modal open onClose={onClose} title={editing ? "Edit goal" : "New savings goal"}>
       <div className="space-y-4">
@@ -227,8 +230,8 @@ function GoalForm({ goal, onClose }: { goal: SavingsGoalDTO | null; onClose: () 
 
         <div className="flex items-center justify-between pt-1">
           {editing ? (
-            <button onClick={remove} disabled={pending} className="btn-danger">
-              <Trash2 size={14} /> Delete
+            <button onClick={confirmRemove.trigger} disabled={pending} className="btn-danger">
+              <Trash2 size={14} /> {confirmRemove.armed ? "Click to confirm" : "Delete"}
             </button>
           ) : (
             <span />

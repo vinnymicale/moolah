@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const account = sp.get("account");
   const category = sp.get("category");
 
-  const where: Record<string, unknown> = { userId };
+  const where: Record<string, unknown> = { userId, deletedAt: null };
   if (ISO_DAY.test(from ?? "") || ISO_DAY.test(to ?? "")) {
     const dateFilter: Record<string, Date> = {};
     if (ISO_DAY.test(from ?? "")) dateFilter.gte = new Date(`${from}T00:00:00.000Z`);
