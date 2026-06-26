@@ -60,7 +60,7 @@ export async function analyzeImportAction(
     // Existing concrete transactions in range, counted as a multiset so we only
     // flag as many CSV rows as there are real matches.
     const existing = await prisma.transaction.findMany({
-      where: { userId, date: { gte: rangeStart, lte: rangeEnd } },
+      where: { userId, deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
       select: { type: true, date: true, amount: true },
     });
     const existingCounts = new Map<string, number>();

@@ -9,9 +9,12 @@ import {
   createTransactionAction,
   updateTransactionAction,
   deleteTransactionAction,
+  restoreTransactionAction,
   convertToRecurringAction,
 } from "@/actions/transactions";
 import { validateSplits } from "@/lib/splits";
+import { useConfirmAction } from "@/lib/useConfirmAction";
+import { useToast } from "./Toast";
 import { localTodayISO } from "@/lib/dates";
 import type { Frequency } from "@/generated/prisma/enums";
 
@@ -71,6 +74,7 @@ export function TransactionModal(props: TransactionModalProps) {
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const { toast } = useToast();
 
   const catOptions = categories.filter((c) => c.kind === form.type);
 
@@ -135,9 +139,22 @@ export function TransactionModal(props: TransactionModalProps) {
   const remove = () =>
     start(async () => {
       if (!transaction) return;
-      await deleteTransactionAction(transaction.id);
+      const id = transaction.id;
+      const res = await deleteTransactionAction(id);
+      if (!res.ok) {
+        setError(res.error ?? "Couldn't delete that transaction.");
+        return;
+      }
       onClose();
+      toast({
+        message: "Transaction deleted.",
+        action: {
+          label: "Undo",
+          onClick: () => { void restoreTransactionAction(id); },
+        },
+      });
     });
+  const confirmRemove = useConfirmAction(remove);
 
   // Create a fresh copy from the current form values (handy for similar entries).
   const duplicate = () =>
@@ -317,8 +334,8 @@ export function TransactionModal(props: TransactionModalProps) {
         <div className="flex items-center justify-between pt-1">
           {editing ? (
             <div className="flex gap-2">
-              <button onClick={remove} disabled={pending} className="btn-danger">
-                Delete
+              <button onClick={confirmRemove.trigger} disabled={pending} className="btn-danger">
+                {confirmRemove.armed ? "Click to confirm" : "Delete"}
               </button>
               <button onClick={duplicate} disabled={pending} className="btn-ghost" title="Create a copy">
                 <Copy size={14} /> Duplicate

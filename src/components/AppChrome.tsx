@@ -11,6 +11,7 @@ import { ShortcutsModal } from "./ShortcutsModal";
 import { DemoWelcomeModal } from "./DemoWelcomeModal";
 import { ChatPanel } from "./ChatPanel";
 import { Sidebar } from "./Sidebar";
+import { ToastProvider } from "./Toast";
 import {
   NAV, NAV_ORDER_KEY, NAV_COLLAPSED_KEY, DEFAULT_ORDER, NAV_BY_HREF, mergeNavOrder, type NavItem,
 } from "./app-nav";
@@ -194,6 +195,7 @@ export function AppChrome({
   };
 
   return (
+    <ToastProvider>
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className={`hidden shrink-0 border-r border-line bg-surface transition-[width] duration-200 md:block ${isCollapsed ? "w-16" : "w-64"}`}>
@@ -214,7 +216,7 @@ export function AppChrome({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar - mobile only (desktop header is just wasted space) */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/70 px-4 py-3 backdrop-blur-md md:hidden">
           <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Open menu">
             <Menu size={18} />
           </button>
@@ -265,7 +267,7 @@ export function AppChrome({
       {!demoMode && !chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
-          className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-lg transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-floating transition-transform duration-200 hover:scale-105 active:scale-95"
           title="Finance assistant (C)"
           aria-label="Open finance assistant"
         >
@@ -276,7 +278,7 @@ export function AppChrome({
       {/* Drag-to-import overlay */}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-60 flex items-center justify-center bg-brand/10 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-brand bg-surface px-10 py-8 text-center shadow-lg">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-brand bg-surface px-10 py-8 text-center shadow-floating">
             <FileSpreadsheet size={36} className="text-brand" />
             <p className="font-semibold">Drop your bank CSV to import</p>
             <p className="text-sm text-muted">We&apos;ll parse it and let you review before adding anything.</p>
@@ -284,5 +286,6 @@ export function AppChrome({
         </div>
       )}
     </div>
+    </ToastProvider>
   );
 }

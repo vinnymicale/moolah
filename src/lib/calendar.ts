@@ -193,7 +193,7 @@ export async function getUpcoming(
   const accountById = new Map(accounts.map((a) => [a.id, a]));
 
   const pending = await prisma.transaction.findMany({
-    where: { userId, cleared: false, date: { gte: start, lte: end } },
+    where: { userId, deletedAt: null, cleared: false, date: { gte: start, lte: end } },
   });
   for (const t of pending) {
     const acct = t.accountId ? accountById.get(t.accountId) : null;
@@ -213,7 +213,7 @@ export async function getUpcoming(
   const rules = await prisma.recurringRule.findMany({ where: { userId, archived: false } });
   const materialised = new Set(
     (await prisma.transaction.findMany({
-      where: { userId, recurringRuleId: { not: null }, date: { gte: start, lte: end } },
+      where: { userId, deletedAt: null, recurringRuleId: { not: null }, date: { gte: start, lte: end } },
       select: { recurringRuleId: true, date: true },
     })).map((t) => `${t.recurringRuleId}|${isoDay(t.date)}`),
   );
@@ -266,7 +266,7 @@ export async function getCalendarMonth(
 
   // Concrete transactions in range.
   const txnRows = await prisma.transaction.findMany({
-    where: { userId, date: { gte: rangeStart, lte: rangeEnd } },
+    where: { userId, deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
     orderBy: { date: "asc" },
     include: { transferPeer: { select: { account: { select: { type: true } } } } },
   });

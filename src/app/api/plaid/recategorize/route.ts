@@ -19,6 +19,7 @@ export async function POST() {
   const uncategorized = await prisma.transaction.findMany({
     where: {
       userId,
+      deletedAt: null,
       categoryId: null,
       plaidPrimaryCategory: { not: null },
     },
