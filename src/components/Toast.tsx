@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 
 export interface ToastAction {
   label: string;
@@ -62,13 +62,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {active && (
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[70] flex justify-center px-4">
           <div
-            role="status"
+            role={active.tone === "danger" ? "alert" : "status"}
             className={`pointer-events-auto flex max-w-md items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-floating animate-[toast-in_180ms_ease-out] ${
               active.tone === "danger"
                 ? "border-expense/40 bg-surface text-text"
                 : "border-line bg-surface text-text"
             }`}
           >
+            {active.tone === "danger" && (
+              <AlertTriangle size={16} className="shrink-0 text-expense" aria-hidden />
+            )}
             <span className="min-w-0 flex-1">{active.message}</span>
             {active.action && (
               <button
