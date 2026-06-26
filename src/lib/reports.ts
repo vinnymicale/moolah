@@ -9,21 +9,22 @@ import { getAccounts, getSnapshots, type AccountDTO, type SnapshotDTO } from "@/
 import { categoryParts, type SplitLike } from "@/lib/splits";
 import { isEffectiveTransfer } from "@/lib/transfers";
 
-export interface NetWorthPoint { label: string; value: number; }
-export interface IncomeExpensePoint { label: string; income: number; expense: number; net: number; }
-export interface CategorySlice { id: string | null; name: string; value: number; color: string; }
-export interface BudgetRow { name: string; color: string; budget: number; actual: number; }
-
-export interface Reports {
-  netWorthSeries: NetWorthPoint[];
-  incomeExpenseSeries: IncomeExpensePoint[];
-  categorySpending: CategorySlice[];
-  /** Same shape as categorySpending but for the previous calendar month. */
-  categoryLastMonth: CategorySlice[];
-  budgetVsActual: BudgetRow[];
-  currentMonthLabel: string;
-  savingsRate: number | null;
-}
+// Types and pure helpers live in reports-shared so client components can import
+// them without pulling Prisma (and node:module) into the browser bundle.
+export {
+  OTHER_SLICE_COLOR,
+  capCategorySlices,
+  budgetStatus,
+  type NetWorthPoint,
+  type IncomeExpensePoint,
+  type CategorySlice,
+  type BudgetRow,
+  type Reports,
+  type BudgetStatus,
+} from "@/lib/reports-shared";
+import type {
+  Reports, NetWorthPoint, IncomeExpensePoint, CategorySlice, BudgetRow,
+} from "@/lib/reports-shared";
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthShort = (d: Date) => `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`;
@@ -65,7 +66,7 @@ export async function computeReports(userId: string, todayISO: string): Promise<
     getSnapshots(userId),
     prisma.category.findMany({ where: { userId } }),
     prisma.transaction.findMany({
-      where: { userId, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
+      where: { userId, deletedAt: null, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
       select: { type: true, amount: true, date: true, categoryId: true, account: { select: { type: true } }, splits: { select: { categoryId: true, amount: true } } },
     }),
     prisma.budget.findMany({ where: { userId, month: monthStart } }),

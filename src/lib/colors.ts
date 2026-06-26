@@ -4,16 +4,10 @@
 
 /** Slate-500. Fallback swatch for uncategorized transactions. */
 export const DEFAULT_CATEGORY_COLOR = "#64748b";
-/** Green-600. Income, and "goal complete" accents. */
+/** Green-600. Persisted default for new goals; matches the --income token. */
 export const INCOME_COLOR = "#16a34a";
 /** Slate-400. Credit-card payment transfers (cash-flow neutral). */
 export const TRANSFER_COLOR = "#94a3b8";
-/** Red-600. Over-budget and other negative accents. */
-export const NEGATIVE_COLOR = "#dc2626";
-/** Indigo-600. The brand accent, used for chart lines. */
-export const BRAND_COLOR = "#4f46e5";
-/** Slate-400. Axis ticks and gridlines in charts. */
-export const CHART_AXIS_COLOR = "#94a3b8";
 
 /** The swatches offered by every color picker (accounts, categories, goals). */
 export const COLOR_PALETTE = [
