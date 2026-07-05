@@ -107,13 +107,13 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
             {messages.length > 0 && (
               <button
                 onClick={() => { setMessages([]); setError(null); }}
-                className="btn-ghost h-8 w-8 !p-0"
+                className="btn-ghost h-8 w-8 p-0!"
                 title="Clear conversation"
               >
                 <RotateCcw size={14} />
               </button>
             )}
-            <button onClick={onClose} className="btn-ghost h-8 w-8 !p-0" aria-label="Close">
+            <button onClick={onClose} className="btn-ghost h-8 w-8 p-0!" aria-label="Close">
               <X size={16} />
             </button>
           </div>
@@ -188,7 +188,7 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
             <button
               onClick={() => void send()}
               disabled={!input.trim() || loading}
-              className="btn-primary h-7 w-7 shrink-0 !p-0 disabled:opacity-40"
+              className="btn-primary h-7 w-7 shrink-0 p-0! disabled:opacity-40"
               aria-label="Send"
             >
               <Send size={13} />

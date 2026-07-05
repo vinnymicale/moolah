@@ -9,7 +9,7 @@ const goal = (currentAmount: number, targetAmount: number): SavingsGoalDTO =>
   ({ currentAmount, targetAmount } as SavingsGoalDTO);
 
 const budget = (limit: number, actual: number): BudgetLineDTO =>
-  ({ categoryId: "c", name: "n", color: "#000", icon: "tag", limit, actual });
+  ({ categoryId: "c", name: "n", color: "#000", icon: "tag", limit, actual, rollover: false, carryover: 0, effectiveLimit: limit });
 
 const base: DashboardSummaryInput = {
   goals: [],

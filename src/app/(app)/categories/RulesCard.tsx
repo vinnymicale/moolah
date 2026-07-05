@@ -243,7 +243,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
                   <button
                     onClick={() => setEditing(rule.id)}
                     disabled={pending}
-                    className="btn-ghost h-7 w-7 !p-0 text-muted hover:text-brand"
+                    className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand"
                     title="Edit rule"
                   >
                     <Pencil size={13} />
@@ -251,7 +251,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
                   <button
                     onClick={() => remove(rule.id)}
                     disabled={pending}
-                    className="btn-ghost h-7 w-7 !p-0 text-muted hover:text-expense"
+                    className="btn-ghost h-7 w-7 p-0! text-muted hover:text-expense"
                     title="Delete rule"
                   >
                     <Trash2 size={13} />
@@ -458,7 +458,7 @@ function ConditionRow({
       )}
 
       {onRemove && (
-        <button onClick={onRemove} className="btn-ghost h-8 w-8 !p-0 text-muted hover:text-expense" title="Remove condition">
+        <button onClick={onRemove} className="btn-ghost h-8 w-8 p-0! text-muted hover:text-expense" title="Remove condition">
           <X size={14} />
         </button>
       )}
@@ -551,7 +551,7 @@ function ActionRow({
               {action.parts.length > 2 && (
                 <button
                   onClick={() => onChange({ ...action, parts: action.parts.filter((_, j) => j !== i) })}
-                  className="btn-ghost h-8 w-8 !p-0 text-muted hover:text-expense"
+                  className="btn-ghost h-8 w-8 p-0! text-muted hover:text-expense"
                   title="Remove part"
                 >
                   <X size={14} />
@@ -569,7 +569,7 @@ function ActionRow({
       )}
 
       {onRemove && (
-        <button onClick={onRemove} className="btn-ghost h-8 w-8 !p-0 text-muted hover:text-expense" title="Remove action">
+        <button onClick={onRemove} className="btn-ghost h-8 w-8 p-0! text-muted hover:text-expense" title="Remove action">
           <X size={14} />
         </button>
       )}

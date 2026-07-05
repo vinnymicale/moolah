@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  BarChart, Bar, PieChart, Pie, Cell,
+  BarChart, Bar, PieChart, Pie, Cell, Sankey, type SankeyNodeProps,
 } from "recharts";
 import { formatUSD, formatUSDWhole } from "@/lib/money";
 import { ChartSkeleton } from "@/components/ChartSkeleton";
@@ -90,6 +90,97 @@ function CategoryMoMTable({ current, last }: { current: CategorySlice[]; last: C
   );
 }
 
+interface FlowNode { name: string; color: string }
+interface FlowLink { source: number; target: number; value: number }
+
+/**
+ * Shape this month's income and spending into Sankey nodes and links:
+ * income categories flow into an "Income" hub, which fans out to expense
+ * categories. A surplus drains to a "Savings" sink; a shortfall is fed by a
+ * "From savings" source so both columns always balance.
+ */
+function buildCashFlow(
+  income: CategorySlice[],
+  spending: CategorySlice[],
+  theme: { income: string; expense: string },
+): { nodes: FlowNode[]; links: FlowLink[] } | null {
+  const inflows = capCategorySlices(income, 4).filter((s) => s.value > 0.005);
+  const outflows = capCategorySlices(spending, 6).filter((s) => s.value > 0.005);
+  if (inflows.length === 0 || outflows.length === 0) return null;
+
+  const nodes: FlowNode[] = [];
+  const links: FlowLink[] = [];
+  const addNode = (name: string, color: string) => nodes.push({ name, color }) - 1;
+
+  const hub = addNode("Income", theme.income);
+  for (const s of inflows) {
+    links.push({ source: addNode(s.name, s.color), target: hub, value: s.value });
+  }
+  for (const s of outflows) {
+    links.push({ source: hub, target: addNode(s.name, s.color), value: s.value });
+  }
+
+  const totalIn = inflows.reduce((sum, s) => sum + s.value, 0);
+  const totalOut = outflows.reduce((sum, s) => sum + s.value, 0);
+  const diff = totalIn - totalOut;
+  if (diff > 0.005) {
+    links.push({ source: hub, target: addNode("Savings", theme.income), value: diff });
+  } else if (diff < -0.005) {
+    links.push({ source: addNode("From savings", theme.expense), target: hub, value: -diff });
+  }
+
+  return { nodes, links };
+}
+
+function CashFlowNode({ x, y, width, height, payload, labelColor }: SankeyNodeProps & { labelColor: string }) {
+  const node = payload as typeof payload & FlowNode;
+  // Leaf nodes on the right column label leftward so text stays inside the chart.
+  const isRightColumn = node.targetLinks.length > 0 && node.sourceLinks.length === 0;
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={2} fill={node.color} />
+      <text
+        x={isRightColumn ? x - 6 : x + width + 6}
+        y={y + height / 2}
+        textAnchor={isRightColumn ? "end" : "start"}
+        dominantBaseline="middle"
+        fontSize={11}
+        fill={labelColor}
+      >
+        {node.name}
+      </text>
+    </g>
+  );
+}
+
+interface CashFlowTooltipPayload {
+  name?: string;
+  value?: number | string;
+  payload?: {
+    source?: { name?: string };
+    target?: { name?: string };
+    name?: string;
+    value?: number;
+  };
+}
+
+function CashFlowTooltip({ active, payload }: { active?: boolean; payload?: CashFlowTooltipPayload[] }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  const data = item.payload;
+  const label = data?.source?.name && data?.target?.name
+    ? `${data.source.name} → ${data.target.name}`
+    : data?.name ?? item.name;
+  return (
+    <div className="rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-md">
+      <p className="flex items-center gap-2">
+        <span className="text-muted">{label}:</span>
+        <span className="font-medium tabular-nums">{formatUSD(data?.value ?? item.value)}</span>
+      </p>
+    </div>
+  );
+}
+
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card p-4">
@@ -123,7 +214,7 @@ function MoneyTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 export function TrendsCharts({ reports }: { reports: Reports }) {
-  const { netWorthSeries, incomeExpenseSeries, categorySpending, categoryLastMonth, budgetVsActual } = reports;
+  const { netWorthSeries, incomeExpenseSeries, categorySpending, categoryLastMonth, incomeByCategory, budgetVsActual } = reports;
   const hasSpending = categorySpending.length > 0;
   const theme = useChartTheme();
   const reducedMotion = usePrefersReducedMotion();
@@ -133,6 +224,10 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
   // Cap the pie to its biggest slices + a rolled-up "Other" so it stays legible
   // and the chart matches its legend.
   const pieData = useMemo(() => capCategorySlices(categorySpending), [categorySpending]);
+  const cashFlow = useMemo(
+    () => buildCashFlow(incomeByCategory, categorySpending, theme),
+    [incomeByCategory, categorySpending, theme],
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -203,6 +298,27 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
           <p className="py-12 text-center text-sm text-muted">No spending recorded this month yet.</p>
         )}
       </ChartCard>
+
+      {cashFlow && (
+        <div className="lg:col-span-2">
+          <ChartCard title="Cash flow (this month)">
+            {!mounted ? <ChartSkeleton height={300} /> : (
+            <ResponsiveContainer width="100%" height={300}>
+              <Sankey
+                data={cashFlow}
+                nodeWidth={12}
+                nodePadding={24}
+                margin={{ top: 12, right: 100, bottom: 12, left: 100 }}
+                node={(props) => <CashFlowNode {...props} labelColor={theme.axis} />}
+                link={{ stroke: theme.axis, strokeOpacity: 0.3 }}
+              >
+                <Tooltip content={<CashFlowTooltip />} />
+              </Sankey>
+            </ResponsiveContainer>
+            )}
+          </ChartCard>
+        </div>
+      )}
 
       {(categorySpending.length > 0 || categoryLastMonth.length > 0) && (
         <div className="lg:col-span-2">

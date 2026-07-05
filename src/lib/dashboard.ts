@@ -50,7 +50,7 @@ export function summarizeDashboard(input: DashboardSummaryInput): DashboardSumma
     projectedEnd: projection.at(-1)?.balance ?? anchorBalance,
     recent: monthTxns.slice(0, 6),
     budgeted,
-    totalBudget: budgeted.reduce((sum, b) => sum + b.limit, 0),
+    totalBudget: budgeted.reduce((sum, b) => sum + b.effectiveLimit, 0),
     budgetSpent: budgeted.reduce((sum, b) => sum + b.actual, 0),
   };
 }
