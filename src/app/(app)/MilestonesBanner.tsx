@@ -40,7 +40,7 @@ export function MilestonesBanner({ milestones }: { milestones: Milestone[] }) {
         </p>
         <p className="text-sm text-muted">{m.detail}</p>
       </div>
-      <button onClick={() => dismiss(m.id)} className="btn-ghost h-7 w-7 shrink-0 !p-0 text-muted" title="Dismiss" aria-label="Dismiss">
+      <button onClick={() => dismiss(m.id)} className="btn-ghost h-7 w-7 shrink-0 p-0! text-muted" title="Dismiss" aria-label="Dismiss">
         <X size={15} />
       </button>
     </div>

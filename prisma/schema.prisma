@@ -54,6 +54,7 @@ model User {
   plaidItems        PlaidItem[]
   rules             Rule[]
   backupConfig      BackupConfig?
+  alertConfig       AlertConfig?
 }
 
 // Auth.js OAuth account link
@@ -353,6 +354,8 @@ model Budget {
   // First day of the budgeted month (UTC midnight).
   month       DateTime
   limit       Decimal  @db.Decimal(14, 2)
+  // Carry last month's leftover (or overspend) into this month's effective limit.
+  rollover    Boolean  @default(false)
 
   @@unique([userId, categoryId, month])
   @@index([userId])
@@ -462,4 +465,36 @@ model BackupConfig {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Per-user outbound notifications: a scheduled digest of upcoming bills,
+// credit-card due dates and over-budget categories, delivered to an ntfy topic
+// or a generic JSON webhook. Runs on the same in-process cron scheduler as
+// backups, so it only fires on long-lived (self-hosted) servers.
+model AlertConfig {
+  id      String  @id @default(cuid())
+  userId  String  @unique
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(false)
+  // Delivery channel: "ntfy" (plain-text POST with a Title header) or
+  // "webhook" (JSON POST).
+  kind    String  @default("ntfy")
+  // The ntfy topic URL or webhook endpoint.
+  url     String  @default("")
+  // When the digest is sent, as a cron expression edited via friendly presets.
+  cron    String  @default("0 8 * * *")
+
+  // How many days ahead to look for upcoming bills and CC due dates.
+  billsDays      Int     @default(3)
+  // Include categories that are over their monthly budget.
+  budgetsEnabled Boolean @default(true)
+
+  // Last-run status for the Settings UI.
+  lastRunAt  DateTime?
+  lastStatus String?   // "success" | "error" | "skipped"
+  lastError  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

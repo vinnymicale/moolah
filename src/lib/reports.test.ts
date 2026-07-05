@@ -174,6 +174,24 @@ describe("aggregateReports category spending", () => {
     // The full amount still counts once toward the month's expense total.
     expect(r.incomeExpenseSeries.at(-1)?.expense).toBe(100);
   });
+
+  it("totals current-month income per category into incomeByCategory", () => {
+    const r = aggregateReports({
+      ...base,
+      categories: [{ id: "pay", name: "Paycheck", color: "#00f" }],
+      txns: [
+        { type: "INCOME", amount: 2000, date: "2026-06-01", categoryId: "pay" },
+        { type: "INCOME", amount: 500, date: "2026-06-10", categoryId: "pay" },
+        { type: "INCOME", amount: 75, date: "2026-06-12", categoryId: null },
+        { type: "INCOME", amount: 999, date: "2026-05-20", categoryId: "pay" },
+        { type: "EXPENSE", amount: 50, date: "2026-06-05", categoryId: "pay" },
+      ],
+    });
+    expect(r.incomeByCategory).toEqual([
+      { id: "pay", name: "Paycheck", color: "#00f", value: 2500 },
+      { id: null, name: "Uncategorized", color: "#94a3b8", value: 75 },
+    ]);
+  });
 });
 
 describe("aggregateReports budgets and savings", () => {

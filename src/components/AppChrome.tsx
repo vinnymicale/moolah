@@ -217,7 +217,7 @@ export function AppChrome({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar - mobile only (desktop header is just wasted space) */}
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/70 px-4 py-3 backdrop-blur-md md:hidden">
-          <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Open menu">
+          <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 p-0!" aria-label="Open menu">
             <Menu size={18} />
           </button>
           <div className="flex items-center gap-2 font-semibold">
@@ -225,7 +225,7 @@ export function AppChrome({
             <img src="/logo.png" alt="Moolah" width={22} height={22} className="h-5.5 w-5.5" />
           </div>
           <div className="flex-1" />
-          <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 !p-0" aria-label="Search">
+          <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 p-0!" aria-label="Search">
             <Search size={18} />
           </button>
           <button onClick={() => setAddOpen(true)} className="btn-primary h-9">

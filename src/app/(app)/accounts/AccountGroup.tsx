@@ -63,13 +63,13 @@ export function AccountGroup({
                     ) : null}
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <Link href={`/transactions?account=${a.id}`} className="btn-ghost h-8 w-8 !p-0" title="View transactions">
+                    <Link href={`/transactions?account=${a.id}`} className="btn-ghost h-8 w-8 p-0!" title="View transactions">
                       <Receipt size={14} />
                     </Link>
-                    <button onClick={() => onSnapshot(a)} className="btn-ghost h-8 w-8 !p-0" title="Update balance">
+                    <button onClick={() => onSnapshot(a)} className="btn-ghost h-8 w-8 p-0!" title="Update balance">
                       <TrendingUp size={14} />
                     </button>
-                    <button onClick={() => onEdit(a)} className="btn-ghost h-8 w-8 !p-0" title="Edit">
+                    <button onClick={() => onEdit(a)} className="btn-ghost h-8 w-8 p-0!" title="Edit">
                       <Pencil size={14} />
                     </button>
                   </div>

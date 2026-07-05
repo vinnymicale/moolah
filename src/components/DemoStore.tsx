@@ -197,11 +197,11 @@ export function DemoStoreProvider({
       const exists = prev.find((b) => b.categoryId === categoryId);
       if (exists) {
         if (limit <= 0) return prev.filter((b) => b.categoryId !== categoryId);
-        return prev.map((b) => b.categoryId === categoryId ? { ...b, limit } : b);
+        return prev.map((b) => b.categoryId === categoryId ? { ...b, limit, effectiveLimit: limit + b.carryover } : b);
       }
       const cat = categories.find((c) => c.id === categoryId);
       if (!cat) return prev;
-      return [...prev, { categoryId, name: cat.name, color: cat.color, icon: cat.icon, limit, actual: 0 }];
+      return [...prev, { categoryId, name: cat.name, color: cat.color, icon: cat.icon, limit, actual: 0, rollover: false, carryover: 0, effectiveLimit: limit }];
     });
   }, [categories]);
 

@@ -156,6 +156,7 @@ export function aggregateReports({ todayISO, accounts, snapshots, categories, tx
   // ── Spending by category, current and previous month ─────────────────────
   const catTotals = new Map<string, number>();
   const catTotalsLastMonth = new Map<string, number>();
+  const incomeTotals = new Map<string, number>();
   let monthIncome = 0;
   let monthExpense = 0;
   const currentMonthKey = isoDay(monthStart).slice(0, 7);
@@ -165,7 +166,14 @@ export function aggregateReports({ todayISO, accounts, snapshots, categories, tx
     const key = t.date.slice(0, 7);
     const amt = t.amount;
     if (key === currentMonthKey) {
-      if (t.type === "INCOME") { monthIncome += amt; continue; }
+      if (t.type === "INCOME") {
+        monthIncome += amt;
+        for (const part of categoryParts(t)) {
+          const catKey = part.categoryId ?? "uncategorized";
+          incomeTotals.set(catKey, (incomeTotals.get(catKey) ?? 0) + part.amount);
+        }
+        continue;
+      }
       monthExpense += amt;
       for (const part of categoryParts(t)) {
         const catKey = part.categoryId ?? "uncategorized";
@@ -191,6 +199,7 @@ export function aggregateReports({ todayISO, accounts, snapshots, categories, tx
 
   const categorySpending = sliceFrom(catTotals);
   const categoryLastMonth = sliceFrom(catTotalsLastMonth);
+  const incomeByCategory = sliceFrom(incomeTotals);
 
   // ── Budget vs actual, current month ──────────────────────────────────────
   const budgetVsActual: BudgetRow[] = budgets
@@ -212,6 +221,7 @@ export function aggregateReports({ todayISO, accounts, snapshots, categories, tx
     incomeExpenseSeries,
     categorySpending,
     categoryLastMonth,
+    incomeByCategory,
     budgetVsActual,
     currentMonthLabel: today.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
     savingsRate,

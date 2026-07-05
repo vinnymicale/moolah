@@ -41,6 +41,34 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
   });
 }
 
+const rolloverSchema = z.object({
+  categoryId: z.string().min(1),
+  month: z.string().min(1),
+  rollover: z.boolean(),
+});
+
+export type BudgetRolloverInput = z.input<typeof rolloverSchema>;
+
+/** Toggle whether last month's leftover carries into this month's limit. */
+export async function setBudgetRolloverAction(input: BudgetRolloverInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const data = rolloverSchema.parse(input);
+    const month = parseISODay(data.month);
+
+    const updated = await prisma.budget.updateMany({
+      where: { userId, categoryId: data.categoryId, month },
+      data: { rollover: data.rollover },
+    });
+    if (updated.count === 0) throw new UserError("Set a budget for this month first.");
+
+    revalidatePath("/trends");
+    revalidatePath("/budgets");
+    revalidatePath("/");
+  });
+}
+
 const copySchema = z.object({
   fromMonth: z.string().min(1),
   toMonth: z.string().min(1),
@@ -64,8 +92,8 @@ export async function copyBudgetsAction(input: CopyBudgetsInput): Promise<Action
       prior.map((b) =>
         prisma.budget.upsert({
           where: { userId_categoryId_month: { userId, categoryId: b.categoryId, month: to } },
-          update: { limit: b.limit },
-          create: { userId, categoryId: b.categoryId, month: to, limit: b.limit },
+          update: { limit: b.limit, rollover: b.rollover },
+          create: { userId, categoryId: b.categoryId, month: to, limit: b.limit, rollover: b.rollover },
         }),
       ),
     );

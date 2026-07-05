@@ -14,6 +14,8 @@ export interface Reports {
   categorySpending: CategorySlice[];
   /** Same shape as categorySpending but for the previous calendar month. */
   categoryLastMonth: CategorySlice[];
+  /** Current-month income broken down by category, for the cash-flow diagram. */
+  incomeByCategory: CategorySlice[];
   budgetVsActual: BudgetRow[];
   currentMonthLabel: string;
   savingsRate: number | null;

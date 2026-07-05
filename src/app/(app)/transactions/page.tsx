@@ -1,102 +1,57 @@
 import { requireUser } from "@/lib/session";
-import { getAccounts, getCategories, getTransactionsBetween } from "@/lib/queries";
-import { addUTCMonths, endOfUTCMonth, formatMonthDayYear, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
+import { getAccounts, getCategories, getTransactionsPage, type TransactionsPageDTO } from "@/lib/queries";
+import { addUTCMonths, isoDay, parseISODay } from "@/lib/dates";
 import { PageHeader } from "@/components/ui-bits";
 import { TransactionsList } from "./TransactionsList";
+import { resolveTransactionsRange } from "./resolve-range";
+import { filterTransactionDTOs, paginateTransactionDTOs, parseTransactionFilters } from "./transactions-utils";
 import { DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TRANSACTIONS } from "@/lib/demo-data";
 import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
-const RANGES = new Set(["month", "3m", "12m", "ytd", "all", "custom"]);
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; account?: string; range?: string; category?: string; focus?: string; from?: string; to?: string }>;
+  searchParams: Promise<{
+    m?: string; range?: string; from?: string; to?: string;
+    q?: string; type?: string; status?: string; category?: string; account?: string;
+    page?: string; focus?: string;
+  }>;
 }) {
-  const { m, account, range: rangeParam, category, focus, from, to } = await searchParams;
+  const params = await searchParams;
   const userId = DEMO_MODE ? "" : (await requireUser()).userId;
-  let range = RANGES.has(rangeParam ?? "") ? (rangeParam as string) : "month";
-  // A valid from/to pair forces custom mode regardless of the range param.
-  const hasCustom = ISO_DAY.test(from ?? "") && ISO_DAY.test(to ?? "") && (from as string) <= (to as string);
-  if (range === "custom" && !hasCustom) range = "month";
-  if (hasCustom) range = "custom";
-
   const todayISO = await userTodayISO();
-  const today = parseISODay(todayISO);
-  const monthStr = /^\d{4}-\d{2}$/.test(m ?? "") ? (m as string) : todayISO.slice(0, 7);
-  const monthFirst = startOfUTCMonth(parseISODay(`${monthStr}-01`));
-  const monthISO = isoDay(monthFirst);
+  const { range, monthISO, startISO, endISO, rangeLabel } = resolveTransactionsRange(params, todayISO);
+  const monthFirst = parseISODay(monthISO);
 
-  let startISO: string;
-  let endISO: string;
-  let rangeLabel: string;
-  switch (range) {
-    case "3m":
-      startISO = isoDay(startOfUTCMonth(addUTCMonths(today, -2)));
-      endISO = isoDay(endOfUTCMonth(today));
-      rangeLabel = "Last 3 months";
-      break;
-    case "12m":
-      startISO = isoDay(startOfUTCMonth(addUTCMonths(today, -11)));
-      endISO = isoDay(endOfUTCMonth(today));
-      rangeLabel = "Last 12 months";
-      break;
-    case "ytd":
-      startISO = `${todayISO.slice(0, 4)}-01-01`;
-      endISO = isoDay(endOfUTCMonth(today));
-      rangeLabel = `${todayISO.slice(0, 4)} year to date`;
-      break;
-    case "all":
-      startISO = "1970-01-01";
-      endISO = "2999-12-31";
-      rangeLabel = "All time";
-      break;
-    case "custom":
-      startISO = from as string;
-      endISO = to as string;
-      rangeLabel = `${formatMonthDayYear(startISO)} – ${formatMonthDayYear(endISO)}`;
-      break;
-    default:
-      startISO = monthISO;
-      endISO = isoDay(endOfUTCMonth(monthFirst));
-      rangeLabel = monthLabel(monthFirst);
-  }
+  const [accounts, categories] = DEMO_MODE
+    ? [DEMO_ACCOUNTS, DEMO_CATEGORIES]
+    : await Promise.all([getAccounts(userId), getCategories(userId)]);
 
-  const [accounts, categories, transactions] = DEMO_MODE
-    ? [
-        DEMO_ACCOUNTS,
-        DEMO_CATEGORIES,
-        DEMO_TRANSACTIONS.filter((t) => t.date >= startISO && t.date <= endISO),
-      ]
-    : await Promise.all([
-        getAccounts(userId),
-        getCategories(userId),
-        getTransactionsBetween(userId, startISO, endISO),
-      ]);
-
-  // Validate comma-separated category/account filters from the URL, keeping
-  // only ids that exist (plus the sentinel "uncategorized" / "no account").
+  // Validate id filters from the URL against real rows, keeping only ids that
+  // exist (plus the "uncategorized" / "no account" sentinels).
   const catIds = new Set(categories.map((c) => c.id));
   const acctIds = new Set(accounts.map((a) => a.id));
-  const initialCategoryId = (category ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((v) => v === "__uncategorized__" || catIds.has(v))
-    .join(",");
-  const initialAccountId = (account ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((v) => v === "__none__" || acctIds.has(v))
-    .join(",");
+  const filters = parseTransactionFilters(params);
+  filters.categoryIds = filters.categoryIds.filter((v) => v === "__uncategorized__" || catIds.has(v));
+  filters.accountIds = filters.accountIds.filter((v) => v === "__none__" || acctIds.has(v));
+  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
+
+  let txnPage: TransactionsPageDTO;
+  if (DEMO_MODE) {
+    const inRange = DEMO_TRANSACTIONS.filter((t) => t.date >= startISO && t.date <= endISO);
+    const catNames = new Map(categories.map((c) => [c.id, c.name]));
+    txnPage = paginateTransactionDTOs(filterTransactionDTOs(inRange, filters, catNames), page);
+  } else {
+    txnPage = await getTransactionsPage(userId, startISO, endISO, filters, page);
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title="Transactions" subtitle="Search, filter and export your activity." />
       <TransactionsList
-        transactions={transactions}
+        txnPage={txnPage}
         accounts={accounts}
         categories={categories}
         range={range}
@@ -104,9 +59,12 @@ export default async function TransactionsPage({
         monthISO={monthISO}
         prevMonthISO={isoDay(addUTCMonths(monthFirst, -1))}
         nextMonthISO={isoDay(addUTCMonths(monthFirst, 1))}
-        initialAccountId={initialAccountId}
-        initialCategoryId={initialCategoryId}
-        focusId={focus ?? ""}
+        initialSearch={filters.search}
+        initialTypes={filters.types.join(",")}
+        initialStatuses={filters.statuses.join(",")}
+        initialCategoryId={filters.categoryIds.join(",")}
+        initialAccountId={filters.accountIds.join(",")}
+        focusId={params.focus ?? ""}
         customFrom={range === "custom" ? startISO : ""}
         customTo={range === "custom" ? endISO : ""}
       />

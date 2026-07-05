@@ -12,27 +12,26 @@ import { TrashDrawer } from "./TrashDrawer";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { MultiSelect } from "@/components/MultiSelect";
 import { formatUSD } from "@/lib/money";
-import { monthLabel } from "@/lib/dates";
+import { monthLabel, formatMonthDayYear } from "@/lib/dates";
+import { useConfirmAction } from "@/lib/useConfirmAction";
+import { Modal } from "@/components/Modal";
 import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
   pairTransfersAction, unpairTransferAction,
 } from "@/actions/transactions";
-import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
+import type { AccountDTO, CategoryDTO, TransactionDTO, TransactionsPageDTO } from "@/lib/queries";
 import { categoryColor } from "@/lib/colors";
 import { toggleInSet } from "@/lib/collections";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { Amount } from "@/components/Amount";
 import { ManageFilters } from "./ManageFilters";
-import {
-  csvField, endOfMonthDay, toSet,
-  type SavedFilter, type StatusOpt, type TxnTypeOpt,
-} from "./transactions-utils";
+import { endOfMonthDay, toSet, type SavedFilter, type StatusOpt, type TxnTypeOpt } from "./transactions-utils";
 
 const SAVED_FILTERS_KEY = "txnSavedFilters";
 const NO_FILTERS: SavedFilter[] = [];
 
 export function TransactionsList({
-  transactions,
+  txnPage,
   accounts,
   categories,
   range,
@@ -40,13 +39,16 @@ export function TransactionsList({
   monthISO,
   prevMonthISO,
   nextMonthISO,
+  initialSearch = "",
+  initialTypes = "",
+  initialStatuses = "",
   initialAccountId = "",
   initialCategoryId = "",
   focusId = "",
   customFrom = "",
   customTo = "",
 }: {
-  transactions: TransactionDTO[];
+  txnPage: TransactionsPageDTO;
   accounts: AccountDTO[];
   categories: CategoryDTO[];
   range: string;
@@ -54,6 +56,9 @@ export function TransactionsList({
   monthISO: string;
   prevMonthISO: string;
   nextMonthISO: string;
+  initialSearch?: string;
+  initialTypes?: string;
+  initialStatuses?: string;
   initialAccountId?: string;
   initialCategoryId?: string;
   focusId?: string;
@@ -73,11 +78,22 @@ export function TransactionsList({
     const t = setTimeout(() => setHighlightId(""), 2600);
     return () => clearTimeout(t);
   }, [focusId]);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
-  const [catFilter, setCatFilter] = useState<Set<string>>(() => toSet(initialCategoryId));
-  const [acctFilter, setAcctFilter] = useState<Set<string>>(() => toSet(initialAccountId));
+
+  // Filters live in the URL so the server can filter and page the query; the
+  // MultiSelects render straight from the props and every change navigates.
+  // Only the search box keeps local state, debounced into router.replace.
+  const typeFilter = useMemo(() => toSet(initialTypes), [initialTypes]);
+  const statusFilter = useMemo(() => toSet(initialStatuses), [initialStatuses]);
+  const catFilter = useMemo(() => toSet(initialCategoryId), [initialCategoryId]);
+  const acctFilter = useMemo(() => toSet(initialAccountId), [initialAccountId]);
+  const [search, setSearch] = useState(initialSearch);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // Keep the box in step with the URL (back button, saved filters) but never
+  // clobber text the user is actively typing.
+  useEffect(() => {
+    if (document.activeElement === searchInputRef.current) return;
+    setSearch(initialSearch);
+  }, [initialSearch]);
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
   const [adding, setAdding] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -85,22 +101,77 @@ export function TransactionsList({
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  // Saved filters (client-side filter combos), persisted in localStorage.
+  const items = txnPage.items;
+
+  // Query-string helpers. currentParams reflects the URL this page was
+  // rendered from; urlWith applies overrides (null/"" deletes a key) and drops
+  // the page param, since any filter or range change restarts at page 1.
+  const currentParams = () => {
+    const p: Record<string, string> = {};
+    if (range === "custom") {
+      p.range = "custom";
+      p.from = customFrom;
+      p.to = customTo;
+    } else if (range === "month") p.m = monthISO.slice(0, 7);
+    else p.range = range;
+    if (initialSearch) p.q = initialSearch;
+    if (initialTypes) p.type = initialTypes;
+    if (initialStatuses) p.status = initialStatuses;
+    if (initialCategoryId) p.category = initialCategoryId;
+    if (initialAccountId) p.account = initialAccountId;
+    return p;
+  };
+  const urlWith = (overrides: Record<string, string | null>, path = "/transactions") => {
+    const p = currentParams();
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v === null || v === "") delete p[k];
+      else p[k] = v;
+    }
+    const qs = new URLSearchParams(p).toString();
+    return qs ? `${path}?${qs}` : path;
+  };
+
+  // Debounce typed search into the URL. Skipped while the input matches the
+  // URL so applying a saved filter or navigating doesn't fire a redundant
+  // replace.
+  useEffect(() => {
+    if (search.trim() === initialSearch) return;
+    const t = setTimeout(() => {
+      router.replace(urlWith({ q: search.trim() }), { scroll: false });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, initialSearch]);
+
+  const setTypeFilter = (s: Set<string>) => router.push(urlWith({ type: [...s].join(",") }));
+  const setStatusFilter = (s: Set<string>) => router.push(urlWith({ status: [...s].join(",") }));
+  const setCatFilter = (s: Set<string>) => router.push(urlWith({ category: [...s].join(",") }));
+  const setAcctFilter = (s: Set<string>) => router.push(urlWith({ account: [...s].join(",") }));
+
+  // Saved filters (named filter combos), persisted in localStorage.
   const [savedFilters, persistFilters] = usePersistentState<SavedFilter[]>(SAVED_FILTERS_KEY, NO_FILTERS);
   const applyFilter = (f: SavedFilter) => {
     setSearch(f.search);
-    setTypeFilter(new Set(f.types));
-    setStatusFilter(new Set(f.statuses));
-    setCatFilter(new Set(f.cats));
-    setAcctFilter(new Set(f.accts));
+    router.push(urlWith({
+      q: f.search.trim(),
+      type: f.types.join(","),
+      status: f.statuses.join(","),
+      category: f.cats.join(","),
+      account: f.accts.join(","),
+    }));
   };
+  const [namingFilter, setNamingFilter] = useState(false);
+  const [filterName, setFilterName] = useState("");
   const saveCurrentFilter = () => {
-    const name = window.prompt("Name this filter (e.g. \"Uber this year\"):")?.trim();
+    const name = filterName.trim();
     if (!name) return;
+    setNamingFilter(false);
+    setFilterName("");
     const next = [
       ...savedFilters.filter((f) => f.name !== name),
       {
-        name, search,
+        name,
+        search: search.trim(),
         types: [...typeFilter] as TxnTypeOpt[],
         statuses: [...statusFilter] as StatusOpt[],
         cats: [...catFilter],
@@ -109,73 +180,62 @@ export function TransactionsList({
     ];
     persistFilters(next);
   };
-  const hasActiveFilters = !!search || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0;
+  const hasActiveFilters = !!search.trim() || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0;
   const clearAllFilters = () => {
     setSearch("");
-    setTypeFilter(new Set());
-    setStatusFilter(new Set());
-    setCatFilter(new Set());
-    setAcctFilter(new Set());
+    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null }));
   };
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
-  const filtered = transactions.filter((t) => {
-    // Empty set = no constraint; otherwise the row must match one selected value.
-    if (typeFilter.size > 0 && !typeFilter.has(t.type)) return false;
-    if (statusFilter.size > 0 && !statusFilter.has(t.cleared ? "CLEARED" : "PENDING")) return false;
-    if (catFilter.size > 0) {
-      const key = t.categoryId ?? "__uncategorized__";
-      if (!catFilter.has(key)) return false;
-    }
-    if (acctFilter.size > 0) {
-      const key = t.accountId ?? "__none__";
-      if (!acctFilter.has(key)) return false;
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      const cat = t.categoryId ? catById.get(t.categoryId)?.name ?? "" : "";
-      const note = t.note ?? "";
-      if (
-        !t.description.toLowerCase().includes(q) &&
-        !cat.toLowerCase().includes(q) &&
-        !note.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  const income = filtered.filter((t) => t.type === "INCOME" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
-  const expense = filtered.filter((t) => t.type === "EXPENSE" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
-
-  // Preserve the account & category filters across range/month navigation by
-  // serialising the selected sets as comma-separated query params.
-  const acctQS = acctFilter.size > 0 ? `&account=${[...acctFilter].join(",")}` : "";
-  const catQS = catFilter.size > 0 ? `&category=${[...catFilter].join(",")}` : "";
-  const filterQS = `${acctQS}${catQS}`;
   const changeRange = (value: string) => {
+    const dropRange = { m: null, range: null, from: null, to: null } as const;
     if (value === "custom") {
       // Default the custom window to the current month until the user edits it.
       const from = customFrom || `${monthISO.slice(0, 7)}-01`;
       const to = customTo || monthISO.slice(0, 7) + "-" + endOfMonthDay(monthISO);
-      router.push(`/transactions?range=custom&from=${from}&to=${to}${filterQS}`);
-    } else if (value === "month") router.push(`/transactions?m=${monthISO.slice(0, 7)}${filterQS}`);
-    else router.push(`/transactions?range=${value}${filterQS}`);
+      router.push(urlWith({ ...dropRange, range: "custom", from, to }));
+    } else if (value === "month") router.push(urlWith({ ...dropRange, m: monthISO.slice(0, 7) }));
+    else router.push(urlWith({ ...dropRange, range: value }));
   };
   const applyCustom = (from: string, to: string) => {
     if (!from || !to) return;
     const lo = from <= to ? from : to;
     const hi = from <= to ? to : from;
-    router.push(`/transactions?range=custom&from=${lo}&to=${hi}${filterQS}`);
+    router.push(urlWith({ m: null, range: "custom", from: lo, to: hi }));
   };
 
-  const allSelected = filtered.length > 0 && filtered.every((t) => selected.has(t.id));
+  const allSelected = items.length > 0 && items.every((t) => selected.has(t.id));
   const toggle = (id: string) => setSelected((prev) => toggleInSet(prev, id));
+  // Shift-click selects the whole span between the last-toggled row and this
+  // one, matching the click target's new state (Gmail-style).
+  const lastToggledId = useRef<string | null>(null);
+  const selectClick = (id: string, shiftKey: boolean) => {
+    const anchor = lastToggledId.current;
+    lastToggledId.current = id;
+    if (shiftKey && anchor && anchor !== id) {
+      const ids = items.map((t) => t.id);
+      const from = ids.indexOf(anchor);
+      const to = ids.indexOf(id);
+      if (from >= 0 && to >= 0) {
+        const [lo, hi] = from < to ? [from, to] : [to, from];
+        const adding = !selected.has(id);
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (const spanId of ids.slice(lo, hi + 1)) {
+            if (adding) next.add(spanId);
+            else next.delete(spanId);
+          }
+          return next;
+        });
+        return;
+      }
+    }
+    toggle(id);
+  };
   const toggleAll = () =>
-    setSelected(allSelected ? new Set() : new Set(filtered.map((t) => t.id)));
+    setSelected(allSelected ? new Set() : new Set(items.map((t) => t.id)));
   const clearSelection = () => setSelected(new Set());
 
   const runBulk = (fn: (ids: string[]) => Promise<{ ok: boolean; error?: string }>) =>
@@ -188,31 +248,14 @@ export function TransactionsList({
       else setBulkError(res.error ?? "Something went wrong.");
     });
 
-  const bulkDelete = () => {
-    if (!confirm(`Delete ${selected.size} transaction${selected.size === 1 ? "" : "s"}? This can't be undone.`)) return;
-    runBulk((ids) => bulkDeleteTransactionsAction(ids));
-  };
+  const { armed: deleteArmed, trigger: bulkDelete } = useConfirmAction(() =>
+    runBulk((ids) => bulkDeleteTransactionsAction(ids)),
+  );
 
+  // The export route re-runs the same range + filters server-side, so the CSV
+  // covers every matching row, not just the loaded page.
   const exportCsv = () => {
-    const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note"];
-    const rows = filtered.map((t) => [
-      t.date,
-      t.type,
-      String(t.amount),
-      csvField(t.description),
-      csvField(t.categoryId ? catById.get(t.categoryId)?.name ?? "" : ""),
-      csvField(t.accountId ? acctById.get(t.accountId)?.name ?? "" : ""),
-      t.cleared ? "yes" : "no",
-      csvField(t.note ?? ""),
-    ]);
-    const content = [header, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([content], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `transactions-${monthISO.slice(0, 7)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    window.location.href = urlWith({}, "/transactions/export");
   };
 
   return (
@@ -222,11 +265,11 @@ export function TransactionsList({
         <div className="flex items-center gap-2">
           {range === "month" ? (
             <>
-              <Link href={`/transactions?m=${prevMonthISO.slice(0, 7)}${filterQS}`} className="btn-ghost h-9 w-9 !p-0" aria-label="Previous">
+              <Link href={urlWith({ m: prevMonthISO.slice(0, 7) })} className="btn-ghost h-9 w-9 p-0!" aria-label="Previous">
                 <ChevronLeft size={18} />
               </Link>
               <span className="min-w-40 text-center font-semibold">{monthLabel(new Date(`${monthISO}T00:00:00Z`))}</span>
-              <Link href={`/transactions?m=${nextMonthISO.slice(0, 7)}${filterQS}`} className="btn-ghost h-9 w-9 !p-0" aria-label="Next">
+              <Link href={urlWith({ m: nextMonthISO.slice(0, 7) })} className="btn-ghost h-9 w-9 p-0!" aria-label="Next">
                 <ChevronRight size={18} />
               </Link>
             </>
@@ -264,7 +307,7 @@ export function TransactionsList({
           )}
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setTrashOpen(true)} className="btn-ghost h-9 w-9 !p-0" title="Recently deleted">
+          <button onClick={() => setTrashOpen(true)} className="btn-ghost h-9 w-9 p-0!" title="Recently deleted">
             <Trash size={15} />
           </button>
           <button onClick={exportCsv} className="btn-ghost h-9" title="Export CSV">
@@ -280,7 +323,7 @@ export function TransactionsList({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-48">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input data-search="true" className="input pl-9" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input ref={searchInputRef} data-search="true" className="input pl-9" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
 
         <MultiSelect
@@ -346,7 +389,7 @@ export function TransactionsList({
         )}
         {hasActiveFilters && (
           <>
-            <button onClick={saveCurrentFilter} className="btn-ghost h-9 text-sm" title="Save this filter combination">
+            <button onClick={() => setNamingFilter(true)} className="btn-ghost h-9 text-sm" title="Save this filter combination">
               <BookmarkPlus size={15} /> <span className="hidden sm:inline">Save</span>
             </button>
             <button onClick={clearAllFilters} className="btn-ghost h-9 text-sm text-muted" title="Clear all filters">
@@ -406,7 +449,7 @@ export function TransactionsList({
               <ArrowLeftRight size={14} /> Link as transfer
             </button>
           )}
-          {selected.size === 1 && filtered.find((t) => selected.has(t.id))?.isTransfer && (
+          {selected.size === 1 && items.find((t) => selected.has(t.id))?.isTransfer && (
             <button
               onClick={() => { const [id] = [...selected]; runBulk(() => unpairTransferAction(id)); }}
               disabled={pending}
@@ -416,41 +459,41 @@ export function TransactionsList({
               <ArrowLeftRight size={14} /> Unlink transfer
             </button>
           )}
-          <button onClick={bulkDelete} disabled={pending} className="btn-danger h-8 text-xs">
-            <Trash2 size={14} /> Delete
+          <button onClick={bulkDelete} disabled={pending} className="btn-danger h-8 text-xs" title="Moves to Recently deleted, where it can be restored">
+            <Trash2 size={14} /> {deleteArmed ? `Move ${selected.size} to trash?` : "Delete"}
           </button>
-          <button onClick={clearSelection} className="btn-ghost ml-auto h-8 w-8 !p-0" title="Clear selection">
+          <button onClick={clearSelection} className="btn-ghost ml-auto h-8 w-8 p-0!" title="Clear selection">
             <X size={15} />
           </button>
         </div>
       ) : (
         <div className="mb-3 flex items-center gap-4 text-sm">
-          <button onClick={toggleAll} disabled={filtered.length === 0} className="flex items-center gap-1.5 text-muted hover:text-text disabled:opacity-50">
+          <button onClick={toggleAll} disabled={items.length === 0} className="flex items-center gap-1.5 text-muted hover:text-text disabled:opacity-50">
             <Square size={14} /> Select
           </button>
-          <span className="text-muted">{filtered.length} transactions</span>
-          <span className="text-income">+{formatUSD(income)}</span>
-          <span className="text-expense">-{formatUSD(expense)}</span>
-          <span className="font-medium">Net {formatUSD(income - expense)}</span>
+          <span className="text-muted">{txnPage.total} transactions</span>
+          <span className="text-income">+{formatUSD(txnPage.income)}</span>
+          <span className="text-expense">-{formatUSD(txnPage.expense)}</span>
+          <span className="font-medium">Net {formatUSD(txnPage.income - txnPage.expense)}</span>
         </div>
       )}
 
       {bulkError && <p className="mb-2 text-sm text-expense">{bulkError}</p>}
 
       {/* Select-all header (only while selecting) */}
-      {selected.size > 0 && filtered.length > 0 && (
+      {selected.size > 0 && items.length > 0 && (
         <button onClick={toggleAll} className="mb-2 flex items-center gap-1.5 px-1 text-xs text-muted hover:text-text">
           {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-          {allSelected ? "Deselect all" : `Select all ${filtered.length}`}
+          {allSelected ? "Deselect all" : `Select all ${items.length} on this page`}
         </button>
       )}
 
       {/* List */}
       <div className="card divide-y divide-line">
-        {filtered.length === 0 ? (
+        {items.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-muted">No transactions match.</p>
         ) : (
-          filtered.map((t) => {
+          items.map((t) => {
             const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
             const acct = t.accountId ? acctById.get(t.accountId) : undefined;
             const isSel = selected.has(t.id);
@@ -467,7 +510,8 @@ export function TransactionsList({
                   <input
                     type="checkbox"
                     checked={isSel}
-                    onChange={() => toggle(t.id)}
+                    onClick={(e) => selectClick(t.id, e.shiftKey)}
+                    onChange={() => {}}
                     aria-label={`Select ${t.description}`}
                   />
                 </label>
@@ -499,7 +543,7 @@ export function TransactionsList({
                       )}
                     </p>
                     <p className="truncate text-xs text-muted">
-                      {t.date}
+                      {formatMonthDayYear(t.date)}
                       {cat ? ` · ${cat.name}` : ""}
                       {acct ? ` · ${acct.name}` : ""}
                       {t.note ? ` · ${t.note}` : ""}
@@ -512,6 +556,47 @@ export function TransactionsList({
           })
         )}
       </div>
+
+      {/* Pagination */}
+      {txnPage.pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2 text-sm">
+          {txnPage.page > 1 ? (
+            <Link href={urlWith({ page: String(txnPage.page - 1) })} className="btn-ghost h-9" aria-label="Previous page">
+              <ChevronLeft size={16} /> Prev
+            </Link>
+          ) : (
+            <span className="btn-ghost h-9 opacity-50" aria-hidden="true"><ChevronLeft size={16} /> Prev</span>
+          )}
+          <span className="text-muted">Page {txnPage.page} of {txnPage.pageCount}</span>
+          {txnPage.page < txnPage.pageCount ? (
+            <Link href={urlWith({ page: String(txnPage.page + 1) })} className="btn-ghost h-9" aria-label="Next page">
+              Next <ChevronRight size={16} />
+            </Link>
+          ) : (
+            <span className="btn-ghost h-9 opacity-50" aria-hidden="true">Next <ChevronRight size={16} /></span>
+          )}
+        </div>
+      )}
+
+      <Modal open={namingFilter} onClose={() => setNamingFilter(false)} title="Save filter" widthClass="max-w-sm">
+        <form
+          onSubmit={(e) => { e.preventDefault(); saveCurrentFilter(); }}
+          className="space-y-3"
+        >
+          <input
+            className="input"
+            placeholder='e.g. "Uber this year"'
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+            aria-label="Filter name"
+          />
+          <p className="text-xs text-muted">Saving with an existing name replaces that filter.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setNamingFilter(false)} className="btn-ghost h-9">Cancel</button>
+            <button type="submit" disabled={!filterName.trim()} className="btn-primary h-9">Save</button>
+          </div>
+        </form>
+      </Modal>
 
       {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} />}
       {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} />}

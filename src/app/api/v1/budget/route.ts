@@ -24,17 +24,21 @@ export async function GET(req: NextRequest) {
 
   const lines = await getBudgetMonth(auth.userId, month);
   const limit = sumMoney(lines.map((b) => b.limit));
+  const effectiveLimit = sumMoney(lines.map((b) => b.effectiveLimit));
   const spent = sumMoney(lines.map((b) => b.actual));
 
   return apiJson({
     month,
-    total: { limit, spent, remaining: sumMoney([limit, -spent]) },
+    total: { limit, effectiveLimit, spent, remaining: sumMoney([effectiveLimit, -spent]) },
     categories: lines.map((b) => ({
       categoryId: b.categoryId,
       name: b.name,
       limit: b.limit,
+      rollover: b.rollover,
+      carryover: b.carryover,
+      effectiveLimit: b.effectiveLimit,
       spent: b.actual,
-      remaining: sumMoney([b.limit, -b.actual]),
+      remaining: sumMoney([b.effectiveLimit, -b.actual]),
     })),
   });
 }
