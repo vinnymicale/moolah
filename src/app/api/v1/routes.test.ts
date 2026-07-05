@@ -134,18 +134,18 @@ describe("GET /api/v1/accounts", () => {
 describe("GET /api/v1/budget", () => {
   it("totals limit/spent and exposes per-category remaining", async () => {
     budget.mockResolvedValue([
-      { categoryId: "c1", name: "Food", limit: 400, actual: 150 },
-      { categoryId: "c2", name: "Fuel", limit: 100, actual: 120 },
+      { categoryId: "c1", name: "Food", limit: 400, actual: 150, rollover: true, carryover: 50, effectiveLimit: 450 },
+      { categoryId: "c2", name: "Fuel", limit: 100, actual: 120, rollover: false, carryover: 0, effectiveLimit: 100 },
     ] as unknown as Awaited<ReturnType<typeof getBudgetMonth>>);
 
     const { GET } = await import("./budget/route");
     const body = await (await GET(req("http://localhost/api/v1/budget?month=2026-06"))).json();
 
     expect(body.month).toBe("2026-06-01");
-    expect(body.total).toEqual({ limit: 500, spent: 270, remaining: 230 });
+    expect(body.total).toEqual({ limit: 500, effectiveLimit: 550, spent: 270, remaining: 280 });
     expect(body.categories).toEqual([
-      { categoryId: "c1", name: "Food", limit: 400, spent: 150, remaining: 250 },
-      { categoryId: "c2", name: "Fuel", limit: 100, spent: 120, remaining: -20 },
+      { categoryId: "c1", name: "Food", limit: 400, rollover: true, carryover: 50, effectiveLimit: 450, spent: 150, remaining: 300 },
+      { categoryId: "c2", name: "Fuel", limit: 100, rollover: false, carryover: 0, effectiveLimit: 100, spent: 120, remaining: -20 },
     ]);
   });
 });

@@ -9,7 +9,7 @@ export function ManageFilters({ filters, onDelete }: { filters: SavedFilter[]; o
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <button onClick={() => setOpen((o) => !o)} className="btn-ghost h-9 w-9 !p-0" title="Manage saved filters" aria-label="Manage saved filters">
+      <button onClick={() => setOpen((o) => !o)} className="btn-ghost h-9 w-9 p-0!" title="Manage saved filters" aria-label="Manage saved filters">
         <Trash2 size={14} />
       </button>
       {open && (

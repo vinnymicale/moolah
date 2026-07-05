@@ -378,7 +378,7 @@ export const DEMO_TRANSACTIONS: TransactionDTO[] = [
 // Budgets (current month)
 // ---------------------------------------------------------------------------
 
-export const DEMO_BUDGETS: BudgetLineDTO[] = [
+const DEMO_BUDGET_LINES: Array<Omit<BudgetLineDTO, "rollover" | "carryover" | "effectiveLimit">> = [
   // Budgeted categories
   {
     categoryId: "cat-groceries",
@@ -454,6 +454,13 @@ export const DEMO_BUDGETS: BudgetLineDTO[] = [
     actual: 500,
   },
 ];
+
+export const DEMO_BUDGETS: BudgetLineDTO[] = DEMO_BUDGET_LINES.map((b) => ({
+  ...b,
+  rollover: false,
+  carryover: 0,
+  effectiveLimit: b.limit,
+}));
 
 // ---------------------------------------------------------------------------
 // Savings goals

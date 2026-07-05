@@ -21,11 +21,11 @@ export function BudgetYearView({
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Link href={`/budgets?view=year&y=${year - 1}`} className="btn-ghost h-9 w-9 !p-0" aria-label="Previous year">
+          <Link href={`/budgets?view=year&y=${year - 1}`} className="btn-ghost h-9 w-9 p-0!" aria-label="Previous year">
             <ChevronLeft size={18} />
           </Link>
           <h1 className="min-w-24 text-center text-lg font-semibold md:text-xl">{year}</h1>
-          <Link href={`/budgets?view=year&y=${year + 1}`} className="btn-ghost h-9 w-9 !p-0" aria-label="Next year">
+          <Link href={`/budgets?view=year&y=${year + 1}`} className="btn-ghost h-9 w-9 p-0!" aria-label="Next year">
             <ChevronRight size={18} />
           </Link>
         </div>

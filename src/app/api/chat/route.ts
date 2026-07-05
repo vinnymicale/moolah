@@ -277,9 +277,10 @@ async function executeTool(
           lines.map((l) => ({
             category: l.name,
             budgeted: l.limit,
+            rollover_carryover: l.carryover,
             spent: l.actual,
-            remaining: (l.limit ?? 0) - l.actual,
-            over_budget: l.limit !== null && l.actual > l.limit,
+            remaining: l.effectiveLimit - l.actual,
+            over_budget: l.actual > l.effectiveLimit,
           })),
         );
       }

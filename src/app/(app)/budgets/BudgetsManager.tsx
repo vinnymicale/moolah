@@ -2,11 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange, RefreshCw } from "lucide-react";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { StatCard } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
-import { setBudgetAction, copyBudgetsAction } from "@/actions/budgets";
+import { setBudgetAction, setBudgetRolloverAction, copyBudgetsAction } from "@/actions/budgets";
 import type { BudgetLineDTO } from "@/lib/queries";
 
 export function BudgetsManager({
@@ -37,7 +37,7 @@ export function BudgetsManager({
   );
   const unbudgeted = useMemo(() => lines.filter((l) => l.limit <= 0), [lines]);
 
-  const totalBudget = budgeted.reduce((s, l) => s + l.limit, 0);
+  const totalBudget = budgeted.reduce((s, l) => s + l.effectiveLimit, 0);
   const totalSpent = lines.reduce((s, l) => s + l.actual, 0);
   const budgetedSpent = budgeted.reduce((s, l) => s + l.actual, 0);
   const remaining = totalBudget - budgetedSpent;
@@ -58,7 +58,7 @@ export function BudgetsManager({
             <ChevronLeft size={18} />
           </Link>
           <h1 className="min-w-44 text-center text-lg font-semibold md:text-xl">{monthTitle}</h1>
-          <Link href={`/budgets?m=${nextMonthISO}`} className="btn-ghost h-9 w-9 !p-0" aria-label="Next month">
+          <Link href={`/budgets?m=${nextMonthISO}`} className="btn-ghost h-9 w-9 p-0!" aria-label="Next month">
             <ChevronRight size={18} />
           </Link>
           <Link href={`/budgets?m=${thisMonthISO}`} className="btn-ghost ml-1 hidden h-9 text-sm sm:inline-flex">
@@ -128,14 +128,16 @@ export function BudgetsManager({
 function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }) {
   const [value, setValue] = useState(line.limit > 0 ? String(line.limit) : "");
   const [pending, start] = useTransition();
+  const [rolloverPending, startRollover] = useTransition();
   const [justSaved, setJustSaved] = useState(false);
 
   const hasBudget = line.limit > 0;
-  const pct = hasBudget ? Math.min(100, (line.actual / line.limit) * 100) : 0;
-  const over = hasBudget && line.actual > line.limit;
+  const effective = line.effectiveLimit;
+  const pct = hasBudget ? (effective > 0 ? Math.min(100, (line.actual / effective) * 100) : 100) : 0;
+  const over = hasBudget && line.actual > effective;
   const near = hasBudget && !over && pct >= 80;
-  const remaining = line.limit - line.actual;
-  const barColor = over ? "#dc2626" : near ? "#d97706" : line.color;
+  const remaining = effective - line.actual;
+  const barColor = over ? "var(--expense)" : near ? "var(--warning)" : line.color;
 
   const save = () => {
     const next = Math.max(0, Number(value.replace(/[^0-9.]/g, "")) || 0);
@@ -148,6 +150,11 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
       }
     });
   };
+
+  const toggleRollover = () =>
+    startRollover(async () => {
+      await setBudgetRolloverAction({ categoryId: line.categoryId, month: monthISO, rollover: !line.rollover });
+    });
 
   return (
     <li className="px-4 py-3">
@@ -165,6 +172,9 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
               <span className={over ? "text-expense" : "text-muted"}>
                 {over ? `${formatUSD(-remaining)} over` : `${formatUSD(remaining)} left`}
               </span>
+              {line.rollover && line.carryover !== 0 && (
+                <span> · {line.carryover > 0 ? "+" : ""}{formatUSD(line.carryover)} rolled over</span>
+              )}
             </p>
           ) : (
             <p className="text-xs text-muted">{formatUSD(line.actual)} spent · no budget</p>
@@ -176,6 +186,19 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
           ) : justSaved ? (
             <Check size={14} className="text-income" />
           ) : null}
+          {hasBudget && (
+            <button
+              onClick={toggleRollover}
+              disabled={rolloverPending}
+              aria-pressed={line.rollover}
+              title={line.rollover ? "Rollover on: last month's leftover adds to this limit" : "Roll over last month's leftover into this limit"}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                line.rollover ? "bg-brand/15 text-brand" : "text-muted hover:bg-surface2 hover:text-text"
+              }`}
+            >
+              {rolloverPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            </button>
+          )}
           <div className="relative w-28">
             <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
             <input
