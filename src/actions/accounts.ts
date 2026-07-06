@@ -8,6 +8,7 @@ import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { AccountType } from "@/generated/prisma/enums";
+import { moneyInput } from "@/lib/money";
 
 const LIABILITY_TYPES: AccountType[] = ["CREDIT_CARD", "LOAN", "OTHER_LIABILITY"];
 
@@ -15,14 +16,14 @@ const accountSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
   type: z.enum(AccountType),
   institution: z.string().max(80).optional().nullable(),
-  currentBalance: z.coerce.number().finite(),
+  currentBalance: moneyInput.pipe(z.number().finite()),
   includeInCash: z.boolean().optional().default(false),
   includeInNetWorth: z.boolean().optional().default(true),
   includeInDebtPlanner: z.boolean().optional().default(true),
   color: z.string().max(20).optional(),
   // Debt-only - sent for liability accounts to power the payoff planner.
   interestRate: z.coerce.number().min(0).max(100).optional().nullable(),
-  minimumPayment: z.coerce.number().min(0).finite().optional().nullable(),
+  minimumPayment: moneyInput.pipe(z.number().min(0).finite()).optional().nullable(),
 });
 
 export type AccountInput = z.input<typeof accountSchema>;
@@ -98,7 +99,7 @@ export async function updateAccountAction(id: string, input: AccountInput): Prom
 
 const debtTermsSchema = z.object({
   interestRate: z.coerce.number().min(0).max(100),
-  minimumPayment: z.coerce.number().min(0).finite(),
+  minimumPayment: moneyInput.pipe(z.number().min(0).finite()),
 });
 
 export type DebtTermsInput = z.input<typeof debtTermsSchema>;
@@ -143,7 +144,7 @@ export async function deleteAccountAction(id: string): Promise<ActionResult> {
 
 const snapshotSchema = z.object({
   accountId: z.string().min(1),
-  balance: z.coerce.number().finite(),
+  balance: moneyInput.pipe(z.number().finite()),
   date: z.string().min(1),
   note: z.string().max(200).optional().nullable(),
   setCurrent: z.boolean().optional().default(true),
@@ -157,13 +158,11 @@ export async function addSnapshotAction(input: SnapshotInput): Promise<ActionRes
     const { userId } = await requireUser();
     const data = snapshotSchema.parse(input);
     await ownedAccount(data.accountId, userId);
-    await prisma.accountSnapshot.create({
-      data: {
-        accountId: data.accountId,
-        balance: data.balance,
-        date: parseISODay(data.date),
-        note: data.note || null,
-      },
+    const date = parseISODay(data.date);
+    await prisma.accountSnapshot.upsert({
+      where: { accountId_date: { accountId: data.accountId, date } },
+      create: { accountId: data.accountId, balance: data.balance, date, note: data.note || null },
+      update: { balance: data.balance, note: data.note || null },
     });
     if (data.setCurrent ?? true) {
       await prisma.financialAccount.update({
