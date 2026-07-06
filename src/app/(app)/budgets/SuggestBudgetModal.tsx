@@ -365,6 +365,30 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
                   <span className="hidden shrink-0 text-muted sm:inline">{item.cadence}</span>
                   <span className="money shrink-0 text-right">{formatUSD(item.monthlyAmount)}/mo</span>
                 </label>
+                {item.topExpenses && item.topExpenses.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 border-l border-line pl-4 ml-1.5">
+                    <li className="text-[10px] uppercase tracking-wide text-muted/80">
+                      Top expenses · last 6 months
+                    </li>
+                    {item.topExpenses.map((e) => (
+                      <li key={e.description} className="flex items-center gap-2 text-[11px] text-muted">
+                        <a
+                          href={`/transactions?q=${encodeURIComponent(e.description)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="min-w-0 flex-1 truncate hover:text-brand hover:underline"
+                          title={`View ${e.description} transactions`}
+                        >
+                          {e.description}
+                        </a>
+                        <span className="shrink-0">
+                          {e.count} purchase{e.count === 1 ? "" : "s"}
+                        </span>
+                        <span className="money shrink-0 text-right text-text/80">{formatUSD(e.total)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

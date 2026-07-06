@@ -515,7 +515,16 @@ export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
       recentTotals: [512.44, 388.1, 434.2, 466.85, 401.32, 445.7],
       suggested: 435,
       items: [
-        { id: "variable:cat-groceries", description: "Typical variable spending", source: "typical", cadence: "median of recent months", monthlyAmount: 434.2 },
+        {
+          id: "variable:cat-groceries", description: "Typical variable spending", source: "typical",
+          cadence: "median of recent months", monthlyAmount: 434.2,
+          topExpenses: [
+            { description: "WHOLE FOODS MARKET", total: 1284.5, count: 18 },
+            { description: "TRADER JOE'S #552", total: 743.28, count: 14 },
+            { description: "COSTCO WHOLESALE", total: 512.6, count: 4 },
+            { description: "SAFEWAY 1189", total: 88.23, count: 3 },
+          ],
+        },
       ],
     },
   ],
