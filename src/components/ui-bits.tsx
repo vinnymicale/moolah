@@ -23,7 +23,7 @@ export function PageHeader({
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
       </div>
       {action}
@@ -57,7 +57,7 @@ export function StatCard({
         <span>{label}</span>
         {info && <InfoTip text={info} />}
       </p>
-      <p className={`font-semibold tabular-nums ${sm ? "text-lg" : "mt-1 text-2xl"} ${toneTextClass(tone)}`}>{value}</p>
+      <p className={`money font-semibold ${sm ? "text-lg" : "mt-1 text-2xl"} ${toneTextClass(tone)}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </>
   );

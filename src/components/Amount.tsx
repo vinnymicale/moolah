@@ -26,5 +26,5 @@ export function Amount({
   const transferTone = isTransfer && !asExpense;
   const tone = transferTone ? "text-muted" : type === "INCOME" ? "text-income" : "text-expense";
   const sign = transferTone ? "" : type === "INCOME" ? "+" : "-";
-  return <span className={`tabular-nums ${tone} ${className}`}>{sign}{format(amount)}</span>;
+  return <span className={`money ${tone} ${className}`}>{sign}{format(amount)}</span>;
 }

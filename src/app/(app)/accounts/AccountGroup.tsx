@@ -4,6 +4,7 @@ import { Dot } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/account-meta";
 import type { AccountDTO, SnapshotDTO } from "@/lib/queries";
+import { Sparkline } from "@/components/Sparkline";
 import { CreditCardDetails } from "./CreditCardDetails";
 
 export function AccountGroup({
@@ -24,14 +25,20 @@ export function AccountGroup({
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <h2 className="font-semibold">{title}</h2>
-        <span className="tabular-nums font-semibold">{formatUSD(total)}</span>
+        <span className="money font-semibold">{formatUSD(total)}</span>
       </div>
       {accounts.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-muted">No {title.toLowerCase()} yet.</p>
       ) : (
         <ul className="divide-y divide-line">
           {accounts.map((a) => {
-            const lastSnap = snapshots.filter((s) => s.accountId === a.id).at(-1);
+            const snaps = snapshots.filter((s) => s.accountId === a.id);
+            const lastSnap = snaps.at(-1);
+            const spark = snaps.slice(-30).map((s) => s.balance);
+            // Rising is good for assets, bad for debts; flat lines stay muted.
+            const trendUp = spark.length >= 2 && spark[spark.length - 1] > spark[0];
+            const trendFlat = spark.length < 2 || spark[spark.length - 1] === spark[0];
+            const sparkTone = trendFlat ? "text-muted" : trendUp === a.isAsset ? "text-income" : "text-expense";
             return (
               <li key={a.id} className="px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -52,8 +59,9 @@ export function AccountGroup({
                       {!a.includeInNetWorth ? " · not in net worth" : ""}
                     </p>
                   </div>
+                  <Sparkline values={spark} className={`hidden shrink-0 sm:block ${sparkTone}`} />
                   <div className="text-right">
-                    <p className="tabular-nums font-semibold">{formatUSD(a.currentBalance)}</p>
+                    <p className="money font-semibold">{formatUSD(a.currentBalance)}</p>
                     {a.creditLimit ? (
                       <p className="text-[11px] text-muted">
                         {Math.round((a.currentBalance / a.creditLimit) * 100)}% of {formatUSD(a.creditLimit)}

@@ -83,7 +83,7 @@ function GoalCard({ goal, onEdit, onContribute }: { goal: SavingsGoalDTO; onEdit
       </div>
 
       <div className="mt-3 flex items-center justify-between text-sm">
-        <span className="tabular-nums font-semibold">{formatUSD(goal.currentAmount)}</span>
+        <span className="money font-semibold">{formatUSD(goal.currentAmount)}</span>
         <span className="text-xs text-muted">of {formatUSD(goal.targetAmount)} · {Math.round(pct)}%</span>
       </div>
       <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface2">

@@ -53,7 +53,7 @@ export function DayEventsModal({
                 </p>
               </div>
               {due.statementBalance !== null && (
-                <span className="shrink-0 tabular-nums text-sm font-semibold text-expense">
+                <span className="shrink-0 money text-sm font-semibold text-expense">
                   {formatUSD(due.statementBalance)}
                 </span>
               )}

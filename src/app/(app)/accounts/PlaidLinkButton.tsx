@@ -314,7 +314,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                       {acct.name}
                       {acct.mask ? <span className="ml-1 text-xs text-muted">·· {acct.mask}</span> : null}
                     </span>
-                    <span className="shrink-0 tabular-nums text-sm font-semibold">
+                    <span className="shrink-0 money text-sm font-semibold">
                       {acct.currentBalance !== null ? formatUSD(acct.currentBalance) : "-"}
                     </span>
                   </div>
@@ -451,7 +451,7 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
                       {[g.date, g.accountName].filter(Boolean).join(" · ")}
                     </p>
                   </div>
-                  <span className={`shrink-0 tabular-nums ${g.type === "INCOME" ? "text-income" : "text-expense"}`}>
+                  <span className={`shrink-0 money ${g.type === "INCOME" ? "text-income" : "text-expense"}`}>
                     {g.type === "INCOME" ? "+" : "−"}{formatUSD(g.amount)}
                   </span>
                   <span className="shrink-0 text-xs text-muted">×{g.removeIds.length + 1}</span>
