@@ -29,6 +29,7 @@ function detected(overrides: Partial<DetectedForBudget> = {}): DetectedForBudget
     interval: 1,
     categoryId: "cat-fun",
     cadence: "about monthly",
+    startDate: "2026-06-15",
     ...overrides,
   };
 }
@@ -150,5 +151,152 @@ describe("buildBudgetSuggestions", () => {
     const res = buildBudgetSuggestions({ rules: [], detected: [] });
     expect(res.categories).toEqual([]);
     expect(res.uncategorized).toEqual([]);
+  });
+});
+
+describe("stale detected charges", () => {
+  it("flags a detected charge whose last occurrence is far older than its cadence and drops it from the total", () => {
+    const res = buildBudgetSuggestions({
+      monthISO: "2026-07-01",
+      rules: [],
+      detected: [
+        // Monthly charge last seen ~4 months before the target month.
+        detected({ key: "EXPENSE|old", description: "Old Gym", startDate: "2026-03-02", amount: 40 }),
+        detected({ key: "EXPENSE|spotify", startDate: "2026-06-15" }),
+      ],
+    });
+    const cat = res.categories[0];
+    const old = cat.items.find((i) => i.id === "EXPENSE|old")!;
+    const fresh = cat.items.find((i) => i.id === "EXPENSE|spotify")!;
+    expect(old.stale).toBe(true);
+    expect(fresh.stale).toBeFalsy();
+    // Only the fresh 11.99 counts: rounds up to 12, not 52.
+    expect(cat.suggested).toBe(12);
+  });
+
+  it("does not flag anything when no target month is given", () => {
+    const res = buildBudgetSuggestions({
+      rules: [],
+      detected: [detected({ startDate: "2025-01-01" })],
+    });
+    expect(res.categories[0].items[0].stale).toBeFalsy();
+  });
+
+  it("never flags rule-based charges", () => {
+    const res = buildBudgetSuggestions({
+      monthISO: "2026-07-01",
+      rules: [rule()],
+      detected: [],
+    });
+    expect(res.categories[0].items[0].stale).toBeFalsy();
+  });
+});
+
+describe("yearly charges with a target month", () => {
+  it("counts a yearly rule at full amount when its anniversary falls in the target month", () => {
+    const res = buildBudgetSuggestions({
+      monthISO: "2026-07-01",
+      rules: [rule({ amount: 120, frequency: "YEARLY", startDate: "2024-07-15" })],
+      detected: [],
+    });
+    const item = res.categories[0].items[0];
+    expect(item.monthlyAmount).toBe(120);
+    expect(res.categories[0].suggested).toBe(120);
+    expect(item.cadence).toContain("due this month");
+  });
+
+  it("counts a yearly rule as zero in months it is not due", () => {
+    const res = buildBudgetSuggestions({
+      monthISO: "2026-07-01",
+      rules: [rule({ amount: 120, frequency: "YEARLY", startDate: "2024-03-15" })],
+      detected: [],
+    });
+    const item = res.categories[0].items[0];
+    expect(item.monthlyAmount).toBe(0);
+    expect(res.categories[0].suggested).toBe(0);
+    expect(item.cadence).toContain("next due Mar");
+  });
+
+  it("uses the last-seen month for detected yearly charges", () => {
+    const res = buildBudgetSuggestions({
+      monthISO: "2026-07-01",
+      rules: [],
+      detected: [
+        detected({ key: "EXPENSE|ins", frequency: "YEARLY", amount: 600, startDate: "2025-07-10", cadence: "about yearly" }),
+      ],
+    });
+    expect(res.categories[0].items[0].monthlyAmount).toBe(600);
+  });
+
+  it("keeps smoothing yearly amounts when no target month is given", () => {
+    const res = buildBudgetSuggestions({
+      rules: [rule({ amount: 120, frequency: "YEARLY", startDate: "2024-03-15" })],
+      detected: [],
+    });
+    expect(res.categories[0].items[0].monthlyAmount).toBe(10);
+  });
+});
+
+describe("variable spend suggestions", () => {
+  it("adds a typical-spending item from the median of monthly totals for a category with no recurring charges", () => {
+    const res = buildBudgetSuggestions({
+      rules: [],
+      detected: [],
+      variableSpend: [{ categoryId: "cat-groceries", monthlyTotals: [200, 250, 300, 220, 0, 240] }],
+    });
+    expect(res.categories).toHaveLength(1);
+    const cat = res.categories[0];
+    expect(cat.categoryId).toBe("cat-groceries");
+    const item = cat.items[0];
+    expect(item.source).toBe("typical");
+    // median of [0, 200, 220, 240, 250, 300] = 230
+    expect(item.monthlyAmount).toBe(230);
+    expect(cat.suggested).toBe(230);
+  });
+
+  it("subtracts the category's recurring total so charges are not double-counted", () => {
+    const res = buildBudgetSuggestions({
+      rules: [rule({ amount: 60, categoryId: "cat-fun" })],
+      detected: [],
+      variableSpend: [{ categoryId: "cat-fun", monthlyTotals: [100, 100, 100, 100] }],
+    });
+    const cat = res.categories[0];
+    const typical = cat.items.find((i) => i.source === "typical")!;
+    expect(typical.monthlyAmount).toBe(40);
+    expect(cat.suggested).toBe(100);
+  });
+
+  it("skips categories with fewer than 3 months of spend", () => {
+    const res = buildBudgetSuggestions({
+      rules: [],
+      detected: [],
+      variableSpend: [{ categoryId: "cat-rare", monthlyTotals: [0, 0, 500, 0, 120, 0] }],
+    });
+    expect(res.categories).toHaveLength(0);
+  });
+
+  it("skips the typical item when recurring charges already cover the median", () => {
+    const res = buildBudgetSuggestions({
+      rules: [rule({ amount: 100, categoryId: "cat-fun" })],
+      detected: [],
+      variableSpend: [{ categoryId: "cat-fun", monthlyTotals: [90, 95, 100, 92] }],
+    });
+    const cat = res.categories[0];
+    expect(cat.items.filter((i) => i.source === "typical")).toHaveLength(0);
+    expect(cat.suggested).toBe(100);
+  });
+
+  it("ignores stale recurring charges when computing the recurring total to subtract", () => {
+    const res = buildBudgetSuggestions({
+      monthISO: "2026-07-01",
+      rules: [],
+      detected: [detected({ key: "EXPENSE|old", startDate: "2026-01-05", amount: 50, categoryId: "cat-fun" })],
+      variableSpend: [{ categoryId: "cat-fun", monthlyTotals: [80, 80, 80, 80] }],
+    });
+    const cat = res.categories[0];
+    const typical = cat.items.find((i) => i.source === "typical")!;
+    // Stale charge contributes nothing, so the full 80 median stands.
+    expect(typical.monthlyAmount).toBe(80);
+    expect(cat.suggested).toBe(80);
   });
 });

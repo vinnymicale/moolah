@@ -72,7 +72,7 @@ describe("getBudgetSuggestionsAction", () => {
     recurringRule.findMany.mockResolvedValue([
       {
         id: "r1", description: "Electric Co", amount: "75.50", type: "EXPENSE",
-        categoryId: "cat-bills", frequency: "MONTHLY", interval: 1,
+        categoryId: "cat-bills", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"),
       },
     ] as never);
     // Four monthly Spotify charges -> detected recurring expense in cat-fun.
@@ -101,7 +101,7 @@ describe("getBudgetSuggestionsAction", () => {
     recurringRule.findMany.mockResolvedValue([
       {
         id: "r1", description: "Spotify Premium", amount: "11.99", type: "EXPENSE",
-        categoryId: "cat-fun", frequency: "MONTHLY", interval: 1,
+        categoryId: "cat-fun", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"),
       },
     ] as never);
     transaction.findMany.mockResolvedValue(
@@ -124,7 +124,7 @@ describe("getBudgetSuggestionsAction", () => {
     recurringRule.findMany.mockResolvedValue([
       {
         id: "r1", description: "Mystery sub", amount: "9.99", type: "EXPENSE",
-        categoryId: null, frequency: "MONTHLY", interval: 1,
+        categoryId: null, frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"),
       },
     ] as never);
 
