@@ -50,6 +50,21 @@ export interface BudgetSuggestions {
   uncategorized: ChargeItem[];
 }
 
+/** A category suggestion joined with display info and the month's current limit. */
+export interface SuggestedCategoryDTO extends CategorySuggestion {
+  name: string;
+  color: string;
+  icon: string;
+  /** Existing limit for the month, or 0 if none. */
+  currentLimit: number;
+}
+
+export interface BudgetSuggestionsDTO {
+  categories: SuggestedCategoryDTO[];
+  /** Recurring expense charges skipped because they have no category. */
+  uncategorizedCount: number;
+}
+
 // Average periods per month for each frequency.
 const PER_MONTH: Record<BudgetFrequency, number> = {
   DAILY: 365 / 12,
