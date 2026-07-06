@@ -12,6 +12,7 @@ import type {
   BudgetLineDTO, SavingsGoalDTO, SnapshotDTO,
 } from "@/lib/queries";
 import type { RecurringSuggestion } from "@/lib/recurring-suggestions";
+import type { BudgetSuggestionsDTO } from "@/lib/budget-suggestions";
 
 // ---------------------------------------------------------------------------
 // Date helpers (UTC)
@@ -461,6 +462,49 @@ export const DEMO_BUDGETS: BudgetLineDTO[] = DEMO_BUDGET_LINES.map((b) => ({
   carryover: 0,
   effectiveLimit: b.limit,
 }));
+
+export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
+  categories: [
+    {
+      categoryId: "cat-mortgage",
+      name: "Rent / Mortgage",
+      color: "#dc2626",
+      icon: "home",
+      currentLimit: 0,
+      suggested: 2150,
+      items: [
+        { id: "demo-rule-rent", description: "Oakwood Apartments", source: "rule", cadence: "monthly", monthlyAmount: 2150 },
+      ],
+    },
+    {
+      categoryId: "cat-utilities",
+      name: "Utilities",
+      color: "#ea580c",
+      icon: "zap",
+      currentLimit: 0,
+      suggested: 219,
+      items: [
+        { id: "demo-rule-electric", description: "City Power & Light", source: "rule", cadence: "monthly", monthlyAmount: 132.4 },
+        { id: "demo-det-internet", description: "COMCAST XFINITY", source: "detected", cadence: "about monthly", monthlyAmount: 86.5 },
+      ],
+    },
+    {
+      categoryId: "cat-subscriptions",
+      name: "Subscriptions",
+      color: "#8b5cf6",
+      icon: "repeat",
+      currentLimit: 0,
+      suggested: 41,
+      items: [
+        { id: "demo-rule-netflix", description: "Netflix", source: "rule", cadence: "monthly", monthlyAmount: 15.99 },
+        { id: "demo-det-spotify", description: "SPOTIFY USA", source: "detected", cadence: "about monthly", monthlyAmount: 11.99 },
+        { id: "demo-det-icloud", description: "APPLE.COM/BILL", source: "detected", cadence: "about monthly", monthlyAmount: 9.99 },
+        { id: "demo-rule-nyt", description: "NYTimes", source: "rule", cadence: "every 4 weeks", monthlyAmount: 2.71 },
+      ],
+    },
+  ],
+  uncategorizedCount: 1,
+};
 
 // ---------------------------------------------------------------------------
 // Savings goals
