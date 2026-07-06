@@ -1,3 +1,4 @@
+import { PrismaClientKnownRequestError } from "@/generated/prisma/internal/prismaNamespace";
 import { ZodError } from "zod";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -31,6 +32,9 @@ export async function run(fn: () => Promise<void>): Promise<ActionResult> {
     }
     if (e instanceof UserError) {
       return { ok: false, error: e.message };
+    }
+    if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
+      return { ok: false, error: "That already exists. Try editing the existing one instead." };
     }
     console.error("Action failed:", e);
     return { ok: false, error: "Something went wrong. Please try again." };

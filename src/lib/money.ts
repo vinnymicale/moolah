@@ -5,13 +5,22 @@
 // within the safe-integer range when expressed in cents, so we do all summation
 // in integer cents to avoid binary-float drift, then convert back to dollars.
 
+import { z } from "zod";
+
 export type MoneyInput = number | string | { toString(): string } | null | undefined;
+
+/** Zod preprocessor for user-typed money amounts: strips thousands separators (e.g. "1,234.56") before coercing to a number. */
+export const moneyInput = z.preprocess(
+  (v) => (typeof v === "string" ? v.replace(/,/g, "") : v),
+  z.coerce.number(),
+);
 
 /** Convert a Prisma Decimal / string / number to a JS number (dollars). */
 export function toNumber(value: MoneyInput): number {
   if (value === null || value === undefined) return 0;
   if (typeof value === "number") return value;
-  const n = typeof value === "string" ? Number(value) : Number(value.toString());
+  const raw = typeof value === "string" ? value : value.toString();
+  const n = Number(raw.replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 

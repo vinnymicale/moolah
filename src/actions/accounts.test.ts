@@ -22,6 +22,7 @@ vi.mock("@/lib/prisma", () => ({
     accountSnapshot: {
       findFirst: vi.fn(),
       create: vi.fn(),
+      upsert: vi.fn(),
       delete: vi.fn(),
     },
   },
@@ -141,8 +142,10 @@ describe("addSnapshotAction", () => {
   it("creates a snapshot and updates the current balance by default", async () => {
     const result = await addSnapshotAction({ accountId: "a1", balance: 900, date: "2026-06-01" });
     expect(result).toEqual({ ok: true });
-    expect(snapshot.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ accountId: "a1", balance: 900, note: null }),
+    expect(snapshot.upsert).toHaveBeenCalledWith({
+      where: { accountId_date: { accountId: "a1", date: expect.any(Date) } },
+      create: expect.objectContaining({ accountId: "a1", balance: 900, note: null }),
+      update: expect.objectContaining({ balance: 900, note: null }),
     });
     expect(account.update).toHaveBeenCalledWith({
       where: { id: "a1" },
@@ -152,7 +155,7 @@ describe("addSnapshotAction", () => {
 
   it("does not touch the current balance when setCurrent is false", async () => {
     await addSnapshotAction({ accountId: "a1", balance: 900, date: "2026-06-01", setCurrent: false });
-    expect(snapshot.create).toHaveBeenCalled();
+    expect(snapshot.upsert).toHaveBeenCalled();
     expect(account.update).not.toHaveBeenCalled();
   });
 
@@ -160,7 +163,7 @@ describe("addSnapshotAction", () => {
     account.findFirst.mockResolvedValue(null);
     const result = await addSnapshotAction({ accountId: "a1", balance: 900, date: "2026-06-01" });
     expect(result).toEqual({ ok: false, error: "Account not found" });
-    expect(snapshot.create).not.toHaveBeenCalled();
+    expect(snapshot.upsert).not.toHaveBeenCalled();
   });
 });
 

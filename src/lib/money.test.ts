@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toNumber, toCents, fromCents, sumMoney, addMoney, formatUSD, formatUSDWhole, formatSigned } from "./money";
+import { toNumber, toCents, fromCents, sumMoney, addMoney, formatUSD, formatUSDWhole, formatSigned, moneyInput } from "./money";
 
 describe("toNumber", () => {
   it("passes numbers through", () => {
@@ -11,10 +11,27 @@ describe("toNumber", () => {
     expect(toNumber({ toString: () => "99.95" })).toBe(99.95);
   });
 
+  it("strips thousands separators", () => {
+    expect(toNumber("1,234.56")).toBe(1234.56);
+    expect(toNumber("12,345,678")).toBe(12345678);
+  });
+
   it("returns 0 for null, undefined, and garbage", () => {
     expect(toNumber(null)).toBe(0);
     expect(toNumber(undefined)).toBe(0);
     expect(toNumber("not-a-number")).toBe(0);
+  });
+});
+
+describe("moneyInput", () => {
+  it("strips commas before coercing", () => {
+    expect(moneyInput.parse("1,234.56")).toBe(1234.56);
+    expect(moneyInput.parse("-12,345")).toBe(-12345);
+  });
+
+  it("passes plain numbers and unformatted strings through", () => {
+    expect(moneyInput.parse(900)).toBe(900);
+    expect(moneyInput.parse("900")).toBe(900);
   });
 });
 
