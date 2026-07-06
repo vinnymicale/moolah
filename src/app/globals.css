@@ -179,6 +179,45 @@ h3 {
   animation-delay: 180ms;
 }
 
+/* Progress bars grow from the left on first paint. scaleX (not width) so the
+   animation composites; the momentary radius squish on a 2px-tall bar is
+   imperceptible. Pairs with width transitions for later value changes. */
+@keyframes bar-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+.bar-fill {
+  animation: bar-fill 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: left;
+}
+
+/* Sparklines draw left to right. The SVG normalizes pathLength to 1 so the
+   dash math is the same regardless of line length. */
+@keyframes sparkline-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+.sparkline-draw {
+  stroke-dasharray: 1;
+  animation: sparkline-draw 0.8s ease-out;
+}
+
+/* Modal entrance: backdrop fades, panel pops. Applied via Tailwind's
+   animate-[...] in Modal.tsx, same pattern as toast-in. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
 /* Interactive elements get a pointer cursor by default. Native disabled
    controls keep the default cursor so they don't look clickable. */
 button:not(:disabled),
