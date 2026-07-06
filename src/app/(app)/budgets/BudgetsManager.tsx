@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange, RefreshCw, Sparkles } from "lucide-react";
+import { SuggestBudgetModal } from "./SuggestBudgetModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { StatCard } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
@@ -30,6 +31,7 @@ export function BudgetsManager({
 }) {
   const [copyPending, startCopy] = useTransition();
   const [copyError, setCopyError] = useState<string | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
 
   const budgeted = useMemo(
     () => lines.filter((l) => l.limit > 0).sort((a, b) => b.limit - a.limit),
@@ -73,6 +75,9 @@ export function BudgetsManager({
             {copyPending ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
             <span className="hidden sm:inline">Copy {prevMonthTitle}</span>
           </button>
+          <button onClick={() => setSuggestOpen(true)} className="btn-ghost h-9 text-sm" title="Suggest a budget from recurring charges">
+            <Sparkles size={15} /> <span className="hidden sm:inline">Suggest</span>
+          </button>
         </div>
       </div>
 
@@ -96,9 +101,14 @@ export function BudgetsManager({
         {budgeted.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <p className="text-sm text-muted">No budgets set for {monthTitle}.</p>
-            <button onClick={copyPrev} disabled={copyPending} className="btn-ghost mx-auto mt-3 text-sm">
-              <Copy size={15} /> Copy from {prevMonthTitle}
-            </button>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <button onClick={() => setSuggestOpen(true)} className="btn-ghost text-sm">
+                <Sparkles size={15} /> Suggest from recurring charges
+              </button>
+              <button onClick={copyPrev} disabled={copyPending} className="btn-ghost text-sm">
+                <Copy size={15} /> Copy from {prevMonthTitle}
+              </button>
+            </div>
             <p className="mt-2 text-xs text-muted">…or set a limit on any category below.</p>
           </div>
         ) : (
@@ -121,6 +131,8 @@ export function BudgetsManager({
           </ul>
         </div>
       )}
+
+      <SuggestBudgetModal open={suggestOpen} onClose={() => setSuggestOpen(false)} monthISO={monthISO} monthTitle={monthTitle} />
     </div>
   );
 }
