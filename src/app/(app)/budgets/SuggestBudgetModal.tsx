@@ -163,7 +163,7 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
             Based on your recurring rules and charges detected in the last 12 months. Check the categories to
             apply, adjust amounts, or expand a category to exclude specific charges.
           </p>
-          <ul className="max-h-[50vh] divide-y divide-line overflow-y-auto rounded-xl border border-line">
+          <ul className="max-h-[50vh] divide-y divide-line overflow-x-hidden overflow-y-auto rounded-xl border border-line">
             {categories.map((c) => {
               const row = rows.get(c.categoryId);
               if (!row) return null;
@@ -210,21 +210,21 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
                     </div>
                   </div>
                   {row.expanded && (
-                    <ul className="mt-2 space-y-1 pl-14">
+                    <ul className="mt-2 space-y-1 pl-9 sm:pl-14">
                       {c.items.map((item) => (
                         <li key={item.id}>
                           <label className="flex cursor-pointer items-center gap-2 text-xs">
                             <input
                               type="checkbox"
-                              className="h-3.5 w-3.5 accent-brand"
+                              className="h-3.5 w-3.5 shrink-0 accent-brand"
                               checked={!row.excluded.has(item.id)}
                               onChange={() => toggleCharge(c, item.id)}
                             />
                             <span className={`min-w-0 flex-1 truncate ${row.excluded.has(item.id) ? "text-muted line-through" : ""}`}>
                               {item.description}
                             </span>
-                            <span className="text-muted">{item.cadence}</span>
-                            <span className="money w-16 text-right">{formatUSD(item.monthlyAmount)}/mo</span>
+                            <span className="hidden shrink-0 text-muted sm:inline">{item.cadence}</span>
+                            <span className="money shrink-0 text-right">{formatUSD(item.monthlyAmount)}/mo</span>
                           </label>
                         </li>
                       ))}
@@ -247,8 +247,8 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
             </button>
             <button onClick={apply} disabled={applyPending || entries.length === 0} className="btn-primary h-9 text-sm">
               {applyPending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-          Apply {entries.length} budget{entries.length === 1 ? "" : "s"}
-        </button>
+              Apply
+            </button>
       </div>
     </>
   );
