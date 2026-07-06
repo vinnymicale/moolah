@@ -1,8 +1,12 @@
 @import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque";
 
 /* Manual dark mode via a `.dark` class on <html>. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Neutral monochrome theme: light is ink-on-paper (near-black brand on soft
+   white), dark is white-on-black. Money figures render in the mono face
+   (see .money / Amount). */
 :root {
   --bg: #f5f5f5;
   --surface: #ffffff;
@@ -70,6 +74,7 @@
   --shadow-floating: var(--elev-floating);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: "Bricolage Grotesque Variable", var(--font-geist-sans), system-ui, sans-serif;
 }
 
 html {
@@ -85,11 +90,25 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Headings carry the display face app-wide; everything else stays quiet. */
+h1,
+h2,
+h3 {
+  font-family: "Bricolage Grotesque Variable", var(--font-sans), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
 /* Shared button base. A @utility (not an @layer class) so the button variants
    below can @apply it - Tailwind v4 only lets @apply pull in utilities. */
 @utility btn-base {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium
     transition-colors disabled:opacity-50 disabled:pointer-events-none;
+}
+
+/* Money figures: the ledger treatment. Every currency amount renders in the
+   mono face with tabular digits so columns of figures align like a statement. */
+@utility money {
+  @apply font-mono tabular-nums tracking-tight;
 }
 
 /* Reusable component classes (kept small; most styling is utility-first). */
@@ -129,6 +148,35 @@ body {
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
   }
+}
+
+/* Entrance for dashboard cards: children rise in with a slight stagger.
+   `backwards` fill (not `both`) so once the animation ends no transform
+   lingers to fight the .card-hover lift. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.stagger > * {
+  animation: rise-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+.stagger > *:nth-child(n + 5) {
+  animation-delay: 180ms;
 }
 
 /* Interactive elements get a pointer cursor by default. Native disabled
@@ -186,5 +234,10 @@ select:disabled {
   }
   .card-hover:hover {
     transform: none;
+  }
+  /* Zero the stagger delays too; the duration collapse above doesn't cover
+     them, and a delayed `backwards` fill would hide content briefly. */
+  .stagger > *:nth-child(n) {
+    animation-delay: 0s;
   }
 }

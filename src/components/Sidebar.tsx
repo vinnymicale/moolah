@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Avatar } from "./Avatar";
-import type { NavItem } from "./app-nav";
+import { NAV_GROUPS, type NavGroupId, type NavItem } from "./app-nav";
 
 const COFFEE_URL = "https://buymeacoffee.com/vinnymicale";
 const GITHUB_URL = "https://github.com/vinnymicale/moolah";
@@ -56,11 +56,70 @@ export function Sidebar({
   const dragHref = useRef<string | null>(null);
   const [dragOverHref, setDragOverHref] = useState<string | null>(null);
 
-  const handleDrop = (targetHref: string) => {
+  // Items arrive as one ordered list; the sidebar shows them in fixed sections.
+  // Reordering (drag or Alt+Arrow) works within a section only, so the grouping
+  // stays meaningful.
+  const byGroup = new Map<NavGroupId, NavItem[]>();
+  for (const item of nav) {
+    const list = byGroup.get(item.group) ?? [];
+    list.push(item);
+    byGroup.set(item.group, list);
+  }
+  const sameGroup = (a: string | null, b: NavItem) =>
+    !!a && nav.find((n) => n.href === a)?.group === b.group;
+
+  const handleDrop = (target: NavItem) => {
     const source = dragHref.current;
     dragHref.current = null;
     setDragOverHref(null);
-    if (source && source !== targetHref) onReorder(source, targetHref);
+    if (source && source !== target.href && sameGroup(source, target)) onReorder(source, target.href);
+  };
+
+  const renderItem = (item: NavItem, siblings: NavItem[], i: number) => {
+    const Icon = item.icon;
+    const active = isActive(item.href);
+    const isOver = dragOverHref === item.href;
+    const prev = siblings[i - 1]?.href;
+    const next = siblings[i + 1]?.href;
+    return (
+      <div
+        key={item.href}
+        draggable={!compact}
+        onDragStart={(e) => { dragHref.current = item.href; e.dataTransfer.effectAllowed = "move"; }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          const over =
+            dragHref.current !== item.href && sameGroup(dragHref.current, item) ? item.href : null;
+          if (dragOverHref !== over) setDragOverHref(over);
+        }}
+        onDrop={(e) => { e.preventDefault(); handleDrop(item); }}
+        onDragEnd={() => { dragHref.current = null; setDragOverHref(null); }}
+        className={`group rounded-lg ${isOver && !compact ? "ring-2 ring-brand/50" : ""}`}
+      >
+        <Link
+          href={item.href}
+          onClick={onNavigate}
+          title={compact ? item.label : undefined}
+          // Keyboard alternative to drag-and-drop reordering: Alt+Arrow
+          // swaps this item with its neighbor (a11y keyboard-shortcuts).
+          aria-keyshortcuts={compact ? undefined : "Alt+ArrowUp Alt+ArrowDown"}
+          onKeyDown={(e) => {
+            if (compact || !e.altKey) return;
+            if (e.key === "ArrowUp" && prev) { e.preventDefault(); onReorder(item.href, prev); }
+            else if (e.key === "ArrowDown" && next) { e.preventDefault(); onReorder(item.href, next); }
+          }}
+          className={`relative flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${compact ? "justify-center px-2" : "gap-3 px-3"
+            } ${active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"}`}
+        >
+          {active && !compact && (
+            <span aria-hidden className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-brand" />
+          )}
+          <Icon size={18} />
+          {!compact && <span className="flex-1">{item.label}</span>}
+          {!compact && <GripVertical size={14} className="cursor-grab text-muted opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />}
+        </Link>
+      </div>
+    );
   };
 
   return (
@@ -70,7 +129,7 @@ export function Sidebar({
           <div className="flex items-center gap-2 text-brand">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="" width={28} height={28} className="h-7 w-7" />
-            <span className="font-semibold text-text">Moolah</span>
+            <span className="font-display text-[17px] font-semibold text-text">Moolah</span>
           </div>
         )}
         {allowCollapse && (
@@ -113,57 +172,35 @@ export function Sidebar({
           <Upload size={15} /> {!compact && "Import CSV"}
         </button>
       </div>
-      <nav className={`flex-1 space-y-0.5 overflow-y-auto py-2 ${compact ? "px-2" : "px-3"}`}>
-        {nav.map((item, i) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          const isOver = dragOverHref === item.href;
-          const prev = nav[i - 1]?.href;
-          const next = nav[i + 1]?.href;
+      <nav className={`flex flex-1 flex-col overflow-y-auto py-2 ${compact ? "px-2" : "px-3"}`}>
+        {NAV_GROUPS.map((group) => {
+          const items = byGroup.get(group.id) ?? [];
+          if (items.length === 0) return null;
+          const isSystem = group.id === "system";
           return (
-            <div
-              key={item.href}
-              draggable={!compact}
-              onDragStart={(e) => { dragHref.current = item.href; e.dataTransfer.effectAllowed = "move"; }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                const over = dragHref.current === item.href ? null : item.href;
-                if (dragOverHref !== over) setDragOverHref(over);
-              }}
-              onDrop={(e) => { e.preventDefault(); handleDrop(item.href); }}
-              onDragEnd={() => { dragHref.current = null; setDragOverHref(null); }}
-              className={`group rounded-lg ${isOver && !compact ? "ring-2 ring-brand/50" : ""}`}
-            >
-              <Link
-                href={item.href}
-                onClick={onNavigate}
-                title={compact ? item.label : undefined}
-                // Keyboard alternative to drag-and-drop reordering: Alt+Arrow
-                // swaps this item with its neighbor (a11y keyboard-shortcuts).
-                aria-keyshortcuts={compact ? undefined : "Alt+ArrowUp Alt+ArrowDown"}
-                onKeyDown={(e) => {
-                  if (compact || !e.altKey) return;
-                  if (e.key === "ArrowUp" && prev) { e.preventDefault(); onReorder(item.href, prev); }
-                  else if (e.key === "ArrowDown" && next) { e.preventDefault(); onReorder(item.href, next); }
-                }}
-                className={`flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${compact ? "justify-center px-2" : "gap-3 px-3"
-                  } ${active ? "bg-brand/10 text-brand" : "text-muted hover:bg-surface2 hover:text-text"}`}
-              >
-                <Icon size={18} />
-                {!compact && <span className="flex-1">{item.label}</span>}
-                {!compact && <GripVertical size={14} className="cursor-grab text-muted opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />}
-              </Link>
+            <div key={group.id} className={isSystem ? "mt-auto pt-2" : ""}>
+              {group.label && !compact && (
+                <p className="mt-3 mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted/80">
+                  {group.label}
+                </p>
+              )}
+              {compact && group.id !== "overview" && !isSystem && (
+                <div aria-hidden className="mx-2 my-2 h-px bg-line" />
+              )}
+              <div className="space-y-0.5">
+                {items.map((item, i) => renderItem(item, items, i))}
+              </div>
+              {group.id === "insights" && !compact && customized && (
+                <button
+                  onClick={onResetOrder}
+                  className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface2 hover:text-text"
+                >
+                  <RotateCcw size={12} /> Reset menu order
+                </button>
+              )}
             </div>
           );
         })}
-        {!compact && customized && (
-          <button
-            onClick={onResetOrder}
-            className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface2 hover:text-text"
-          >
-            <RotateCcw size={12} /> Reset menu order
-          </button>
-        )}
       </nav>
       <div className={`border-t border-line ${compact ? "p-2" : "p-3"}`}>
         <div className={`mb-2 flex items-center ${compact ? "justify-center" : "gap-2 px-1"}`}>

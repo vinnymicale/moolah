@@ -141,7 +141,7 @@ export function DebtPlanner({ debts }: { debts: AccountDTO[] }) {
                     inputMode="decimal"
                     value={extra}
                     onChange={(e) => setExtra(e.target.value)}
-                    className="input h-9 w-full pl-6 text-sm tabular-nums"
+                    className="input h-9 w-full pl-6 text-sm money"
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-muted">On top of {formatUSD(totalMin)} in minimums</p>

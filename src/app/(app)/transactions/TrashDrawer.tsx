@@ -125,7 +125,7 @@ function TrashRow({
         <p className="truncate text-sm font-medium">{row.description || "(no description)"}</p>
         <p className="truncate text-xs text-muted">{meta}</p>
       </div>
-      <span className={`shrink-0 text-sm tabular-nums ${row.type === "INCOME" ? "text-income" : "text-expense"}`}>
+      <span className={`shrink-0 text-sm money ${row.type === "INCOME" ? "text-income" : "text-expense"}`}>
         {row.type === "INCOME" ? "+" : "−"}
         {formatUSD(row.amount)}
       </span>

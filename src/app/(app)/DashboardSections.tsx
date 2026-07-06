@@ -59,7 +59,7 @@ export function DashboardSections({ sections }: { sections: DashboardSection[] }
         </button>
       </div>
 
-      <div className="space-y-5">
+      <div className="stagger space-y-5">
         {effective.map((id) => (
           <div
             key={id}

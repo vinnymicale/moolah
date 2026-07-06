@@ -56,7 +56,7 @@ export function DayCell({
           {day}
         </span>
         {projBalance !== undefined && (
-          <span className={`hidden text-[10px] tabular-nums sm:inline ${projBalance < 0 ? "text-expense" : "text-muted"}`}>
+          <span className={`hidden text-[10px] money sm:inline ${projBalance < 0 ? "text-expense" : "text-muted"}`}>
             {formatUSDWhole(projBalance)}
           </span>
         )}
@@ -74,7 +74,7 @@ export function DayCell({
             >
               <CreditCard size={10} className={`shrink-0 ${urgent ? "text-expense" : "text-warning"}`} />
               <span className="hidden flex-1 truncate sm:inline" style={{ color: due.color }}>{due.accountName}</span>
-              <span className={`ml-auto shrink-0 tabular-nums ${urgent ? "text-expense" : "text-warning"}`}>
+              <span className={`ml-auto shrink-0 money ${urgent ? "text-expense" : "text-warning"}`}>
                 {due.statementBalance !== null ? compact(due.statementBalance) : "due"}
               </span>
             </button>

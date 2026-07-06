@@ -247,7 +247,7 @@ export function ImportReview({ open, onClose, csvText, filename, accounts, categ
                       <div className="relative">
                         <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted">$</span>
                         <input
-                          className="input h-8 pl-5 pr-2 py-1 text-right text-xs tabular-nums"
+                          className="input h-8 pl-5 pr-2 py-1 text-right text-xs money"
                           inputMode="decimal"
                           value={r.amount}
                           onChange={(e) => patch(i, { amount: e.target.value })}

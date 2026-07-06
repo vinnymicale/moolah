@@ -20,13 +20,13 @@ export function CcDueModal({ due, onClose }: { due: CcDueEvent; onClose: () => v
           {due.statementBalance !== null && (
             <div className="rounded-lg bg-surface2 px-3 py-2">
               <p className="text-xs text-muted">Statement balance</p>
-              <p className="tabular-nums font-semibold text-expense">{formatUSD(due.statementBalance)}</p>
+              <p className="money font-semibold text-expense">{formatUSD(due.statementBalance)}</p>
             </div>
           )}
           {due.minimumPayment !== null && (
             <div className="rounded-lg bg-surface2 px-3 py-2">
               <p className="text-xs text-muted">Minimum payment</p>
-              <p className="tabular-nums font-semibold">{formatUSD(due.minimumPayment)}</p>
+              <p className="money font-semibold">{formatUSD(due.minimumPayment)}</p>
             </div>
           )}
         </div>

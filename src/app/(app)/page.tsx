@@ -15,6 +15,7 @@ import { categoryColor } from "@/lib/colors";
 import { budgetStatus } from "@/lib/reports";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { Amount } from "@/components/Amount";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { PageHeader, StatCard, toneTextClass, type Tone } from "@/components/ui-bits";
 import { computeMilestones } from "@/lib/milestones";
 import { summarizeDashboard } from "@/lib/dashboard";
@@ -149,7 +150,7 @@ export default async function DashboardPage() {
             <div className="px-4 py-3">
               <div className="mb-3 flex items-center justify-between text-sm">
                 <span className="text-muted">{formatUSD(budgetSpent)} of {formatUSD(totalBudget)} spent</span>
-                <span className={`font-semibold tabular-nums ${totalBudget - budgetSpent >= 0 ? "text-income" : "text-expense"}`}>
+                <span className={`font-semibold money ${totalBudget - budgetSpent >= 0 ? "text-income" : "text-expense"}`}>
                   {formatUSD(totalBudget - budgetSpent)} left
                 </span>
               </div>
@@ -165,7 +166,7 @@ export default async function DashboardPage() {
                           {status === "over" && <AlertTriangle size={11} className="text-expense" />}
                           {b.name}
                         </Link>
-                        <span className={`tabular-nums ${status === "over" ? "text-expense" : status === "near" ? "text-warning" : "text-muted"}`}>
+                        <span className={`money ${status === "over" ? "text-expense" : status === "near" ? "text-warning" : "text-muted"}`}>
                           {status === "over"
                             ? `over by ${formatUSD(b.actual - b.limit)}`
                             : `${formatUSD(b.actual)} / ${formatUSD(b.limit)}`}
@@ -217,7 +218,7 @@ export default async function DashboardPage() {
                           {cat ? cat.name : "Uncategorized"} · {m.count} {m.count === 1 ? "charge" : "charges"}
                         </p>
                       </div>
-                      <span className="shrink-0 tabular-nums text-sm font-semibold text-expense">
+                      <span className="shrink-0 money text-sm font-semibold text-expense">
                         -{formatUSD(m.amount)}
                       </span>
                     </li>
@@ -258,7 +259,7 @@ export default async function DashboardPage() {
                             </span>
                             {g.name}
                           </span>
-                          <span className="tabular-nums text-muted">
+                          <span className="money text-muted">
                             {formatUSD(g.currentAmount)} / {formatUSD(g.targetAmount)} · {Math.round(pct)}%
                           </span>
                         </div>
@@ -324,18 +325,18 @@ export default async function DashboardPage() {
 
       <MilestonesBanner milestones={milestones} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" href="/networth" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
+      <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Net Worth" value={<AnimatedNumber value={netWorth.net} />} tone="brand" href="/networth" hint={`${formatUSD(netWorth.assets)} assets · ${formatUSD(netWorth.liabilities)} debt`} />
         <StatCard
           label="Income this month"
-          value={formatUSD(calendar.monthIncomeActual)}
+          value={<AnimatedNumber value={calendar.monthIncomeActual} />}
           tone="income"
           href={`/transactions?m=${monthISO.slice(0, 7)}`}
           hint={`${formatUSD(calendar.monthIncome)} projected by month end`}
         />
         <StatCard
           label="Spent this month"
-          value={formatUSD(calendar.monthExpenseActual)}
+          value={<AnimatedNumber value={calendar.monthExpenseActual} />}
           tone="expense"
           href={`/transactions?m=${monthISO.slice(0, 7)}`}
           hint={
@@ -351,7 +352,7 @@ export default async function DashboardPage() {
         />
         <StatCard
           label="Savings rate"
-          value={savingsRate === null ? "-" : `${savingsRate}%`}
+          value={savingsRate === null ? "-" : <AnimatedNumber value={savingsRate} format="percent" />}
           tone={savingsRate !== null && savingsRate >= 0 ? "income" : "expense"}
           href="/trends"
           hint={`Net ${formatUSD(net)}`}
@@ -372,7 +373,7 @@ function Row({ label, value, tone = "default", icon }: { label: string; value: s
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`flex items-center gap-1.5 tabular-nums font-semibold ${toneTextClass(tone)}`}>{icon}{value}</span>
+      <span className={`flex items-center gap-1.5 money font-semibold ${toneTextClass(tone)}`}>{icon}{value}</span>
     </div>
   );
 }

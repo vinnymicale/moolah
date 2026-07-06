@@ -55,7 +55,7 @@ function NetWorthTooltip({ active, payload, label }: { active?: boolean; payload
           <p key={p.name} className="flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color || p.fill }} />
             <span className="text-muted">{p.name}:</span>
-            <span className="font-medium tabular-nums">{formatUSD(p.value)}</span>
+            <span className="font-medium money">{formatUSD(p.value)}</span>
           </p>
         ))}
     </div>

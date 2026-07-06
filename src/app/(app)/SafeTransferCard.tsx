@@ -220,7 +220,7 @@ export function SafeTransferCard({
                 step="50"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="input h-9 w-28 pl-6 text-sm tabular-nums"
+                className="input h-9 w-28 pl-6 text-sm money"
                 aria-label="Amount to allocate"
               />
             </div>
@@ -315,7 +315,7 @@ function BalanceShift({
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-muted">{label}</span>
-      <span className="flex items-center gap-1.5 tabular-nums">
+      <span className="flex items-center gap-1.5 money">
         <span className="text-muted line-through decoration-muted/40">{formatUSD(before)}</span>
         <ArrowRight size={11} className="text-muted" />
         <span className={`font-semibold ${negative ? "text-expense" : "text-text"}`}>{formatUSD(after)}</span>
@@ -338,7 +338,7 @@ function Row({
   return (
     <div className="flex items-center justify-between gap-4">
       <span>{label}</span>
-      <span className={`tabular-nums ${toneTextClass(tone)} ${bold ? "font-semibold" : ""}`}>{value}</span>
+      <span className={`money ${toneTextClass(tone)} ${bold ? "font-semibold" : ""}`}>{value}</span>
     </div>
   );
 }
