@@ -202,7 +202,7 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
           <div className="relative w-28">
             <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
             <input
-              className="input h-9 pl-6 pr-2 text-right tabular-nums"
+              className="input h-9 pl-6 pr-2 text-right money"
               inputMode="decimal"
               placeholder="0"
               value={value}

@@ -36,7 +36,7 @@ export function SpendingAlertsCard({ anomalies }: { anomalies: SpendingAnomalyDT
                 </p>
               </div>
               <div className="text-right">
-                <p className="tabular-nums text-sm font-semibold text-expense">
+                <p className="money text-sm font-semibold text-expense">
                   {formatUSD(a.thisMonth)}
                 </p>
                 <p className="text-xs text-warning">

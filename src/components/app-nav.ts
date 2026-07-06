@@ -3,22 +3,34 @@ import {
   Settings, PiggyBank, Target, TrendingDown, Wallet,
 } from "lucide-react";
 
+export type NavGroupId = "overview" | "track" | "plan" | "insights" | "system";
+
 export const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/transactions", label: "Transactions", icon: Receipt },
-  { href: "/accounts", label: "Accounts", icon: Landmark },
-  { href: "/networth", label: "Net Worth", icon: Wallet },
-  { href: "/recurring", label: "Recurring", icon: Repeat },
-  { href: "/budgets", label: "Budgets", icon: PiggyBank },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/debt", label: "Debt payoff", icon: TrendingDown },
-  { href: "/categories", label: "Categories", icon: Tags },
-  { href: "/trends", label: "Trends", icon: LineChart },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, group: "overview" as NavGroupId },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, group: "overview" as NavGroupId },
+  { href: "/transactions", label: "Transactions", icon: Receipt, group: "track" as NavGroupId },
+  { href: "/accounts", label: "Accounts", icon: Landmark, group: "track" as NavGroupId },
+  { href: "/recurring", label: "Recurring", icon: Repeat, group: "track" as NavGroupId },
+  { href: "/budgets", label: "Budgets", icon: PiggyBank, group: "plan" as NavGroupId },
+  { href: "/goals", label: "Goals", icon: Target, group: "plan" as NavGroupId },
+  { href: "/debt", label: "Debt payoff", icon: TrendingDown, group: "plan" as NavGroupId },
+  { href: "/networth", label: "Net worth", icon: Wallet, group: "insights" as NavGroupId },
+  { href: "/trends", label: "Trends", icon: LineChart, group: "insights" as NavGroupId },
+  { href: "/categories", label: "Categories", icon: Tags, group: "insights" as NavGroupId },
+  { href: "/settings", label: "Settings", icon: Settings, group: "system" as NavGroupId },
 ];
 
 export type NavItem = (typeof NAV)[number];
+
+/** Sidebar sections, in display order. Overview and system render without a
+ *  heading; the rest get a small eyebrow label. */
+export const NAV_GROUPS: { id: NavGroupId; label: string | null }[] = [
+  { id: "overview", label: null },
+  { id: "track", label: "Track" },
+  { id: "plan", label: "Plan" },
+  { id: "insights", label: "Insights" },
+  { id: "system", label: null },
+];
 
 export const NAV_ORDER_KEY = "navOrder";
 export const NAV_COLLAPSED_KEY = "navCollapsed";

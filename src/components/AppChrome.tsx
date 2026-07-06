@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Plus, Menu, FileSpreadsheet, Search, Bot, Upload, Keyboard } from "lucide-react";
+import Link from "next/link";
 import type { Command } from "@/lib/commands";
 import { TransactionModal } from "./TransactionModal";
 import { ImportReview } from "./ImportReview";
@@ -18,6 +19,26 @@ import {
 import { usePersistentState } from "@/lib/usePersistentState";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
+
+// The three destinations that earn a spot in the mobile tab bar; everything
+// else lives behind the Menu tab (full drawer).
+const MOBILE_TABS = ["/", "/transactions", "/budgets"]
+  .map((h) => NAV_BY_HREF.get(h))
+  .filter((x): x is NavItem => !!x);
+
+function MobileTab({ tab, active }: { tab: NavItem; active: boolean }) {
+  const Icon = tab.icon;
+  return (
+    <Link
+      href={tab.href}
+      className={`flex h-full flex-col items-center justify-center gap-1 ${active ? "text-brand" : "text-muted"}`}
+      aria-current={active ? "page" : undefined}
+    >
+      <Icon size={20} />
+      <span className="text-[10px] font-medium">{tab.label}</span>
+    </Link>
+  );
+}
 
 export function AppChrome({
   children,
@@ -217,24 +238,51 @@ export function AppChrome({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar - mobile only (desktop header is just wasted space) */}
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/70 px-4 py-3 backdrop-blur-md md:hidden">
-          <button onClick={() => setNavOpen(true)} className="btn-ghost h-9 w-9 p-0!" aria-label="Open menu">
-            <Menu size={18} />
-          </button>
-          <div className="flex items-center gap-2 font-semibold">
+          <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Moolah" width={22} height={22} className="h-5.5 w-5.5" />
+            <img src="/logo.png" alt="" width={22} height={22} className="h-5.5 w-5.5" />
+            <span className="font-display text-[15px] font-semibold">Moolah</span>
           </div>
           <div className="flex-1" />
           <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 p-0!" aria-label="Search">
             <Search size={18} />
           </button>
-          <button onClick={() => setAddOpen(true)} className="btn-primary h-9">
-            <Plus size={16} />
-          </button>
         </header>
 
-        <main className="flex-1 px-4 py-5 md:px-6 md:py-6">{children}</main>
+        <main className="flex-1 px-4 py-5 pb-24 md:px-6 md:py-6 md:pb-6">{children}</main>
       </div>
+
+      {/* Mobile bottom tab bar with a raised Add button in the middle */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+        aria-label="Primary"
+      >
+        <div className="grid h-16 grid-cols-5 items-center">
+          {MOBILE_TABS.slice(0, 2).map((tab) => (
+            <MobileTab key={tab.href} tab={tab} active={isActive(tab.href)} />
+          ))}
+          <div className="flex justify-center">
+            <button
+              onClick={() => setAddOpen(true)}
+              className="-mt-6 flex h-13 w-13 items-center justify-center rounded-full bg-brand text-brand-fg shadow-floating transition-transform active:scale-95"
+              aria-label="Add transaction"
+            >
+              <Plus size={24} />
+            </button>
+          </div>
+          {MOBILE_TABS.slice(2).map((tab) => (
+            <MobileTab key={tab.href} tab={tab} active={isActive(tab.href)} />
+          ))}
+          <button
+            onClick={() => setNavOpen(true)}
+            className="flex h-full flex-col items-center justify-center gap-1 text-muted"
+            aria-label="Open menu"
+          >
+            <Menu size={20} />
+            <span className="text-[10px] font-medium">Menu</span>
+          </button>
+        </div>
+      </nav>
 
       {searchOpen && (
         <CommandPalette onClose={() => setSearchOpen(false)} commands={commands} categories={categories} accounts={accounts} />
@@ -267,7 +315,7 @@ export function AppChrome({
       {!demoMode && !chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
-          className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-floating transition-transform duration-200 hover:scale-105 active:scale-95"
+          className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-floating transition-transform duration-200 hover:scale-105 active:scale-95 md:bottom-5 md:right-5"
           title="Finance assistant (C)"
           aria-label="Open finance assistant"
         >

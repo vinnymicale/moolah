@@ -65,13 +65,13 @@ function CategoryMoMTable({ current, last }: { current: CategorySlice[]; last: C
                     {r.name}
                   </Link>
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums text-muted">
+                <td className="py-2 pr-4 text-right money text-muted">
                   {r.lastVal > 0 ? formatUSD(r.lastVal) : "-"}
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums font-medium">
+                <td className="py-2 pr-4 text-right money font-medium">
                   {r.thisVal > 0 ? formatUSD(r.thisVal) : "-"}
                 </td>
-                <td className={`py-2 text-right tabular-nums ${changeColor}`}>
+                <td className={`py-2 text-right money ${changeColor}`}>
                   <span className="flex items-center justify-end gap-1">
                     <Icon size={13} />
                     {r.pct !== null
@@ -175,7 +175,7 @@ function CashFlowTooltip({ active, payload }: { active?: boolean; payload?: Cash
     <div className="rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-md">
       <p className="flex items-center gap-2">
         <span className="text-muted">{label}:</span>
-        <span className="font-medium tabular-nums">{formatUSD(data?.value ?? item.value)}</span>
+        <span className="font-medium money">{formatUSD(data?.value ?? item.value)}</span>
       </p>
     </div>
   );
@@ -206,7 +206,7 @@ function MoneyTooltip({ active, payload, label }: { active?: boolean; payload?: 
         <p key={p.name} className="flex items-center gap-2">
           <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color || p.fill }} />
           <span className="text-muted">{p.name}:</span>
-          <span className="font-medium tabular-nums">{formatUSD(p.value)}</span>
+          <span className="font-medium money">{formatUSD(p.value)}</span>
         </p>
       ))}
     </div>
@@ -288,7 +288,7 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
                   >
                     <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
                     <span className="flex-1 truncate text-muted">{s.name}</span>
-                    <span className="tabular-nums font-medium">{formatUSD(s.value)}</span>
+                    <span className="money font-medium">{formatUSD(s.value)}</span>
                   </Link>
                 </li>
               ))}
@@ -348,7 +348,7 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
                       {status === "over" && <AlertTriangle size={13} className="text-expense" />}
                       {b.name}
                     </span>
-                    <span className={`tabular-nums ${status === "over" ? "text-expense" : status === "near" ? "text-warning" : "text-muted"}`}>
+                    <span className={`money ${status === "over" ? "text-expense" : status === "near" ? "text-warning" : "text-muted"}`}>
                       {status === "over"
                         ? `over by ${formatUSD(b.actual - b.budget)}`
                         : `${formatUSD(b.actual)} / ${formatUSD(b.budget)}`}

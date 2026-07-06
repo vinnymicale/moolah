@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Search, Plus, Download, Clock,
-  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight,
+  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight, Pencil,
 } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
 import { TrashDrawer } from "./TrashDrawer";
@@ -502,8 +502,8 @@ export function TransactionsList({
               <div
                 key={t.id}
                 ref={isFocus ? focusRef : undefined}
-                className={`flex items-center gap-2 px-2 transition-colors sm:px-3 ${
-                  isFocus ? "bg-brand/15 ring-2 ring-inset ring-brand/40" : isSel ? "bg-brand/5" : ""
+                className={`group flex items-center gap-2 px-2 transition-colors sm:px-3 ${
+                  isFocus ? "bg-brand/15 ring-2 ring-inset ring-brand/40" : isSel ? "bg-brand/5" : "hover:bg-surface2/60"
                 }`}
               >
                 <label className="flex h-full cursor-pointer items-center px-2 py-3" onClick={(e) => e.stopPropagation()}>
@@ -517,7 +517,7 @@ export function TransactionsList({
                 </label>
                 <button
                   onClick={() => setEditing(t)}
-                  className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 text-left hover:bg-surface2"
+                  className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 text-left"
                 >
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
@@ -550,6 +550,11 @@ export function TransactionsList({
                     </p>
                   </div>
                   <Amount type={t.type} amount={t.amount} isTransfer={t.isTransfer} className="shrink-0 font-semibold" />
+                  <Pencil
+                    size={13}
+                    className="hidden shrink-0 text-muted opacity-0 transition-opacity group-hover:opacity-100 sm:block"
+                    aria-hidden="true"
+                  />
                 </button>
               </div>
             );

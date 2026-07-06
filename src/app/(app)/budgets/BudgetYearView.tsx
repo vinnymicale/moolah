@@ -57,7 +57,7 @@ export function BudgetYearView({
                 <Link href={`/budgets?m=${m.monthISO.slice(0, 7)}`} className="block px-4 py-3 hover:bg-surface2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium">{m.label}</span>
-                    <span className={`tabular-nums ${over ? "text-expense" : "text-muted"}`}>
+                    <span className={`money ${over ? "text-expense" : "text-muted"}`}>
                       {formatUSD(m.actual)}
                       {m.budget > 0 ? ` / ${formatUSD(m.budget)}` : " · no budget"}
                     </span>
