@@ -71,6 +71,8 @@ export interface SuggestedCategoryDTO extends CategorySuggestion {
   icon: string;
   /** Existing limit for the month, or 0 if none. */
   currentLimit: number;
+  /** Total spend for each of the 6 months before the target, oldest first. */
+  recentTotals: number[];
 }
 
 export interface BudgetSuggestionsDTO {

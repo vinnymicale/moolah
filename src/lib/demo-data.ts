@@ -471,6 +471,7 @@ export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
       color: "#dc2626",
       icon: "home",
       currentLimit: 0,
+      recentTotals: [2150, 2150, 2150, 2150, 2150, 2150],
       suggested: 2150,
       items: [
         { id: "demo-rule-rent", description: "Oakwood Apartments", source: "rule", cadence: "monthly", monthlyAmount: 2150 },
@@ -482,6 +483,7 @@ export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
       color: "#ea580c",
       icon: "zap",
       currentLimit: 0,
+      recentTotals: [241.3, 228.75, 205.1, 198.4, 212.6, 224.9],
       suggested: 219,
       items: [
         { id: "demo-rule-electric", description: "City Power & Light", source: "rule", cadence: "monthly", monthlyAmount: 132.4 },
@@ -494,6 +496,7 @@ export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
       color: "#8b5cf6",
       icon: "repeat",
       currentLimit: 0,
+      recentTotals: [58.67, 58.67, 40.68, 40.68, 40.68, 40.68],
       suggested: 41,
       items: [
         { id: "demo-rule-netflix", description: "Netflix", source: "rule", cadence: "monthly", monthlyAmount: 15.99 },
@@ -509,6 +512,7 @@ export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
       color: "#65a30d",
       icon: "shopping-cart",
       currentLimit: 0,
+      recentTotals: [512.44, 388.1, 434.2, 466.85, 401.32, 445.7],
       suggested: 435,
       items: [
         { id: "variable:cat-groceries", description: "Typical variable spending", source: "typical", cadence: "median of recent months", monthlyAmount: 434.2 },
