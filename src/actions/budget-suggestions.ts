@@ -91,9 +91,35 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
         categoryId: r.categoryId,
         frequency: r.frequency as RuleForBudget["frequency"],
         interval: r.interval,
+        startDate: isoDay(r.startDate),
       }));
 
-    const suggestions = buildBudgetSuggestions({ rules: activeRules, detected });
+    // Total expense spend per category for the 6 full months before the
+    // target month, so the rollup can suggest typical variable spending.
+    // Includes rule-linked transactions; the rollup subtracts the recurring
+    // total itself, leaving only the variable residual.
+    const windowStart = startOfUTCMonth(addUTCMonths(monthStart, -6));
+    const totalsByCat = new Map<string, number[]>();
+    for (const t of txns) {
+      if (t.type !== "EXPENSE" || !t.categoryId) continue;
+      if (t.date < windowStart || t.date >= monthStart) continue;
+      const monthIdx =
+        (t.date.getUTCFullYear() - windowStart.getUTCFullYear()) * 12 +
+        (t.date.getUTCMonth() - windowStart.getUTCMonth());
+      const totals = totalsByCat.get(t.categoryId) ?? totalsByCat.set(t.categoryId, [0, 0, 0, 0, 0, 0]).get(t.categoryId)!;
+      totals[monthIdx] += toNumber(t.amount);
+    }
+    const variableSpend = [...totalsByCat.entries()].map(([categoryId, monthlyTotals]) => ({
+      categoryId,
+      monthlyTotals,
+    }));
+
+    const suggestions = buildBudgetSuggestions({
+      rules: activeRules,
+      detected,
+      monthISO: isoDay(monthStart),
+      variableSpend,
+    });
 
     const catById = new Map(cats.map((c) => [c.id, c]));
     const limitByCat = new Map(budgets.map((b) => [b.categoryId, toNumber(b.limit)]));

@@ -30,6 +30,25 @@ function computeSuggested(cat: SuggestedCategoryDTO, excluded: Set<string>): num
   return Math.ceil(cents / 100);
 }
 
+// Saved per-category choices, so reopening the modal keeps checkbox, amount,
+// and exclusion tweaks. Keyed by month; cleared once suggestions are applied.
+interface SavedRow {
+  checked: boolean;
+  amount: string;
+  edited: boolean;
+  excluded: string[];
+}
+
+const storageKey = (monthISO: string) => `moolah.budgetSuggest.${monthISO}`;
+
+function loadSavedRows(monthISO: string): Record<string, SavedRow> {
+  try {
+    return JSON.parse(localStorage.getItem(storageKey(monthISO)) ?? "{}") as Record<string, SavedRow>;
+  } catch {
+    return {};
+  }
+}
+
 export function SuggestBudgetModal({
   open,
   onClose,
@@ -68,19 +87,31 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
       }
       setCategories(res.data.categories);
       setUncategorizedCount(res.data.uncategorizedCount);
-      // Categories that already have a limit default to keeping it.
+      // Defaults: categories with an existing limit keep it (unchecked), and
+      // stale charges start excluded. Saved choices from a previous open of
+      // this month's modal override the defaults.
+      const saved = loadSavedRows(monthISO);
       setRows(
         new Map(
-          res.data.categories.map((c) => [
-            c.categoryId,
-            {
-              checked: c.currentLimit <= 0,
-              amount: String(c.suggested),
-              edited: false,
-              excluded: new Set<string>(),
-              expanded: false,
-            },
-          ]),
+          res.data.categories.map((c) => {
+            const s = saved[c.categoryId];
+            const row: RowState = s
+              ? {
+                  checked: s.checked,
+                  amount: s.amount,
+                  edited: s.edited,
+                  excluded: new Set(s.excluded.filter((id) => c.items.some((i) => i.id === id))),
+                  expanded: false,
+                }
+              : {
+                  checked: c.currentLimit <= 0,
+                  amount: String(c.suggested),
+                  edited: false,
+                  excluded: new Set(c.items.filter((i) => i.stale).map((i) => i.id)),
+                  expanded: false,
+                };
+            return [c.categoryId, row];
+          }),
         ),
       );
     });
@@ -88,6 +119,20 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
       cancelled = true;
     };
   }, [monthISO]);
+
+  // Remember choices for this month across modal opens.
+  useEffect(() => {
+    if (loading || rows.size === 0) return;
+    const out: Record<string, SavedRow> = {};
+    for (const [id, r] of rows) {
+      out[id] = { checked: r.checked, amount: r.amount, edited: r.edited, excluded: [...r.excluded] };
+    }
+    try {
+      localStorage.setItem(storageKey(monthISO), JSON.stringify(out));
+    } catch {
+      // Storage unavailable; persistence is best-effort.
+    }
+  }, [rows, loading, monthISO]);
 
   const updateRow = useCallback((categoryId: string, patch: Partial<RowState>) => {
     setRows((prev) => {
@@ -131,8 +176,10 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
     startApply(async () => {
       setError(null);
       const res = await applyBudgetSuggestionsAction({ month: monthISO, entries });
-      if (res.ok) onClose();
-      else setError(res.error);
+      if (res.ok) {
+        localStorage.removeItem(storageKey(monthISO));
+        onClose();
+      } else setError(res.error);
     });
 
   if (loading) {
@@ -221,7 +268,24 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
                               onChange={() => toggleCharge(c, item.id)}
                             />
                             <span className={`min-w-0 flex-1 truncate ${row.excluded.has(item.id) ? "text-muted line-through" : ""}`}>
-                              {item.description}
+                              {item.source === "typical" ? (
+                                item.description
+                              ) : (
+                                <a
+                                  href={`/transactions?q=${encodeURIComponent(item.description)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="hover:text-brand hover:underline"
+                                  title={`View ${item.description} transactions`}
+                                >
+                                  {item.description}
+                                </a>
+                              )}
+                              {item.stale && (
+                                <span className="ml-1.5 rounded bg-warning/15 px-1 py-0.5 text-[10px] font-medium text-warning no-underline">
+                                  possibly ended
+                                </span>
+                              )}
                             </span>
                             <span className="hidden shrink-0 text-muted sm:inline">{item.cadence}</span>
                             <span className="money shrink-0 text-right">{formatUSD(item.monthlyAmount)}/mo</span>

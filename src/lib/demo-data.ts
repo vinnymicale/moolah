@@ -500,6 +500,18 @@ export const DEMO_BUDGET_SUGGESTIONS: BudgetSuggestionsDTO = {
         { id: "demo-det-spotify", description: "SPOTIFY USA", source: "detected", cadence: "about monthly", monthlyAmount: 11.99 },
         { id: "demo-det-icloud", description: "APPLE.COM/BILL", source: "detected", cadence: "about monthly", monthlyAmount: 9.99 },
         { id: "demo-rule-nyt", description: "NYTimes", source: "rule", cadence: "every 4 weeks", monthlyAmount: 2.71 },
+        { id: "demo-det-hulu", description: "HULU", source: "detected", cadence: "about monthly", monthlyAmount: 17.99, stale: true },
+      ],
+    },
+    {
+      categoryId: "cat-groceries",
+      name: "Groceries",
+      color: "#65a30d",
+      icon: "shopping-cart",
+      currentLimit: 0,
+      suggested: 435,
+      items: [
+        { id: "variable:cat-groceries", description: "Typical variable spending", source: "typical", cadence: "median of recent months", monthlyAmount: 434.2 },
       ],
     },
   ],
