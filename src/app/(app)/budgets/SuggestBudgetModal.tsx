@@ -128,13 +128,15 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
       setUncategorizedCount(res.data.uncategorizedCount);
       // Defaults: categories with an existing limit keep it (unchecked), and
       // stale charges start excluded. Saved choices from a previous open of
-      // this month's modal override the defaults.
+      // this month's modal override the defaults. Unchecked rows are
+      // normalized to $0 / all charges deselected — the category checkbox
+      // acts as a master switch over its charges.
       const saved = loadSavedRows(monthISO);
       setRows(
         new Map(
           res.data.categories.map((c) => {
             const s = saved[c.categoryId];
-            const row: RowState = s
+            let row: RowState = s
               ? {
                   checked: s.checked,
                   amount: s.amount,
@@ -149,6 +151,9 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
                   excluded: new Set(c.items.filter((i) => i.stale).map((i) => i.id)),
                   expanded: false,
                 };
+            if (!row.checked) {
+              row = { ...row, amount: "0", edited: false, excluded: new Set(c.items.map((i) => i.id)) };
+            }
             return [c.categoryId, row];
           }),
         ),
@@ -182,6 +187,27 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
     });
   }, []);
 
+  // Master switch: off zeroes the amount and deselects every charge; on
+  // reselects the default charges and restores the suggested total.
+  const toggleCategory = (cat: SuggestedCategoryDTO, checked: boolean) => {
+    setRows((prev) => {
+      const next = new Map(prev);
+      const row = next.get(cat.categoryId);
+      if (!row) return prev;
+      const excluded = checked
+        ? new Set(cat.items.filter((i) => i.stale).map((i) => i.id))
+        : new Set(cat.items.map((i) => i.id));
+      next.set(cat.categoryId, {
+        ...row,
+        checked,
+        excluded,
+        amount: checked ? String(computeSuggested(cat, excluded, rounding)) : "0",
+        edited: false,
+      });
+      return next;
+    });
+  };
+
   const toggleCharge = (cat: SuggestedCategoryDTO, chargeId: string) => {
     setRows((prev) => {
       const next = new Map(prev);
@@ -190,11 +216,19 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
       const excluded = new Set(row.excluded);
       if (excluded.has(chargeId)) excluded.delete(chargeId);
       else excluded.add(chargeId);
+      // The category checkbox mirrors its charges: any charge selected means
+      // checked, none selected means unchecked at $0.
+      if (excluded.size >= cat.items.length) {
+        next.set(cat.categoryId, { ...row, excluded, checked: false, amount: "0", edited: false });
+        return next;
+      }
       next.set(cat.categoryId, {
         ...row,
         excluded,
+        checked: true,
         // A manual edit sticks; otherwise track the recomputed total.
-        amount: row.edited ? row.amount : String(computeSuggested(cat, excluded, rounding)),
+        amount: row.edited && row.checked ? row.amount : String(computeSuggested(cat, excluded, rounding)),
+        edited: row.edited && row.checked,
       });
       return next;
     });
@@ -297,7 +331,7 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
             type="checkbox"
             className="h-4 w-4 shrink-0 accent-brand"
             checked={row.checked}
-            onChange={(e) => updateRow(c.categoryId, { checked: e.target.checked })}
+            onChange={(e) => toggleCategory(c, e.target.checked)}
             aria-label={`Apply budget for ${c.name}`}
           />
           <span
