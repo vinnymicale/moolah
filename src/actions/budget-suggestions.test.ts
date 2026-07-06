@@ -125,6 +125,39 @@ describe("getBudgetSuggestionsAction", () => {
     expect(fun!.items[0].source).toBe("rule");
   });
 
+  it("returns the top non-recurring expenses behind a typical-spending item", async () => {
+    category.findMany.mockResolvedValue([{ id: "cat-groc", name: "Groceries", color: "#0f0", icon: "cart" }] as never);
+    // Irregular grocery purchases across Mar-May (3 active months) plus one
+    // rule-linked charge that must stay out of the breakdown.
+    const groceries = [
+      { date: "2026-03-03", description: "WHOLE FOODS", amount: "50" },
+      { date: "2026-04-18", description: "WHOLE FOODS", amount: "60" },
+      { date: "2026-05-09", description: "WHOLE FOODS", amount: "70" },
+      { date: "2026-04-02", description: "TRADER JOES", amount: "20" },
+      { date: "2026-05-21", description: "TRADER JOES", amount: "30" },
+    ].map((t) => ({
+      date: new Date(`${t.date}T00:00:00Z`), description: t.description, amount: t.amount,
+      type: "EXPENSE", categoryId: "cat-groc", accountId: "a1", recurringRuleId: null,
+    }));
+    transaction.findMany.mockResolvedValue([
+      ...groceries,
+      {
+        date: new Date("2026-04-10T00:00:00Z"), description: "COSTCO GAS", amount: "40",
+        type: "EXPENSE", categoryId: "cat-groc", accountId: "a1", recurringRuleId: "r9",
+      },
+    ] as never);
+
+    const res = await getBudgetSuggestionsAction({ month: "2026-07-01" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const groc = res.data.categories.find((c) => c.categoryId === "cat-groc");
+    const typical = groc!.items.find((i) => i.source === "typical");
+    expect(typical!.topExpenses).toEqual([
+      { description: "WHOLE FOODS", total: 180, count: 3 },
+      { description: "TRADER JOES", total: 50, count: 2 },
+    ]);
+  });
+
   it("counts uncategorized recurring charges instead of including them", async () => {
     recurringRule.findMany.mockResolvedValue([
       {

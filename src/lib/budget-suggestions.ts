@@ -31,11 +31,21 @@ export type DetectedForBudget = Pick<
   "key" | "description" | "amount" | "type" | "frequency" | "interval" | "categoryId" | "cadence" | "startDate"
 >;
 
+/** A merchant/description that contributed to a category's variable spend. */
+export interface VariableExpenseSample {
+  description: string;
+  /** Total spent on this description across the window. */
+  total: number;
+  count: number;
+}
+
 /** Per-category totals of recent monthly spend, for variable-spend suggestions. */
 export interface VariableSpend {
   categoryId: string;
   /** Total expense spend for each of the last N months (any order). */
   monthlyTotals: number[];
+  /** Largest non-recurring expenses in the window, biggest first. */
+  topExpenses?: VariableExpenseSample[];
 }
 
 export interface ChargeItem {
@@ -49,6 +59,8 @@ export interface ChargeItem {
   monthlyAmount: number;
   /** Detected charge that hasn't recurred on schedule; excluded from totals. */
   stale?: boolean;
+  /** For "typical" items: the expenses behind the median, biggest first. */
+  topExpenses?: VariableExpenseSample[];
 }
 
 export interface CategorySuggestion {
@@ -229,6 +241,7 @@ export function buildBudgetSuggestions({
       source: "typical",
       cadence: "median of recent months",
       monthlyAmount: fromCents(residual),
+      ...(v.topExpenses?.length ? { topExpenses: v.topExpenses } : {}),
     });
   }
 

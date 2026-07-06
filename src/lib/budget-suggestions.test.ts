@@ -286,6 +286,19 @@ describe("variable spend suggestions", () => {
     expect(cat.suggested).toBe(100);
   });
 
+  it("carries the category's top expenses onto the typical item so the UI can show what's behind the number", () => {
+    const topExpenses = [
+      { description: "WHOLE FOODS", total: 610.4, count: 9 },
+      { description: "TRADER JOES", total: 280.15, count: 6 },
+    ];
+    const res = buildBudgetSuggestions({
+      rules: [],
+      detected: [],
+      variableSpend: [{ categoryId: "cat-groceries", monthlyTotals: [200, 250, 300, 220, 0, 240], topExpenses }],
+    });
+    expect(res.categories[0].items[0].topExpenses).toEqual(topExpenses);
+  });
+
   it("ignores stale recurring charges when computing the recurring total to subtract", () => {
     const res = buildBudgetSuggestions({
       monthISO: "2026-07-01",

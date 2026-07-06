@@ -100,6 +100,16 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
     // total itself, leaving only the variable residual.
     const windowStart = startOfUTCMonth(addUTCMonths(monthStart, -6));
     const totalsByCat = new Map<string, number[]>();
+    // Per-category merchant rollup of the non-recurring spend in the same
+    // window, so the UI can show what's behind a typical-spending amount.
+    // Skips rule-linked transactions and descriptions the rules/detector
+    // already claim as recurring.
+    const recurringDescs = new Set(
+      [...rules.map((r) => r.description), ...detected.map((d) => d.description)].map((d) =>
+        d.trim().toUpperCase(),
+      ),
+    );
+    const merchantsByCat = new Map<string, Map<string, { description: string; totalCents: number; count: number }>>();
     for (const t of txns) {
       if (t.type !== "EXPENSE" || !t.categoryId) continue;
       if (t.date < windowStart || t.date >= monthStart) continue;
@@ -108,10 +118,23 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
         (t.date.getUTCMonth() - windowStart.getUTCMonth());
       const totals = totalsByCat.get(t.categoryId) ?? totalsByCat.set(t.categoryId, [0, 0, 0, 0, 0, 0]).get(t.categoryId)!;
       totals[monthIdx] += toNumber(t.amount);
+
+      const descKey = t.description.trim().toUpperCase();
+      if (t.recurringRuleId || recurringDescs.has(descKey)) continue;
+      const merchants =
+        merchantsByCat.get(t.categoryId) ?? merchantsByCat.set(t.categoryId, new Map()).get(t.categoryId)!;
+      const entry = merchants.get(descKey) ?? { description: t.description, totalCents: 0, count: 0 };
+      entry.totalCents += toCents(toNumber(t.amount));
+      entry.count += 1;
+      merchants.set(descKey, entry);
     }
     const variableSpend = [...totalsByCat.entries()].map(([categoryId, monthlyTotals]) => ({
       categoryId,
       monthlyTotals,
+      topExpenses: [...(merchantsByCat.get(categoryId)?.values() ?? [])]
+        .sort((a, b) => b.totalCents - a.totalCents)
+        .slice(0, 5)
+        .map((m) => ({ description: m.description, total: fromCents(m.totalCents), count: m.count })),
     }));
 
     const suggestions = buildBudgetSuggestions({
