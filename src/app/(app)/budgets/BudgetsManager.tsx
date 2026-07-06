@@ -79,7 +79,7 @@ export function BudgetsManager({
       {copyError && <p className="mb-3 text-sm text-expense">{copyError}</p>}
 
       {/* Summary */}
-      <div className="mb-5 grid gap-4 sm:grid-cols-3">
+      <div className="stagger mb-5 grid gap-4 sm:grid-cols-3">
         <StatCard label="Budgeted" value={formatUSD(totalBudget)} hint={`${budgeted.length} categor${budgeted.length === 1 ? "y" : "ies"}`} />
         <StatCard label="Spent (budgeted)" value={formatUSD(budgetedSpent)} tone="expense" hint={`${formatUSD(totalSpent)} across all categories`} />
         <StatCard
@@ -217,7 +217,7 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
       </div>
       {hasBudget && (
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface2">
-          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+          <div className="bar-fill h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
         </div>
       )}
     </li>
