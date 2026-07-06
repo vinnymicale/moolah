@@ -94,6 +94,11 @@ describe("getBudgetSuggestionsAction", () => {
     const fun = res.data.categories.find((c) => c.categoryId === "cat-fun");
     expect(fun).toMatchObject({ name: "Fun", currentLimit: 0, suggested: 12 });
     expect(fun!.items[0]).toMatchObject({ source: "detected" });
+
+    // Last-6-month spend history (oldest first) rides along for sparklines
+    // and coverage: Spotify hit Mar-Jun, Bills had no transactions at all.
+    expect(fun!.recentTotals).toEqual([0, 0, 11.99, 11.99, 11.99, 11.99]);
+    expect(bills!.recentTotals).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
   it("skips detected charges already covered by a rule description", async () => {

@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { isDemoMode } from "@/lib/demo-guard";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
-import { toNumber } from "@/lib/money";
+import { toNumber, toCents, fromCents } from "@/lib/money";
 import { isoDay, parseISODay, startOfUTCMonth, addUTCMonths } from "@/lib/dates";
 import { detectRecurringCandidates } from "@/lib/recurring-suggestions";
 import {
@@ -134,6 +134,9 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
         color: cat.color,
         icon: cat.icon,
         currentLimit: limitByCat.get(s.categoryId) ?? 0,
+        recentTotals: (totalsByCat.get(s.categoryId) ?? [0, 0, 0, 0, 0, 0]).map(
+          (t) => fromCents(toCents(t)),
+        ),
       });
     }
 
