@@ -173,7 +173,7 @@ export default async function DashboardPage() {
                         </span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }} />
+                        <div className="bar-fill h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }} />
                       </div>
                     </li>
                   );
@@ -266,7 +266,7 @@ export default async function DashboardPage() {
                         <div className="h-1.5 overflow-hidden rounded-full bg-surface2">
                           {(() => {
                             const fill = complete ? "var(--income)" : g.color;
-                            return <div className="h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }} />;
+                            return <div className="bar-fill h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }} />;
                           })()}
                         </div>
                       </li>

@@ -64,7 +64,7 @@ export function BudgetYearView({
                   </div>
                   {m.budget > 0 && (
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface2">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? "var(--expense)" : "var(--income)" }} />
+                      <div className="bar-fill h-full rounded-full" style={{ width: `${pct}%`, background: over ? "var(--expense)" : "var(--income)" }} />
                     </div>
                   )}
                 </Link>

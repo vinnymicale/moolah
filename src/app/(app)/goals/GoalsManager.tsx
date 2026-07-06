@@ -42,7 +42,7 @@ export function GoalsManager({ goals }: { goals: SavingsGoalDTO[] }) {
           description="Create a goal like an emergency fund, a vacation, or a down payment, and track your progress toward it."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="stagger grid gap-4 sm:grid-cols-2">
           {goals.map((g) => (
             <GoalCard key={g.id} goal={g} onEdit={() => setEditing(g)} onContribute={() => setContributing(g)} />
           ))}
@@ -87,7 +87,7 @@ function GoalCard({ goal, onEdit, onContribute }: { goal: SavingsGoalDTO; onEdit
         <span className="text-xs text-muted">of {formatUSD(goal.targetAmount)} · {Math.round(pct)}%</span>
       </div>
       <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface2">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: complete ? "var(--income)" : goal.color }} />
+        <div className="bar-fill h-full rounded-full transition-all" style={{ width: `${pct}%`, background: complete ? "var(--income)" : goal.color }} />
       </div>
     </div>
   );

@@ -357,7 +357,7 @@ export function TrendsCharts({ reports }: { reports: Reports }) {
                   <div className="h-2 overflow-hidden rounded-full bg-surface2">
                     {/* Subtle same-hue gradient gives the fill a little depth. */}
                     <div
-                      className="h-full rounded-full"
+                      className="bar-fill h-full rounded-full"
                       style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 80%, #000) 0%, ${fill} 100%)` }}
                     />
                   </div>

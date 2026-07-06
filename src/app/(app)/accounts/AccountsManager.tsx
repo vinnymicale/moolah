@@ -23,7 +23,7 @@ export function AccountsManager({ accounts, snapshots }: { accounts: AccountDTO[
         </button>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="stagger grid gap-5 lg:grid-cols-2">
         <AccountGroup
           title="Assets"
           accounts={assets}
