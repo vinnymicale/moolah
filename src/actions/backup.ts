@@ -5,7 +5,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/demo-guard";
 import { encryptSecret } from "@/lib/crypto";
-import { runScheduledBackupForUser } from "@/lib/backup/run";
+import { runScheduledBackupForUser, performBackup } from "@/lib/backup/run";
+import { LocalDestination } from "@/lib/backup/local";
 import { cronFor, isValidSchedule, type BackupSchedule } from "@/lib/backup/schedule";
 
 const DESTINATIONS = ["local", "dropbox", "gdrive"];
@@ -103,6 +104,27 @@ export async function runBackupNowAction() {
     return { ok: true as const, name: result.name, pruned: result.pruned.length };
   } catch (e) {
     revalidatePath("/settings");
+    return { ok: false as const, error: e instanceof Error ? e.message : "Backup failed." };
+  }
+}
+
+// Ad-hoc backup straight to the local folder, regardless of which destination
+// the schedule is configured for. Skips the lastRun* bookkeeping on purpose:
+// that status reflects the scheduled destination, and a quick local dump
+// shouldn't overwrite a "gdrive failed" message the user still needs to see.
+export async function runLocalBackupNowAction() {
+  if (isDemoMode()) return { ok: false as const, error: "Not available in demo mode." };
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+
+  try {
+    const config = await prisma.backupConfig.findUnique({
+      where: { userId: session.user.id },
+      select: { keepCount: true },
+    });
+    const result = await performBackup(new LocalDestination(), config?.keepCount ?? 7);
+    return { ok: true as const, name: result.name, pruned: result.pruned.length };
+  } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Backup failed." };
   }
 }
