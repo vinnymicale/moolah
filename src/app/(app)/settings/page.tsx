@@ -17,7 +17,7 @@ const DEMO_MODE = process.env.DEMO_MODE === "true";
 export default async function SettingsPage() {
   if (DEMO_MODE) {
     return (
-      <div className="mx-auto max-w-2xl space-y-5">
+      <div className="stagger mx-auto max-w-2xl space-y-5">
         <PageHeader title="Settings" subtitle="Demo mode — settings are read-only." />
         <section className="card p-5">
           <h2 className="mb-1 font-semibold">Demo mode</h2>
@@ -82,7 +82,7 @@ export default async function SettingsPage() {
   const envFallback = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="stagger mx-auto max-w-2xl space-y-5">
       <PageHeader title="Settings" subtitle="Manage your data, exports, and integrations." />
 
       <section className="card p-5">

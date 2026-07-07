@@ -18,7 +18,7 @@ export default async function TrendsPage() {
   const change = latestNet - firstNet;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="stagger mx-auto max-w-5xl">
       <PageHeader title="Trends" subtitle={`Insights for ${reports.currentMonthLabel}.`} />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
