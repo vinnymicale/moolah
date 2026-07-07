@@ -23,7 +23,7 @@ export default async function CategoriesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="stagger mx-auto max-w-5xl">
       <PageHeader title="Categories" subtitle="Organize how you classify income and spending." />
       <CategoriesManager categories={categories} />
       {!DEMO_MODE && <RulesCard rules={rules} categories={categories} accounts={accounts} />}

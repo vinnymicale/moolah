@@ -10,7 +10,7 @@ const DEMO_MODE = process.env.DEMO_MODE === "true";
 export default async function RecurringPage() {
   if (DEMO_MODE) {
     return (
-      <div className="mx-auto max-w-3xl">
+      <div className="stagger mx-auto max-w-3xl">
         <PageHeader title="Recurring" subtitle="Paychecks, bills and subscriptions that repeat automatically on your calendar." />
         <RecurringManager rules={DEMO_RECURRING} accounts={DEMO_ACCOUNTS} categories={DEMO_CATEGORIES} suggestions={DEMO_SUGGESTIONS} />
       </div>
@@ -26,7 +26,7 @@ export default async function RecurringPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="stagger mx-auto max-w-3xl">
       <PageHeader title="Recurring" subtitle="Paychecks, bills and subscriptions that repeat automatically on your calendar." />
       <RecurringManager rules={rules} accounts={accounts} categories={categories} suggestions={suggestions} />
     </div>

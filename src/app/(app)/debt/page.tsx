@@ -12,7 +12,7 @@ export default async function DebtPage() {
   const debts = accounts.filter((a) => LIABILITY_TYPES.includes(a.type) && a.currentBalance > 0);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="stagger mx-auto max-w-4xl">
       <PageHeader title="Debt payoff" subtitle="Plan your route to zero with avalanche or snowball." />
       {debts.length === 0 ? (
         <EmptyState

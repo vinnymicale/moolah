@@ -50,7 +50,7 @@ export default async function NetWorthPage() {
   const warn = goesNegative || fallsSharply;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="stagger mx-auto max-w-5xl">
       <PageHeader title="Net Worth" subtitle="Your assets minus liabilities, tracked over time." />
 
       {warn && (

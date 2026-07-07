@@ -30,7 +30,7 @@ export default async function CalendarPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="stagger mx-auto max-w-6xl">
       <CalendarView
         data={data}
         accounts={accounts}

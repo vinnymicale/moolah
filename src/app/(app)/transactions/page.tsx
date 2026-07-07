@@ -48,7 +48,7 @@ export default async function TransactionsPage({
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="stagger mx-auto max-w-4xl">
       <PageHeader title="Transactions" subtitle="Search, filter and export your activity." />
       <TransactionsList
         txnPage={txnPage}
