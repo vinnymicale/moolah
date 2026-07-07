@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Play } from "lucide-react";
-import { saveBackupConfigAction, runBackupNowAction } from "@/actions/backup";
+import { Check, HardDrive, Play } from "lucide-react";
+import {
+  saveBackupConfigAction,
+  runBackupNowAction,
+  runLocalBackupNowAction,
+} from "@/actions/backup";
 import type { BackupSchedule } from "@/lib/backup/schedule";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -59,6 +63,7 @@ export function ScheduledBackupForm({
   // Live "Run now" result, separate from the persisted last-run status below.
   const [runResult, setRunResult] = useState<string | null>(null);
   const [running, startRun] = useTransition();
+  const [runningLocal, startLocalRun] = useTransition();
 
   const destReady = DESTINATIONS.find((d) => d.value === destination)?.ready ?? false;
 
@@ -108,6 +113,24 @@ export function ScheduledBackupForm({
         res.pruned > 0
           ? `Saved ${res.name} (pruned ${res.pruned} old ${res.pruned === 1 ? "copy" : "copies"}).`
           : `Saved ${res.name}.`,
+      );
+    });
+
+  // Local backup regardless of the destination dropdown, so a quick on-server
+  // copy doesn't require flipping the schedule away from Google Drive.
+  const runLocalNow = () =>
+    startLocalRun(async () => {
+      setError(null);
+      setRunResult(null);
+      const res = await runLocalBackupNowAction();
+      if (!res.ok) {
+        setError(res.error ?? "Backup failed.");
+        return;
+      }
+      setRunResult(
+        res.pruned > 0
+          ? `Saved ${res.name} to the local folder (pruned ${res.pruned} old ${res.pruned === 1 ? "copy" : "copies"}).`
+          : `Saved ${res.name} to the local folder.`,
       );
     });
 
@@ -261,9 +284,14 @@ export function ScheduledBackupForm({
           {saved ? <Check size={16} /> : null}
           {pending ? "Saving…" : saved ? "Saved" : "Save schedule"}
         </button>
-        <button onClick={runNow} disabled={running || !destReady} className="btn-ghost">
+        <button onClick={runNow} disabled={running || runningLocal || !destReady} className="btn-ghost">
           <Play size={14} /> {running ? "Backing up…" : "Run backup now"}
         </button>
+        {destination !== "local" && (
+          <button onClick={runLocalNow} disabled={running || runningLocal} className="btn-ghost">
+            <HardDrive size={14} /> {runningLocal ? "Backing up…" : "Back up to local folder"}
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-expense">{error}</p>}

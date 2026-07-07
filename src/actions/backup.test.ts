@@ -24,8 +24,13 @@ vi.mock("@/lib/crypto", () => ({
 const { rescheduleUser } = vi.hoisted(() => ({ rescheduleUser: vi.fn() }));
 vi.mock("@/lib/backup/scheduler", () => ({ rescheduleUser }));
 
-const { runScheduledBackupForUser } = vi.hoisted(() => ({ runScheduledBackupForUser: vi.fn() }));
-vi.mock("@/lib/backup/run", () => ({ runScheduledBackupForUser }));
+const { runScheduledBackupForUser, performBackup } = vi.hoisted(() => ({
+  runScheduledBackupForUser: vi.fn(),
+  performBackup: vi.fn(),
+}));
+vi.mock("@/lib/backup/run", () => ({ runScheduledBackupForUser, performBackup }));
+
+vi.mock("@/lib/backup/local", () => ({ LocalDestination: class {} }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -33,7 +38,8 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { saveBackupConfigAction, runBackupNowAction } from "./backup";
+import { saveBackupConfigAction, runBackupNowAction, runLocalBackupNowAction } from "./backup";
+import { LocalDestination } from "@/lib/backup/local";
 import { prisma } from "@/lib/prisma";
 
 const findUnique = vi.mocked(prisma.backupConfig.findUnique);
@@ -200,5 +206,51 @@ describe("runBackupNowAction", () => {
     runScheduledBackupForUser.mockRejectedValue(new Error("disk full"));
     const res = await runBackupNowAction();
     expect(res).toEqual({ ok: false, error: "disk full" });
+  });
+});
+
+describe("runLocalBackupNowAction", () => {
+  it("is blocked in demo mode", async () => {
+    demoMode.value = true;
+    const res = await runLocalBackupNowAction();
+    expect(res).toEqual({ ok: false, error: "Not available in demo mode." });
+    expect(performBackup).not.toHaveBeenCalled();
+  });
+
+  it("fails when not signed in", async () => {
+    session.value = null;
+    expect(await runLocalBackupNowAction()).toEqual({ ok: false, error: "Not signed in." });
+  });
+
+  it("backs up to a LocalDestination with the configured keepCount", async () => {
+    findUnique.mockResolvedValue({ keepCount: 30 } as never);
+    performBackup.mockResolvedValue({
+      name: "moolah-backup-2026-07-07_10-00-00.json",
+      bytes: 456,
+      pruned: ["old.json"],
+    });
+    const res = await runLocalBackupNowAction();
+    expect(res).toEqual({
+      ok: true,
+      name: "moolah-backup-2026-07-07_10-00-00.json",
+      pruned: 1,
+    });
+    const [dest, keepCount] = performBackup.mock.calls[0];
+    expect(dest).toBeInstanceOf(LocalDestination);
+    expect(keepCount).toBe(30);
+  });
+
+  it("defaults keepCount to 7 with no config row", async () => {
+    findUnique.mockResolvedValue(null as never);
+    performBackup.mockResolvedValue({ name: "n.json", bytes: 1, pruned: [] });
+    await runLocalBackupNowAction();
+    expect(performBackup.mock.calls[0][1]).toBe(7);
+  });
+
+  it("maps a thrown error to a failure result", async () => {
+    findUnique.mockResolvedValue(null as never);
+    performBackup.mockRejectedValue(new Error("EACCES: permission denied"));
+    const res = await runLocalBackupNowAction();
+    expect(res).toEqual({ ok: false, error: "EACCES: permission denied" });
   });
 });

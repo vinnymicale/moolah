@@ -53,7 +53,17 @@ async function accessToken(creds: GDriveCredentials): Promise<string> {
     body,
   });
   if (!res.ok) {
-    throw new Error(`Google token exchange failed (${res.status}): ${await safeText(res)}`);
+    const detail = await safeText(res);
+    // invalid_grant means the refresh token itself is dead (revoked, or expired
+    // after 7 days because the OAuth consent screen is still in "Testing").
+    // Retrying can't fix that, so point the user at the actual remedy.
+    if (detail.includes("invalid_grant")) {
+      throw new Error(
+        "Google Drive refresh token has expired or been revoked. Generate a new refresh token and paste it in Settings. " +
+          "If this keeps happening, your OAuth consent screen is in \"Testing\" mode, which expires tokens after 7 days - publish it to Production to get long-lived tokens.",
+      );
+    }
+    throw new Error(`Google token exchange failed (${res.status}): ${detail}`);
   }
   const json = (await res.json()) as { access_token?: string };
   if (!json.access_token) throw new Error("Google token response had no access_token.");
