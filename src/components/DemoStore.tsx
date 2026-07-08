@@ -62,6 +62,9 @@ export interface DemoMutations {
   dismissSuggestion: (key: string) => void;
   // Budgets
   setBudget: (categoryId: string, limit: number) => void;
+  setBudgetRollover: (categoryId: string, rollover: boolean) => void;
+  clearBudgets: () => void;
+  resetBudgets: () => void;
   // Goals
   addGoal: (g: SavingsGoalDTO) => void;
   updateGoal: (id: string, patch: Partial<SavingsGoalDTO>) => void;
@@ -191,19 +194,36 @@ export function DemoStoreProvider({
     setSuggestions((prev) => prev.filter((s) => s.key !== key));
   }, []);
 
-  // Budgets
+  // Budgets. Every category keeps a line (mirroring getBudgetMonth, which
+  // returns budgeted and unbudgeted categories alike) — a zero limit marks the
+  // line unbudgeted rather than dropping it, so its actual spend stays visible.
   const setBudget = useCallback((categoryId: string, limit: number) => {
     setBudgets((prev) => {
       const exists = prev.find((b) => b.categoryId === categoryId);
       if (exists) {
-        if (limit <= 0) return prev.filter((b) => b.categoryId !== categoryId);
-        return prev.map((b) => b.categoryId === categoryId ? { ...b, limit, effectiveLimit: limit + b.carryover } : b);
+        return prev.map((b) => {
+          if (b.categoryId !== categoryId) return b;
+          if (limit <= 0) return { ...b, limit: 0, effectiveLimit: 0, rollover: false, carryover: 0 };
+          return { ...b, limit, effectiveLimit: limit + b.carryover };
+        });
       }
       const cat = categories.find((c) => c.id === categoryId);
-      if (!cat) return prev;
+      if (!cat || limit <= 0) return prev;
       return [...prev, { categoryId, name: cat.name, color: cat.color, icon: cat.icon, limit, actual: 0, rollover: false, carryover: 0, effectiveLimit: limit }];
     });
   }, [categories]);
+
+  const setBudgetRollover = useCallback((categoryId: string, rollover: boolean) => {
+    setBudgets((prev) => prev.map((b) => (b.categoryId === categoryId ? { ...b, rollover } : b)));
+  }, []);
+
+  const clearBudgets = useCallback(() => {
+    setBudgets((prev) => prev.map((b) => ({ ...b, limit: 0, effectiveLimit: 0, rollover: false, carryover: 0 })));
+  }, []);
+
+  const resetBudgets = useCallback(() => {
+    setBudgets(initialData.budgets);
+  }, [initialData.budgets]);
 
   // Goals
   const addGoal = useCallback((g: SavingsGoalDTO) => {
@@ -232,7 +252,7 @@ export function DemoStoreProvider({
     addAccount, updateAccount, deleteAccount,
     addCategory, updateCategory, deleteCategory,
     addRecurring, updateRecurring, deleteRecurring, dismissSuggestion,
-    setBudget,
+    setBudget, setBudgetRollover, clearBudgets, resetBudgets,
     addGoal, updateGoal, deleteGoal, contributeToGoal,
   };
 

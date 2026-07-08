@@ -2,16 +2,18 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange, RefreshCw, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { SuggestBudgetModal } from "./SuggestBudgetModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { StatCard } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
-import { setBudgetAction, setBudgetRolloverAction, copyBudgetsAction } from "@/actions/budgets";
+import { useConfirmAction } from "@/lib/useConfirmAction";
+import { useDemoStoreOrNull } from "@/components/DemoStore";
+import { setBudgetAction, setBudgetRolloverAction, copyBudgetsAction, clearMonthBudgetsAction } from "@/actions/budgets";
 import type { BudgetLineDTO } from "@/lib/queries";
 
 export function BudgetsManager({
-  lines,
+  lines: serverLines,
   monthISO,
   monthTitle,
   prevMonthISO,
@@ -32,6 +34,9 @@ export function BudgetsManager({
   const [copyPending, startCopy] = useTransition();
   const [copyError, setCopyError] = useState<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  // In demo mode budgets live in the client store so edits show up in-session.
+  const demo = useDemoStoreOrNull();
+  const lines = demo ? demo.budgets : serverLines;
 
   const budgeted = useMemo(
     () => lines.filter((l) => l.limit > 0).sort((a, b) => b.limit - a.limit),
@@ -47,9 +52,27 @@ export function BudgetsManager({
   const copyPrev = () =>
     startCopy(async () => {
       setCopyError(null);
+      if (demo) {
+        // The demo dataset has one month of budgets; "copy" restores the seed.
+        demo.resetBudgets();
+        return;
+      }
       const res = await copyBudgetsAction({ fromMonth: prevMonthFull, toMonth: monthISO });
       if (!res.ok) setCopyError(res.error);
     });
+
+  const [clearPending, startClear] = useTransition();
+  const confirmClear = useConfirmAction(() =>
+    startClear(async () => {
+      setCopyError(null);
+      if (demo) {
+        demo.clearBudgets();
+        return;
+      }
+      const res = await clearMonthBudgetsAction({ month: monthISO });
+      if (!res.ok) setCopyError(res.error);
+    }),
+  );
 
   return (
     <div>
@@ -78,6 +101,17 @@ export function BudgetsManager({
           <button onClick={() => setSuggestOpen(true)} className="btn-ghost h-9 text-sm" title="Suggest a budget from recurring charges">
             <Sparkles size={15} /> <span className="hidden sm:inline">Suggest</span>
           </button>
+          {budgeted.length > 0 && (
+            <button
+              onClick={confirmClear.trigger}
+              disabled={clearPending}
+              className={`btn-ghost h-9 text-sm ${confirmClear.armed ? "text-expense" : ""}`}
+              title={`Delete every budget for ${monthTitle}`}
+            >
+              {clearPending ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+              <span className="hidden sm:inline">{confirmClear.armed ? "Click to confirm" : "Clear"}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -138,6 +172,7 @@ export function BudgetsManager({
 }
 
 function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }) {
+  const demo = useDemoStoreOrNull();
   const [value, setValue] = useState(line.limit > 0 ? String(line.limit) : "");
   const [pending, start] = useTransition();
   const [rolloverPending, startRollover] = useTransition();
@@ -155,16 +190,23 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
     const next = Math.max(0, Number(value.replace(/[^0-9.]/g, "")) || 0);
     if (next === line.limit) return;
     start(async () => {
-      const res = await setBudgetAction({ categoryId: line.categoryId, month: monthISO, limit: next });
-      if (res.ok) {
-        setJustSaved(true);
-        setTimeout(() => setJustSaved(false), 1500);
+      if (demo) {
+        demo.setBudget(line.categoryId, next);
+      } else {
+        const res = await setBudgetAction({ categoryId: line.categoryId, month: monthISO, limit: next });
+        if (!res.ok) return;
       }
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 1500);
     });
   };
 
   const toggleRollover = () =>
     startRollover(async () => {
+      if (demo) {
+        demo.setBudgetRollover(line.categoryId, !line.rollover);
+        return;
+      }
       await setBudgetRolloverAction({ categoryId: line.categoryId, month: monthISO, rollover: !line.rollover });
     });
 

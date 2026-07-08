@@ -69,6 +69,28 @@ export async function setBudgetRolloverAction(input: BudgetRolloverInput): Promi
   });
 }
 
+const clearMonthSchema = z.object({
+  month: z.string().min(1),
+});
+
+export type ClearMonthBudgetsInput = z.input<typeof clearMonthSchema>;
+
+/** Delete every category budget for a given month. */
+export async function clearMonthBudgetsAction(input: ClearMonthBudgetsInput): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const month = parseISODay(clearMonthSchema.parse(input).month);
+
+    const deleted = await prisma.budget.deleteMany({ where: { userId, month } });
+    if (deleted.count === 0) throw new UserError("No budgets set for this month.");
+
+    revalidatePath("/trends");
+    revalidatePath("/budgets");
+    revalidatePath("/");
+  });
+}
+
 const copySchema = z.object({
   fromMonth: z.string().min(1),
   toMonth: z.string().min(1),
