@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { useDemoStoreOrNull } from "@/components/DemoStore";
 import { formatUSD, toCents } from "@/lib/money";
 import { getBudgetSuggestionsAction, applyBudgetSuggestionsAction } from "@/actions/budget-suggestions";
 import type { SuggestedCategoryDTO } from "@/lib/budget-suggestions";
@@ -280,14 +281,23 @@ function SuggestContent({ onClose, monthISO }: { onClose: () => void; monthISO: 
     return { budgetCents, actualCents };
   }, [categories, rows]);
 
+  const demo = useDemoStoreOrNull();
+
   const apply = () =>
     startApply(async () => {
       setError(null);
-      const res = await applyBudgetSuggestionsAction({ month: monthISO, entries });
-      if (res.ok) {
-        localStorage.removeItem(storageKey(monthISO));
-        onClose();
-      } else setError(res.error);
+      if (demo) {
+        // Demo mode: apply to the in-memory store so the change is visible.
+        for (const e of entries) demo.setBudget(e.categoryId, e.limit);
+      } else {
+        const res = await applyBudgetSuggestionsAction({ month: monthISO, entries });
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+      }
+      localStorage.removeItem(storageKey(monthISO));
+      onClose();
     });
 
   if (loading) {

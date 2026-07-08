@@ -22,7 +22,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { setBudgetAction, copyBudgetsAction } from "./budgets";
+import { setBudgetAction, copyBudgetsAction, clearMonthBudgetsAction } from "./budgets";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 
@@ -50,6 +50,28 @@ describe("demo-mode guard", () => {
   it("copyBudgetsAction is a no-op success in demo mode", async () => {
     expect(await copyBudgetsAction({ fromMonth: "2026-05-01", toMonth: "2026-06-01" })).toEqual({ ok: true });
     expect(budget.findMany).not.toHaveBeenCalled();
+  });
+
+  it("clearMonthBudgetsAction is a no-op success in demo mode", async () => {
+    expect(await clearMonthBudgetsAction({ month: "2026-06-01" })).toEqual({ ok: true });
+    expect(budget.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("clearMonthBudgetsAction", () => {
+  it("deletes every budget in the month for the user", async () => {
+    budget.deleteMany.mockResolvedValue({ count: 3 } as never);
+    const result = await clearMonthBudgetsAction({ month: "2026-06-01" });
+    expect(result).toEqual({ ok: true });
+    expect(budget.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "u1", month: expect.any(Date) },
+    });
+  });
+
+  it("errors when the month has no budgets", async () => {
+    budget.deleteMany.mockResolvedValue({ count: 0 } as never);
+    const result = await clearMonthBudgetsAction({ month: "2026-06-01" });
+    expect(result).toEqual({ ok: false, error: "No budgets set for this month." });
   });
 });
 
