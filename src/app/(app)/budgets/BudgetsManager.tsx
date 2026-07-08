@@ -3,11 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Copy, Check, Loader2, CalendarRange, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Modal } from "@/components/Modal";
 import { SuggestBudgetModal } from "./SuggestBudgetModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { StatCard } from "@/components/ui-bits";
 import { formatUSD } from "@/lib/money";
-import { useConfirmAction } from "@/lib/useConfirmAction";
 import { useDemoStoreOrNull } from "@/components/DemoStore";
 import { setBudgetAction, setBudgetRolloverAction, copyBudgetsAction, clearMonthBudgetsAction } from "@/actions/budgets";
 import type { BudgetLineDTO } from "@/lib/queries";
@@ -62,7 +62,9 @@ export function BudgetsManager({
     });
 
   const [clearPending, startClear] = useTransition();
-  const confirmClear = useConfirmAction(() =>
+  const [clearOpen, setClearOpen] = useState(false);
+  const doClear = () => {
+    setClearOpen(false);
     startClear(async () => {
       setCopyError(null);
       if (demo) {
@@ -71,8 +73,8 @@ export function BudgetsManager({
       }
       const res = await clearMonthBudgetsAction({ month: monthISO });
       if (!res.ok) setCopyError(res.error);
-    }),
-  );
+    });
+  };
 
   return (
     <div>
@@ -102,14 +104,9 @@ export function BudgetsManager({
             <Sparkles size={15} /> <span className="hidden sm:inline">Suggest</span>
           </button>
           {budgeted.length > 0 && (
-            <button
-              onClick={confirmClear.trigger}
-              disabled={clearPending}
-              className={`btn-ghost h-9 text-sm ${confirmClear.armed ? "text-expense" : ""}`}
-              title={`Delete every budget for ${monthTitle}`}
-            >
+            <button onClick={() => setClearOpen(true)} disabled={clearPending} className="btn-ghost h-9 text-sm" title={`Delete every budget for ${monthTitle}`}>
               {clearPending ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-              <span className="hidden sm:inline">{confirmClear.armed ? "Click to confirm" : "Clear"}</span>
+              <span className="hidden sm:inline">Clear</span>
             </button>
           )}
         </div>
@@ -167,6 +164,20 @@ export function BudgetsManager({
       )}
 
       <SuggestBudgetModal open={suggestOpen} onClose={() => setSuggestOpen(false)} monthISO={monthISO} monthTitle={monthTitle} />
+
+      <Modal open={clearOpen} onClose={() => setClearOpen(false)} title="Clear budgets" widthClass="max-w-sm">
+        <p className="text-sm text-muted">
+          Delete all {budgeted.length} budget{budgeted.length === 1 ? "" : "s"} for {monthTitle}? Spending history is not affected.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={() => setClearOpen(false)} className="btn-ghost text-sm">
+            Cancel
+          </button>
+          <button onClick={doClear} className="btn-danger">
+            <Trash2 size={15} /> Clear {monthTitle}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
