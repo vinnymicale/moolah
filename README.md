@@ -32,10 +32,16 @@ Planned improvements, roughly in priority order:
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
 
-Recently shipped: the **rules & automation center** (one place to define rules — description
-contains, amount range, account, type — that auto-categorize, mark transfers, split by ratio, or
-clean up messy payee names, with a dry-run preview and a "run on existing transactions" backfill),
-the Net Worth page (automatic daily snapshots, a history chart, and a 12-month forecast),
+Recently shipped: a **UI redesign** (grouped Track / Plan / Insights nav with drag-reorder, a
+mobile bottom tab bar, a display typeface for headings, tabular-mono currency, and subtle entrance
+motion throughout), **budget suggestions** (a modal that proposes limits from your recurring charges
+and typical variable spending), **notifications** (digest alerts over ntfy or a webhook), **budget
+rollover**, a **transaction trash** with soft-delete/restore and a **duplicate finder**, a **command
+bar** (⌘K) for jump-to-page navigation and quick actions, and **PWA install** support. Before that:
+the **rules & automation center** (one place to define rules — description contains, amount range,
+account, type — that auto-categorize, mark transfers, split by ratio, or clean up messy payee names,
+with a dry-run preview and a "run on existing transactions" backfill), the Net Worth page (automatic
+daily snapshots, a history chart, and a 12-month forecast),
 [Docker support](#self-hosting-with-docker), the [read-only data API](#read-only-data-api),
 category splits, and [in-app backup
 restore](#backing-up-your-data-and-your-plaid-connections).
@@ -70,10 +76,21 @@ Have a request? Open an issue on GitHub.
   groceries, part household). Budgets, trends, and spending alerts count each split part under its
   own category, while the charge still totals once.
 - **CSV import** - drag-and-drop a bank CSV anywhere to review and import transactions.
+- **Trash & undo** - deletes are soft, not permanent. A trash drawer shows recently deleted
+  transactions to restore or remove for good. A **duplicate finder** on the Accounts page groups
+  identical copies (account, day, amount, type, description), keeps the oldest, and clears the rest -
+  and a **Re-import all** button rebinds transactions by content after a Plaid cursor reset instead
+  of duplicating them.
 
 ### Planning
 - **Budgets** - set monthly limits per category and track spent-vs-remaining, on the dashboard
-  and in trends.
+  and in trends. **Suggest budgets** proposes a starting set of limits from your detected recurring
+  charges (yearly charges land at full amount in their renewal month, and charges that stopped
+  recurring are flagged "possibly ended" and left out) plus a "typical variable spending" figure
+  from the median of the last six months. Each line links to the transactions behind it, and your
+  tweaks are remembered per month. **Rollover** carries a category's leftover forward into the next
+  month, **copy previous month** clones last month's limits, and **clear month** wipes them all in
+  two clicks.
 - **Savings goals** - track progress toward targets (emergency fund, vacation, down payment) with
   contributions and target dates.
 - **Debt payoff planner** - model **avalanche** (highest APR first) or **snowball** (smallest
@@ -98,14 +115,20 @@ Have a request? Open an issue on GitHub.
 - **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
   spending alerts (categories trending over their 3-month average), top payees, and net-worth
   milestone celebrations. Cards are drag-to-reorder.
+- **Notifications (optional)** - opt into a periodic digest (upcoming bills, over-budget categories,
+  spending alerts) delivered over [ntfy](https://ntfy.sh) or a webhook of your choice. A per-user
+  scheduler runs it on your instance; configure destinations and frequency in Settings. Best on an
+  always-on host.
 - **AI assistant (optional)** - bring your own Anthropic, OpenAI, or Gemini API key (Settings) and
   chat with your finances: "how much did I spend on dining out last month?", "add a $15.99/month
   Netflix expense", "set a $500 grocery budget". The key is encrypted at rest and never sent to
   the browser.
 
 ### Finding & exporting
-- **Global search (⌘K)** - a command palette to search your entire transaction history by name,
-  note, or amount from anywhere, with keyboard navigation.
+- **Command bar (⌘K)** - a command palette that searches your entire transaction history (by name,
+  note, or amount) and doubles as a launcher: jump to any page or fire a quick action (new
+  transaction, import CSV, open chat), all with keyboard navigation. Dashboard stat cards are
+  drill-through links too - net worth, income/spent, and savings rate each open their detail page.
 - **Powerful filtering** - multi-select filters (type, status, categories, accounts), custom date
   ranges, and named **saved filters** on the Transactions page.
 - **Data export** - download your full transaction history as CSV, filtered by date, account, or
@@ -120,9 +143,12 @@ Have a request? Open an issue on GitHub.
   "Run backup now" button and last-run status.
 
 ### Polished
-- **Extras** - dark mode, mobile-friendly, keyboard shortcuts, an email allow-list, and dates that
-  follow **your timezone** (not the server's). Recurrence / projection / debt-payoff / matching
-  math is unit-tested, with a Playwright e2e suite and CI on every push and PR.
+- **Extras** - dark mode, a mobile bottom-tab layout, **installable as a PWA** (web manifest and
+  icons), keyboard shortcuts, an email allow-list, and dates that follow **your timezone** (not the
+  server's). The interface uses a grouped sidebar (Track / Plan / Insights) you can drag to reorder,
+  a display typeface for headings, tabular-mono digits for currency, and light entrance motion that
+  respects "reduce motion". Recurrence / projection / debt-payoff / matching math is unit-tested,
+  with a Playwright e2e suite and CI on every push and PR.
 
 ---
 
@@ -170,7 +196,7 @@ A tour of the pages. _(Sample data - generated from the isolated `demo@example.c
 
 ## Quick start (local, zero cloud setup)
 
-You need **Node 20.9+** (the minimum for Next.js 16). No Docker or system Postgres required - a real
+You need **Node 22+**. No Docker or system Postgres required - a real
 Postgres is downloaded and run for you by
 [`embedded-postgres`](https://www.npmjs.com/package/embedded-postgres).
 
@@ -367,6 +393,24 @@ A Plaid access token is tied to your `PLAID_CLIENT_ID` + `PLAID_SECRET` + `PLAID
 computer or database, so you can move it to another machine and keep the same connections.
 **Restoring a saved token never costs a new Plaid item - only clicking "Connect a bank" does.**
 
+### Two things have to travel together
+
+Preserving your Plaid connections across a move takes **both** pieces below. Move the backup but
+not the key and the connections are technically there, yet every Plaid page errors because the app
+can't decrypt the credentials it needs to actually call Plaid.
+
+1. **The data** - the backup file (or `.pgdata/`). It carries each bank's `accessToken` in **plain
+   text**, so the tokens themselves restore fine on any machine, under any key.
+2. **The encryption key** - your per-user **Plaid API keys** (`PLAID_CLIENT_ID` / `PLAID_SECRET`)
+   and AI keys are stored **encrypted**, keyed off `ENCRYPTION_KEY` (or `AUTH_SECRET` if you never
+   set one). The app decrypts your Plaid secret on every sync, so if the new host can't decrypt it,
+   the access tokens are useless and Plaid pages fail. The key must match the source instance.
+
+So the rule is: **copy the backup *and* set the same `ENCRYPTION_KEY` / `AUTH_SECRET` on the new
+host before you restore.** (If your Plaid keys live only in `.env` as an instance-wide fallback,
+rather than per-user in Settings, they aren't encrypted in the database - just copy that `.env` and
+the key question is moot.) The full step-by-step is in the ⚠️ callout under Option A.
+
 ### Option A - one-command backup (recommended)
 
 Export everything to a single JSON file (all tables, including the Plaid tokens):
@@ -396,15 +440,21 @@ Your banks reconnect with **no new Plaid items** and no re-linking. (`db:restore
 empty database; pass `--force` to overwrite an existing one - the in-app restore always overwrites.)
 The `backups/` folder is gitignored.
 
-> ⚠️ **Moving to a new machine? The encryption key must travel with the backup.** Your per-user
-> Plaid API keys and AI keys are stored encrypted, keyed off `ENCRYPTION_KEY` - or `AUTH_SECRET` if
-> you never set `ENCRYPTION_KEY`. Restore that data under a *different* key and decryption fails,
-> surfacing as a "Something went wrong" error on the Accounts page (and anywhere Plaid is touched).
-> Before restoring on the new host, find the source's key (`grep -E 'ENCRYPTION_KEY|AUTH_SECRET'
-> .env`), set both `AUTH_SECRET` and `ENCRYPTION_KEY` to that value on the new instance, restart,
-> **then** restore. Setting a dedicated `ENCRYPTION_KEY` on both ends lets `AUTH_SECRET` rotate
-> independently. If the original key is lost, those secrets are unrecoverable - clear them and
-> re-enter your Plaid/AI keys from Settings.
+> ⚠️ **Moving to a new machine? Set the encryption key *before* you restore.** Restore the backup
+> under a *different* key and decryption of your Plaid/AI secrets fails, surfacing as a "Something
+> went wrong" error on the Accounts page (and anywhere Plaid is touched). The correct order on the
+> new host is:
+>
+> 1. On the **old** instance, read its key: `grep -E 'ENCRYPTION_KEY|AUTH_SECRET' .env`.
+> 2. On the **new** instance, set both `AUTH_SECRET` and `ENCRYPTION_KEY` to that value in `.env`
+>    (Docker/Unraid: the same two environment variables), and restart so the new values take effect.
+> 3. **Then** restore the backup (in-app or `npm run db:restore`).
+>
+> Setting a dedicated `ENCRYPTION_KEY` on both ends lets `AUTH_SECRET` rotate independently later.
+> If the original key is truly lost, those encrypted secrets are unrecoverable - restore anyway
+> (your data and access tokens come back), then clear and re-enter your Plaid/AI keys from Settings;
+> because the access tokens are intact, re-entering the API keys reconnects the *same* Plaid items
+> with **no new billed links**.
 
 ### Option B - raw data-directory copy
 
@@ -502,11 +552,12 @@ src/
                    backup (download/import), v1 (read-only API), chat (AI assistant), health
   actions/         server actions (mutations)
   lib/             prisma, auth/session, money, dates, recurrence, projection,
-                   calendar, reports, queries, plaid-sync, debt-payoff, milestones,
-                   snapshots (net-worth history), networth-forecast,
-                   backup (full export/restore), crypto (secret encryption), api-auth (token auth)
-  components/      AppChrome, CommandPalette, MultiSelect, TransactionModal,
-                   Modal, charts, icons
+                   calendar, reports, queries/, plaid-sync, debt-payoff, milestones,
+                   budget-suggestions, alerts (notification digest), snapshots (net-worth history),
+                   networth-forecast, backup/ (full export/restore, Google Drive),
+                   crypto (secret encryption), api-auth (token auth)
+  components/      AppChrome, Sidebar, CommandPalette, MultiSelect, TransactionModal,
+                   Modal, Toast, AnimatedNumber, Sparkline, charts, icons
 ```
 
 ---
