@@ -2,8 +2,14 @@ import type { TriggerDef, TriggerGroup } from "../types";
 import { plaidReauth } from "./plaid-reauth";
 import { syncFailing } from "./sync-failing";
 import { accountStale } from "./account-stale";
+import { budgetExceeded } from "./budget-exceeded";
+import { budgetThreshold } from "./budget-threshold";
+import { budgetPace } from "./budget-pace";
 
-export const TRIGGERS: TriggerDef[] = [plaidReauth, syncFailing, accountStale];
+export const TRIGGERS: TriggerDef[] = [
+  plaidReauth, syncFailing, accountStale,
+  budgetExceeded, budgetThreshold, budgetPace,
+];
 
 export const TRIGGER_BY_ID = new Map(TRIGGERS.map((t) => [t.id, t]));
 
