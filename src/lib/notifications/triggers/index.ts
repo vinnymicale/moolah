@@ -14,12 +14,14 @@ import { newMerchant } from "./new-merchant";
 import { lowBalance } from "./low-balance";
 import { ccUtilization } from "./cc-utilization";
 import { incomeReceived } from "./income-received";
+import { digest } from "./digest";
 
 export const TRIGGERS: TriggerDef[] = [
   plaidReauth, syncFailing, accountStale,
   budgetExceeded, budgetThreshold, budgetPace,
   billDue, ccDue, recurringPriceChange, recurringMissing,
   largeTransaction, newMerchant, lowBalance, ccUtilization, incomeReceived,
+  digest,
 ];
 
 export const TRIGGER_BY_ID = new Map(TRIGGERS.map((t) => [t.id, t]));
