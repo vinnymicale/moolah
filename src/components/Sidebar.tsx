@@ -21,6 +21,8 @@ export interface SidebarProps {
   user: { name?: string | null; email?: string | null; image?: string | null };
   authBypass: boolean;
   demoMode?: boolean;
+  /** Unread notification count for the /notifications badge. */
+  unreadCount?: number;
   nav: NavItem[];
   isActive: (href: string) => boolean;
   customized: boolean;
@@ -41,6 +43,7 @@ export function Sidebar({
   user,
   authBypass,
   demoMode = false,
+  unreadCount = 0,
   nav,
   isActive,
   customized,
@@ -116,6 +119,14 @@ export function Sidebar({
           )}
           <Icon size={18} />
           {!compact && <span className="flex-1">{item.label}</span>}
+          {item.href === "/notifications" && unreadCount > 0 && !compact && (
+            <span className="rounded-full bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+          {item.href === "/notifications" && unreadCount > 0 && compact && (
+            <span aria-hidden className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-brand" />
+          )}
           {!compact && <GripVertical size={14} className="cursor-grab text-muted opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />}
         </Link>
       </div>

@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { getAccounts, getCategories } from "@/lib/queries";
+import { getUnreadNotificationCount } from "@/lib/queries/notifications";
 import { AppChrome } from "@/components/AppChrome";
 import { AutoPlaidSync } from "./AutoPlaidSync";
 import { DemoStoreProvider } from "@/components/DemoStore";
@@ -39,9 +40,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const ctx = await requireUser();
-  const [accounts, categories] = await Promise.all([
+  const [accounts, categories, unreadCount] = await Promise.all([
     getAccounts(ctx.userId),
     getCategories(ctx.userId),
+    getUnreadNotificationCount(ctx.userId),
   ]);
 
   return (
@@ -50,6 +52,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       accounts={accounts}
       categories={categories}
       authBypass={process.env.AUTH_BYPASS === "true"}
+      unreadCount={unreadCount}
     >
       <AutoPlaidSync />
       {children}
