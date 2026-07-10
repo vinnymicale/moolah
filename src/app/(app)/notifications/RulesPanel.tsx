@@ -16,6 +16,7 @@ export function RulesPanel({
   groups,
   accounts,
   categories,
+  readOnly = false,
 }: {
   rules: RuleDTO[];
   channels: ChannelDTO[];
@@ -23,6 +24,7 @@ export function RulesPanel({
   groups: { id: string; label: string }[];
   accounts: OptionItem[];
   categories: OptionItem[];
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -46,11 +48,19 @@ export function RulesPanel({
         <p className="rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-warning">{error}</p>
       )}
 
-      <div className="flex justify-end">
-        <button onClick={() => setEditing("new")} className="btn-primary text-sm">
-          <Plus size={15} /> Add rule
-        </button>
-      </div>
+      {readOnly && (
+        <p className="rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-muted">
+          This is a read-only preview. Editing rules and sending notifications are disabled in the demo.
+        </p>
+      )}
+
+      {!readOnly && (
+        <div className="flex justify-end">
+          <button onClick={() => setEditing("new")} className="btn-primary text-sm">
+            <Plus size={15} /> Add rule
+          </button>
+        </div>
+      )}
 
       {rules.length === 0 && (
         <div className="card p-8 text-center text-sm text-muted">
@@ -76,7 +86,7 @@ export function RulesPanel({
                       <input
                         type="checkbox"
                         checked={rule.enabled}
-                        disabled={pending}
+                        disabled={pending || readOnly}
                         onChange={(e) => act(() => setRuleEnabledAction(rule.id, e.target.checked))}
                         className="h-4 w-4 accent-current"
                         aria-label={`Enable ${rule.name}`}
@@ -90,42 +100,46 @@ export function RulesPanel({
                         {meta?.label ?? rule.trigger} · {channel ? `Discord: ${channel.name}` : "In-app only"}
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        setTestedId(null);
-                        act(async () => {
-                          const res = await testRuleAction(rule.id);
-                          if (res.ok) setTestedId(rule.id);
-                          return res;
-                        });
-                      }}
-                      disabled={pending}
-                      className="btn-ghost h-8 px-2 text-xs text-muted"
-                      title="Send a test notification"
-                    >
-                      <Send size={13} /> {testedId === rule.id ? "Sent" : "Test"}
-                    </button>
-                    <button
-                      onClick={() => setEditing(rule)}
-                      className="btn-ghost h-8 w-8 p-0!"
-                      title="Edit rule"
-                      aria-label={`Edit ${rule.name}`}
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete rule "${rule.name}"? Its history stays in the inbox.`)) {
-                          act(() => deleteRuleAction(rule.id));
-                        }
-                      }}
-                      disabled={pending}
-                      className="btn-ghost h-8 w-8 p-0! text-muted"
-                      title="Delete rule"
-                      aria-label={`Delete ${rule.name}`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {!readOnly && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setTestedId(null);
+                            act(async () => {
+                              const res = await testRuleAction(rule.id);
+                              if (res.ok) setTestedId(rule.id);
+                              return res;
+                            });
+                          }}
+                          disabled={pending}
+                          className="btn-ghost h-8 px-2 text-xs text-muted"
+                          title="Send a test notification"
+                        >
+                          <Send size={13} /> {testedId === rule.id ? "Sent" : "Test"}
+                        </button>
+                        <button
+                          onClick={() => setEditing(rule)}
+                          className="btn-ghost h-8 w-8 p-0!"
+                          title="Edit rule"
+                          aria-label={`Edit ${rule.name}`}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete rule "${rule.name}"? Its history stays in the inbox.`)) {
+                              act(() => deleteRuleAction(rule.id));
+                            }
+                          }}
+                          disabled={pending}
+                          className="btn-ghost h-8 w-8 p-0! text-muted"
+                          title="Delete rule"
+                          aria-label={`Delete ${rule.name}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -134,7 +148,7 @@ export function RulesPanel({
         );
       })}
 
-      <ChannelsPanel channels={channels} />
+      <ChannelsPanel channels={channels} readOnly={readOnly} />
 
       {editing && (
         <RuleEditor

@@ -29,6 +29,7 @@ export function NotificationCenter({
   groups,
   accounts,
   categories,
+  readOnly = false,
 }: {
   notifications: NotificationDTO[];
   rules: RuleDTO[];
@@ -37,6 +38,7 @@ export function NotificationCenter({
   groups: { id: string; label: string }[];
   accounts: OptionItem[];
   categories: OptionItem[];
+  readOnly?: boolean;
 }) {
   const [tab, setTab] = useState<"inbox" | "rules">("inbox");
   const unread = notifications.filter((n) => !n.readAt).length;
@@ -62,7 +64,7 @@ export function NotificationCenter({
         ))}
       </div>
       {tab === "inbox" ? (
-        <InboxList notifications={notifications} />
+        <InboxList notifications={notifications} readOnly={readOnly} />
       ) : (
         <RulesPanel
           rules={rules}
@@ -71,6 +73,7 @@ export function NotificationCenter({
           groups={groups}
           accounts={accounts}
           categories={categories}
+          readOnly={readOnly}
         />
       )}
     </div>

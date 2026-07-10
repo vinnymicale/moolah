@@ -6,7 +6,13 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ChannelDTO } from "@/lib/queries/notifications";
 import { deleteChannelAction, saveChannelAction } from "@/actions/notifications";
 
-export function ChannelsPanel({ channels }: { channels: ChannelDTO[] }) {
+export function ChannelsPanel({
+  channels,
+  readOnly = false,
+}: {
+  channels: ChannelDTO[];
+  readOnly?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState(false);
@@ -42,7 +48,7 @@ export function ChannelsPanel({ channels }: { channels: ChannelDTO[] }) {
           <h3 className="text-sm font-semibold">Channels</h3>
           <p className="text-xs text-muted">Named Discord webhooks rules can deliver to.</p>
         </div>
-        {!adding && (
+        {!adding && !readOnly && (
           <button onClick={() => setAdding(true)} className="btn-ghost text-xs">
             <Plus size={13} /> Add channel
           </button>
@@ -60,15 +66,17 @@ export function ChannelsPanel({ channels }: { channels: ChannelDTO[] }) {
               <p className="text-sm font-medium">{c.name}</p>
               <p className="truncate font-mono text-[11px] text-muted">{c.webhookUrl}</p>
             </div>
-            <button
-              onClick={() => remove(c)}
-              disabled={pending}
-              className="btn-ghost h-8 w-8 p-0! text-muted"
-              title="Delete channel"
-              aria-label={`Delete ${c.name}`}
-            >
-              <Trash2 size={14} />
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => remove(c)}
+                disabled={pending}
+                className="btn-ghost h-8 w-8 p-0! text-muted"
+                title="Delete channel"
+                aria-label={`Delete ${c.name}`}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         ))}
       </div>

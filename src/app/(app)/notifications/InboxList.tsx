@@ -15,15 +15,23 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export function InboxList({ notifications }: { notifications: NotificationDTO[] }) {
+export function InboxList({
+  notifications,
+  readOnly = false,
+}: {
+  notifications: NotificationDTO[];
+  readOnly?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const markRead = (ids: string[] | "all") =>
+  const markRead = (ids: string[] | "all") => {
+    if (readOnly) return;
     startTransition(async () => {
       await markReadAction(ids);
       router.refresh();
     });
+  };
 
   if (notifications.length === 0) {
     return (
@@ -38,7 +46,7 @@ export function InboxList({ notifications }: { notifications: NotificationDTO[] 
 
   return (
     <div className="space-y-3">
-      {hasUnread && (
+      {hasUnread && !readOnly && (
         <div className="flex justify-end">
           <button onClick={() => markRead("all")} disabled={pending} className="btn-ghost text-xs text-muted">
             <CheckCheck size={14} /> Mark all read
@@ -48,13 +56,14 @@ export function InboxList({ notifications }: { notifications: NotificationDTO[] 
       <div className="card divide-y divide-line">
         {notifications.map((n) => {
           const unread = !n.readAt;
+          const Row = readOnly ? "div" : "button";
           return (
-            <button
+            <Row
               key={n.id}
-              onClick={() => unread && markRead([n.id])}
+              onClick={readOnly ? undefined : () => unread && markRead([n.id])}
               className={`block w-full px-4 py-3 text-left transition-colors ${
-                unread ? "bg-brand/5 hover:bg-brand/10" : "hover:bg-surface2"
-              }`}
+                readOnly ? "" : unread ? "bg-brand/5 hover:bg-brand/10" : "hover:bg-surface2"
+              } ${unread && readOnly ? "bg-brand/5" : ""}`}
             >
               <div className="flex items-start gap-2">
                 {unread && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
@@ -73,7 +82,7 @@ export function InboxList({ notifications }: { notifications: NotificationDTO[] 
                   </div>
                 </div>
               </div>
-            </button>
+            </Row>
           );
         })}
       </div>
