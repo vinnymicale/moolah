@@ -54,7 +54,9 @@ model User {
   plaidItems        PlaidItem[]
   rules             Rule[]
   backupConfig      BackupConfig?
-  alertConfig       AlertConfig?
+  notificationChannels NotificationChannel[]
+  notificationRules    NotificationRule[]
+  notifications        Notification[]
 }
 
 // Auth.js OAuth account link
@@ -396,6 +398,7 @@ model PlaidItem {
   cursor          String?
   lastSyncedAt    DateTime?
   error           String?   // last sync error message, if any
+  failureCount    Int       @default(0)
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -467,34 +470,67 @@ model BackupConfig {
   updatedAt   DateTime @updatedAt
 }
 
-// Per-user outbound notifications: a scheduled digest of upcoming bills,
-// credit-card due dates and over-budget categories, delivered to an ntfy topic
-// or a generic JSON webhook. Runs on the same in-process cron scheduler as
-// backups, so it only fires on long-lived (self-hosted) servers.
-model AlertConfig {
-  id      String  @id @default(cuid())
-  userId  String  @unique
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// A named Discord webhook, defined once and referenced by many rules.
+/// `kind` is always "discord" in v1; kept so other channel types can be
+/// added later without a migration.
+model NotificationChannel {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  kind       String   @default("discord")
+  webhookUrl String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  enabled Boolean @default(false)
-  // Delivery channel: "ntfy" (plain-text POST with a Title header) or
-  // "webhook" (JSON POST).
-  kind    String  @default("ntfy")
-  // The ntfy topic URL or webhook endpoint.
-  url     String  @default("")
-  // When the digest is sent, as a cron expression edited via friendly presets.
-  cron    String  @default("0 8 * * *")
+  rules NotificationRule[]
 
-  // How many days ahead to look for upcoming bills and CC due dates.
-  billsDays      Int     @default(3)
-  // Include categories that are over their monthly budget.
-  budgetsEnabled Boolean @default(true)
+  @@index([userId])
+}
 
-  // Last-run status for the Settings UI.
-  lastRunAt  DateTime?
-  lastStatus String?   // "success" | "error" | "skipped"
-  lastError  String?
+model NotificationRule {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  enabled       Boolean  @default(true)
+  /// Trigger id from the registry (src/lib/notifications/triggers).
+  trigger       String
+  /// JSON string; shape validated against the trigger's zod schema.
+  params        String   @default("{}")
+  /// Null = in-app only. SetNull so deleting a channel downgrades rules
+  /// instead of deleting them.
+  channelId     String?
+  channel       NotificationChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  templateTitle String?
+  templateBody  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notifications Notification[]
+
+  @@index([userId])
+}
+
+/// Fired-notification log, doubling as the in-app inbox. Survives rule
+/// deletion via SetNull + the denormalized ruleName.
+model Notification {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ruleId         String?
+  rule           NotificationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  ruleName       String
+  title          String
+  body           String
+  dedupeKey      String
+  firedAt        DateTime  @default(now())
+  readAt         DateTime?
+  /// "in_app" (no channel) | "sent" | "failed"
+  deliveryStatus String    @default("in_app")
+  deliveryError  String?
+
+  @@unique([ruleId, dedupeKey])
+  @@index([userId, firedAt])
+  @@index([userId, readAt])
 }

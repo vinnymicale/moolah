@@ -11,6 +11,9 @@ import type {
   AccountDTO, CategoryDTO, TransactionDTO, RecurringDTO,
   BudgetLineDTO, SavingsGoalDTO, SnapshotDTO,
 } from "@/lib/queries";
+import type {
+  ChannelDTO, NotificationDTO, RuleDTO,
+} from "@/lib/queries/notifications";
 import type { RecurringSuggestion } from "@/lib/recurring-suggestions";
 import type { BudgetSuggestionsDTO } from "@/lib/budget-suggestions";
 
@@ -588,5 +591,104 @@ export const DEMO_SUGGESTIONS: RecurringSuggestion[] = [
     accountId: "acct-cc",
     startDate: day(15),
     cadence: "about monthly",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Notification center (read-only preview in the live demo)
+// ---------------------------------------------------------------------------
+
+/** Minutes/hours ago as an ISO string, relative to now. */
+function agoISO(minutes: number): string {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
+export const DEMO_NOTIFICATION_CHANNELS: ChannelDTO[] = [
+  { id: "demo-chan-discord", name: "money-alerts", kind: "discord", webhookUrl: "https://discord.com/api/webhooks/•••••/••••••••" },
+];
+
+export const DEMO_NOTIFICATION_RULES: RuleDTO[] = [
+  {
+    id: "demo-rule-large",
+    name: "Large purchase over $500",
+    enabled: true,
+    trigger: "large-transaction",
+    params: JSON.stringify({ amount: 500 }),
+    channelId: "demo-chan-discord",
+    templateTitle: null,
+    templateBody: null,
+  },
+  {
+    id: "demo-rule-ccdue",
+    name: "Card payment due soon",
+    enabled: true,
+    trigger: "cc-due",
+    params: JSON.stringify({ days: 3 }),
+    channelId: "demo-chan-discord",
+    templateTitle: null,
+    templateBody: null,
+  },
+  {
+    id: "demo-rule-lowbal",
+    name: "Checking running low",
+    enabled: false,
+    trigger: "low-balance",
+    params: JSON.stringify({ amount: 200, accountId: "acct-checking" }),
+    channelId: null,
+    templateTitle: "Heads up: {{account}} is low",
+    templateBody: "{{account}} is down to {{balance}}.",
+  },
+  {
+    id: "demo-rule-digest",
+    name: "Weekly money digest",
+    enabled: true,
+    trigger: "digest",
+    params: JSON.stringify({ frequency: "weekly", weekday: 1, hour: 8, days: 7 }),
+    channelId: "demo-chan-discord",
+    templateTitle: null,
+    templateBody: null,
+  },
+];
+
+export const DEMO_NOTIFICATIONS: NotificationDTO[] = [
+  {
+    id: "demo-notif-1",
+    ruleName: "Large purchase over $500",
+    title: "Large purchase: $842.19",
+    body: "A $842.19 charge from BEST BUY posted to Sapphire Card.",
+    firedAt: agoISO(38),
+    readAt: null,
+    deliveryStatus: "sent",
+    deliveryError: null,
+  },
+  {
+    id: "demo-notif-2",
+    ruleName: "Card payment due soon",
+    title: "Sapphire Card payment due in 3 days",
+    body: "Statement balance of $1,106.54 is due on the 18th.",
+    firedAt: agoISO(190),
+    readAt: null,
+    deliveryStatus: "sent",
+    deliveryError: null,
+  },
+  {
+    id: "demo-notif-3",
+    ruleName: "Weekly money digest",
+    title: "Your week in money",
+    body: "Spent $612 across 14 transactions. Top category: Groceries ($208).",
+    firedAt: agoISO(60 * 26),
+    readAt: agoISO(60 * 25),
+    deliveryStatus: "sent",
+    deliveryError: null,
+  },
+  {
+    id: "demo-notif-4",
+    ruleName: "Checking running low",
+    title: "Joint Checking is low",
+    body: "Joint Checking is down to $184.20.",
+    firedAt: agoISO(60 * 72),
+    readAt: agoISO(60 * 71),
+    deliveryStatus: "in_app",
+    deliveryError: null,
   },
 ];
