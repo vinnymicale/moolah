@@ -1,6 +1,9 @@
 import type { TriggerDef, TriggerGroup } from "../types";
+import { plaidReauth } from "./plaid-reauth";
+import { syncFailing } from "./sync-failing";
+import { accountStale } from "./account-stale";
 
-export const TRIGGERS: TriggerDef[] = [];
+export const TRIGGERS: TriggerDef[] = [plaidReauth, syncFailing, accountStale];
 
 export const TRIGGER_BY_ID = new Map(TRIGGERS.map((t) => [t.id, t]));
 
