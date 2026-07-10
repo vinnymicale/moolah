@@ -215,6 +215,7 @@ export async function syncPlaidItem(
     matchRecurringRule(rules, type, date, amount, description);
 
   const result: SyncResult = { added: 0, modified: 0, removed: 0, balancesUpdated: 0 };
+  const newTxnIds: string[] = [];
 
   // ── Paginated transaction sync ──────────────────────────────────────────────
   // recategorizeOnly: start from the beginning of history so all transactions
@@ -295,7 +296,7 @@ export async function syncPlaidItem(
         }
       }
 
-      await prisma.transaction.upsert({
+      const row = await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
         update: opts?.recategorizeOnly
           ? { amount, description, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
@@ -316,6 +317,7 @@ export async function syncPlaidItem(
           plaidDetailedCategory: detailCat || null,
         },
       });
+      if (!opts?.recategorizeOnly) newTxnIds.push(row.id);
 
       // When a pending charge posts, Plaid delivers the settled version as a
       // new transaction (with its own id) that points back at the pending one
@@ -470,7 +472,7 @@ export async function syncPlaidItem(
     await matchTransfers(item.userId);
     await prisma.plaidItem.update({
       where: { id: plaidItemId },
-      data: { cursor, lastSyncedAt: new Date(), error: null },
+      data: { cursor, lastSyncedAt: new Date(), error: null, failureCount: 0 },
     });
     // Record a net-worth snapshot now that balances are up to date. Non-fatal:
     // a failed snapshot must not fail the sync.
@@ -478,6 +480,16 @@ export async function syncPlaidItem(
       await captureNetWorthSnapshot(item.userId);
     } catch {
       /* ignore */
+    }
+    // Fire event-mode notification rules with this sync's outcome. Non-fatal.
+    try {
+      const { runRules } = await import("@/lib/notifications/engine");
+      await runRules(item.userId, {
+        mode: "event",
+        event: { kind: "plaid-sync", plaidItemId, newTransactionIds: newTxnIds },
+      });
+    } catch (e) {
+      console.error("[notifications] post-sync rules failed:", e);
     }
   }
 

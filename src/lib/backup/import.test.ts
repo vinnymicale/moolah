@@ -37,6 +37,9 @@ const SCHEMA_ROWS = [
   { table_name: "Transaction", column_name: "amount" },
 ];
 
+// The live tables the importer checks unknown-table names against.
+const LIVE_TABLES = [{ tablename: "User" }, { tablename: "Transaction" }];
+
 // Make the User COUNT(*) return `userCount`; the schema lookup returns
 // SCHEMA_ROWS; the superuser probe returns `isSuper` (default true, the
 // session_replication_role fast path); everything else resolves empty.
@@ -44,6 +47,9 @@ function wireCount(userCount: number, isSuper = true) {
   query.mockImplementation((sql: string) => {
     if (sql.includes("information_schema.columns")) {
       return Promise.resolve({ rows: SCHEMA_ROWS });
+    }
+    if (sql.includes("pg_tables")) {
+      return Promise.resolve({ rows: LIVE_TABLES });
     }
     if (sql.includes("usesuper")) {
       return Promise.resolve({ rows: [{ super: isSuper }] });
@@ -91,6 +97,7 @@ describe("importAllData", () => {
     // Transaction depends on User (Transaction.userId -> User.id).
     query.mockImplementation((sql: string) => {
       if (sql.includes("information_schema.columns")) return Promise.resolve({ rows: SCHEMA_ROWS });
+      if (sql.includes("pg_tables")) return Promise.resolve({ rows: LIVE_TABLES });
       if (sql.includes("usesuper")) return Promise.resolve({ rows: [{ super: false }] });
       if (sql.includes("constraint_type")) {
         return Promise.resolve({ rows: [{ child: "Transaction", parent: "User" }] });
@@ -180,6 +187,7 @@ describe("importAllData", () => {
   it("rolls back and rethrows when an insert fails", async () => {
     query.mockImplementation((sql: string) => {
       if (sql.includes("information_schema.columns")) return Promise.resolve({ rows: SCHEMA_ROWS });
+      if (sql.includes("pg_tables")) return Promise.resolve({ rows: LIVE_TABLES });
       if (sql.includes("COUNT(*)")) return Promise.resolve({ rows: [{ n: 0 }] });
       if (sql.startsWith("INSERT INTO")) return Promise.reject(new Error("constraint blew up"));
       return Promise.resolve({ rows: [] });
@@ -200,6 +208,37 @@ describe("importAllData", () => {
     ).rejects.toThrow(/unknown table/i);
 
     // Rejected before any insert ran.
+    expect(ran("INSERT INTO")).toBe(false);
+  });
+
+  it("skips an empty table that no longer exists in the schema", async () => {
+    wireCount(0);
+
+    // "AlertConfig" was dropped from the schema but a pre-drop backup still
+    // carries it with zero rows. Nothing to restore, so it should be skipped
+    // rather than failing the whole restore.
+    const res = await importAllData(
+      { ...payload, tables: [...payload.tables, { table: "AlertConfig", rows: [] }] },
+      "postgres://test",
+    );
+
+    // Only the two real tables are restored; the dropped one is dropped silently.
+    expect(res).toEqual({ imported: 2, tables: 2 });
+    expect(ran('"AlertConfig"')).toBe(false);
+  });
+
+  it("still rejects a dropped table that carries rows", async () => {
+    wireCount(0);
+
+    // A dropped table WITH rows would be silent data loss if skipped, so it
+    // must still throw.
+    await expect(
+      importAllData(
+        { ...payload, tables: [{ table: "AlertConfig", rows: [{ id: "a1" }] }] },
+        "postgres://test",
+      ),
+    ).rejects.toThrow(/unknown table/i);
+
     expect(ran("INSERT INTO")).toBe(false);
   });
 

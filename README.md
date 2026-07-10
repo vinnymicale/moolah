@@ -35,7 +35,7 @@ Planned improvements, roughly in priority order:
 Recently shipped: a **UI redesign** (grouped Track / Plan / Insights nav with drag-reorder, a
 mobile bottom tab bar, a display typeface for headings, tabular-mono currency, and subtle entrance
 motion throughout), **budget suggestions** (a modal that proposes limits from your recurring charges
-and typical variable spending), **notifications** (digest alerts over ntfy or a webhook), **budget
+and typical variable spending), **notifications** (rule-based triggers with an in-app inbox and optional Discord delivery), **budget
 rollover**, a **transaction trash** with soft-delete/restore and a **duplicate finder**, a **command
 bar** (⌘K) for jump-to-page navigation and quick actions, and **PWA install** support. Before that:
 the **rules & automation center** (one place to define rules — description contains, amount range,
@@ -115,10 +115,15 @@ Have a request? Open an issue on GitHub.
 - **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
   spending alerts (categories trending over their 3-month average), top payees, and net-worth
   milestone celebrations. Cards are drag-to-reorder.
-- **Notifications (optional)** - opt into a periodic digest (upcoming bills, over-budget categories,
-  spending alerts) delivered over [ntfy](https://ntfy.sh) or a webhook of your choice. A per-user
-  scheduler runs it on your instance; configure destinations and frequency in Settings. Best on an
-  always-on host.
+- **Notification center** - rule-based notifications (connection health, budgets, bills,
+  transactions, scheduled digest) with an in-app inbox and optional Discord webhook delivery
+  with custom message templates. Notifications live at **Notifications** in the sidebar (not
+  Settings). Each rule pairs a trigger (bank connection needs relinking, budget exceeded, bill
+  due, large transaction, scheduled digest, and more) with an optional Discord webhook channel
+  and an optional custom message template using `{{variables}}`. Every fired rule lands in the
+  in-app inbox; the sidebar bell shows an unread badge. Time-based triggers run on an in-process
+  sweep every 15 minutes, so they need an always-on / self-hosted deployment (like scheduled
+  backups). Transaction triggers fire immediately after a Plaid sync or CSV import.
 - **AI assistant (optional)** - bring your own Anthropic, OpenAI, or Gemini API key (Settings) and
   chat with your finances: "how much did I spend on dining out last month?", "add a $15.99/month
   Netflix expense", "set a $500 grocery budget". The key is encrypted at rest and never sent to
@@ -546,14 +551,15 @@ prisma/            schema.prisma, migrations, seed.ts
 scripts/           setup.ts (first-run schema), local-db.ts (embedded Postgres runner)
 src/
   app/(auth)/      sign-in
-  app/(app)/       dashboard, calendar, transactions, accounts, networth,
+  app/(app)/       dashboard, calendar, notifications, transactions, accounts, networth,
                    recurring, budgets, goals, debt, categories, trends, settings
   app/api/         plaid (link/exchange/sync/recategorize), export (CSV),
                    backup (download/import), v1 (read-only API), chat (AI assistant), health
   actions/         server actions (mutations)
   lib/             prisma, auth/session, money, dates, recurrence, projection,
                    calendar, reports, queries/, plaid-sync, debt-payoff, milestones,
-                   budget-suggestions, alerts (notification digest), snapshots (net-worth history),
+                   budget-suggestions, notifications/ (triggers, engine, Discord delivery),
+                   snapshots (net-worth history),
                    networth-forecast, backup/ (full export/restore, Google Drive),
                    crypto (secret encryption), api-auth (token auth)
   components/      AppChrome, Sidebar, CommandPalette, MultiSelect, TransactionModal,

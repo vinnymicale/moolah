@@ -158,6 +158,20 @@ export async function importAllData(
   const client = new Client({ connectionString: requireUrl(databaseUrl) });
   await client.connect();
   try {
+    // A backup from an older schema can carry tables since dropped from the app.
+    // If such a table is empty there's nothing to restore, so skip it rather than
+    // fail the whole restore. An unknown table WITH rows still throws below - that
+    // would be silent data loss.
+    const liveTableNames = new Set(
+      (
+        await client.query<{ tablename: string }>(
+          "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
+        )
+      ).rows.map((r) => r.tablename),
+    );
+    const restorable = tables.filter(
+      (t) => liveTableNames.has(t.table) || t.rows.length > 0,
+    );
     // Identifiers (table/column names) from the backup can't be bound as query
     // params, so they're interpolated. Validate every one against the live
     // schema first - an uploaded file is untrusted input. Anything not a real
@@ -207,7 +221,7 @@ export async function importAllData(
     const canDisableFks = superRows[0]?.super === true;
 
     // Insert order: arbitrary when FK checks are off, else parents-before-children.
-    let loadOrder = tables;
+    let loadOrder = restorable;
     if (!canDisableFks) {
       const { rows: fks } = await client.query<{ child: string; parent: string }>(
         `SELECT tc.table_name AS child, ccu.table_name AS parent
@@ -223,10 +237,10 @@ export async function importAllData(
         deps.get(child)!.add(parent);
       }
       const order = topoSortTables(
-        tables.map((t) => t.table),
+        restorable.map((t) => t.table),
         deps,
       );
-      const byName = new Map(tables.map((t) => [t.table, t]));
+      const byName = new Map(restorable.map((t) => [t.table, t]));
       loadOrder = order.map((name) => byName.get(name)!).filter(Boolean);
     }
 
@@ -236,7 +250,7 @@ export async function importAllData(
     if (hasData && opts.force) {
       // TRUNCATE ... CASCADE clears child rows regardless of order, so the raw
       // table list is fine here even on the dependency-ordered path.
-      const names = tables.map((t) => tableIdentOf(t.table)).join(", ");
+      const names = restorable.map((t) => tableIdentOf(t.table)).join(", ");
       if (names) await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
     }
 
@@ -259,7 +273,7 @@ export async function importAllData(
 
     if (canDisableFks) await client.query("SET session_replication_role = DEFAULT");
     await client.query("COMMIT");
-    return { imported, tables: tables.length };
+    return { imported, tables: restorable.length };
   } catch (e) {
     try {
       await client.query("ROLLBACK");

@@ -16,7 +16,7 @@ vi.mock("@/lib/plaid-sync", () => ({ matchTransfers: vi.fn() }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    transaction: { findMany: vi.fn(), createMany: vi.fn() },
+    transaction: { findMany: vi.fn(), createManyAndReturn: vi.fn() },
     recurringRule: { findMany: vi.fn() },
     category: { findMany: vi.fn() },
     rule: { findMany: vi.fn() },
@@ -148,7 +148,7 @@ describe("commitImportAction", () => {
       rows: [{ date: "2026-01-01", description: "x", amount: 1, type: "EXPENSE" }],
     });
     expect(res).toEqual({ ok: true });
-    expect(prisma.transaction.createMany).not.toHaveBeenCalled();
+    expect(prisma.transaction.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it("fails when the target account isn't the user's", async () => {
@@ -158,12 +158,12 @@ describe("commitImportAction", () => {
       rows: [{ date: "2026-01-01", description: "x", amount: 1, type: "EXPENSE" }],
     });
     expect(res).toEqual({ ok: false, error: "Account not found" });
-    expect(prisma.transaction.createMany).not.toHaveBeenCalled();
+    expect(prisma.transaction.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it("drops category ids the user doesn't own, keeps valid ones", async () => {
     vi.mocked(prisma.category.findMany).mockResolvedValue([{ id: "mine" }] as never);
-    vi.mocked(prisma.transaction.createMany).mockResolvedValue({ count: 2 } as never);
+    vi.mocked(prisma.transaction.createManyAndReturn).mockResolvedValue([{ id: "t1" }, { id: "t2" }] as never);
 
     const res = await commitImportAction({
       rows: [
@@ -172,7 +172,7 @@ describe("commitImportAction", () => {
       ],
     });
     expect(res).toEqual({ ok: true });
-    const arg = vi.mocked(prisma.transaction.createMany).mock.calls[0][0] as {
+    const arg = vi.mocked(prisma.transaction.createManyAndReturn).mock.calls[0][0] as {
       data: { categoryId: string | null }[];
     };
     expect(arg.data[0].categoryId).toBe("mine");

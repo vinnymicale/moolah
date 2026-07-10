@@ -178,7 +178,7 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
         : [],
     );
 
-    await prisma.transaction.createMany({
+    const created = await prisma.transaction.createManyAndReturn({
       data: rows.map((r) => ({
         userId,
         accountId: accountId || null,
@@ -189,10 +189,22 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
         description: r.description,
         cleared: true,
       })),
+      select: { id: true },
     });
 
     // Imported CC payments pair up the same way Plaid-synced ones do.
     await matchTransfers(userId);
+
+    // Fire event-mode notification rules with the imported ids. Non-fatal.
+    try {
+      const { runRules } = await import("@/lib/notifications/engine");
+      await runRules(userId, {
+        mode: "event",
+        event: { kind: "csv-import", newTransactionIds: created.map((t) => t.id) },
+      });
+    } catch (e) {
+      console.error("[notifications] post-import rules failed:", e);
+    }
 
     revalidatePath("/");
     revalidatePath("/calendar");

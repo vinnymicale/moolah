@@ -9,7 +9,6 @@ import { AiConfigForm } from "./sections/AiConfigForm";
 import { PlaidConfigForm } from "./sections/PlaidConfigForm";
 import { ApiTokenForm } from "./sections/ApiTokenForm";
 import { ScheduledBackupForm } from "./sections/ScheduledBackupForm";
-import { AlertsForm } from "./sections/AlertsForm";
 import { scheduleFromCron } from "@/lib/backup/schedule";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -64,19 +63,6 @@ export default async function SettingsPage() {
     lastStatus: backupConfig?.lastStatus ?? null,
     lastError: backupConfig?.lastError ?? null,
     lastBackupName: backupConfig?.lastBackupName ?? null,
-  };
-
-  const alertConfig = await prisma.alertConfig.findUnique({ where: { userId } });
-  const alertProps = {
-    enabled: alertConfig?.enabled ?? false,
-    kind: alertConfig?.kind ?? "ntfy",
-    url: alertConfig?.url ?? "",
-    schedule: scheduleFromCron(alertConfig?.cron ?? "0 8 * * *"),
-    billsDays: alertConfig?.billsDays ?? 3,
-    budgetsEnabled: alertConfig?.budgetsEnabled ?? true,
-    lastRunAt: alertConfig?.lastRunAt ? alertConfig.lastRunAt.toISOString() : null,
-    lastStatus: alertConfig?.lastStatus ?? null,
-    lastError: alertConfig?.lastError ?? null,
   };
 
   const envFallback = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
@@ -142,16 +128,6 @@ export default async function SettingsPage() {
           serverless.
         </p>
         <ScheduledBackupForm config={backupProps} />
-      </section>
-
-      <section className="card p-5">
-        <h2 className="mb-1 font-semibold">Notifications</h2>
-        <p className="mb-3 text-sm text-muted">
-          Get a scheduled push notification or webhook with upcoming bills, credit-card due dates,
-          and anything over budget. Like scheduled backups, this runs on the server itself, so it
-          needs an always-on / self-hosted setup.
-        </p>
-        <AlertsForm config={alertProps} />
       </section>
 
       <section className="card p-5">

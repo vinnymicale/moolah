@@ -23,7 +23,25 @@ export async function POST(
     const msg = e instanceof Error ? e.message : "Sync failed";
     console.error("Plaid sync error:", e);
     // Persist the error so the UI can surface it.
-    await prisma.plaidItem.update({ where: { id: itemId }, data: { error: msg } });
+    const updated = await prisma.plaidItem.update({
+      where: { id: itemId },
+      data: { error: msg, failureCount: { increment: 1 } },
+    });
+    try {
+      const { runRules } = await import("@/lib/notifications/engine");
+      await runRules(session.user.id, {
+        mode: "event",
+        event: {
+          kind: "plaid-sync-failed",
+          plaidItemId: itemId,
+          reauthRequired: msg.includes("ITEM_LOGIN_REQUIRED"),
+          failureCount: updated.failureCount,
+          newTransactionIds: [],
+        },
+      });
+    } catch (hookErr) {
+      console.error("[notifications] sync-failure rules failed:", hookErr);
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

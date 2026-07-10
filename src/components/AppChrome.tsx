@@ -47,6 +47,7 @@ export function AppChrome({
   categories,
   authBypass = false,
   demoMode = false,
+  unreadCount = 0,
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -54,6 +55,7 @@ export function AppChrome({
   categories: CategoryDTO[];
   authBypass?: boolean;
   demoMode?: boolean;
+  unreadCount?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -202,6 +204,7 @@ export function AppChrome({
     user,
     authBypass,
     demoMode,
+    unreadCount,
     nav: orderedNav,
     isActive,
     customized,
