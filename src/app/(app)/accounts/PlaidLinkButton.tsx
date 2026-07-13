@@ -11,8 +11,9 @@ import type { PlaidItemDTO } from "@/lib/queries";
 import {
   scanDuplicateTransactionsAction,
   removeDuplicateTransactionsAction,
+  ignoreDuplicateGroupAction,
 } from "@/actions/transactions";
-import type { DedupScan } from "@/lib/dedup-transactions";
+import type { DedupScan, DuplicateGroup } from "@/lib/dedup-transactions";
 import { useConfirmAction } from "@/lib/useConfirmAction";
 
 // Owns the single usePlaidLink instance for the page. Only mounted when we
@@ -382,10 +383,12 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
 // Scans for transactions that share an account, date, amount, type, and
 // description but exist as more than one row - the trail left by a re-import
 // that re-created charges the bank handed back under a fresh id. The oldest
-// copy in each group is kept; the user removes the rest, to the trash or for
-// good. This is the self-serve path on a self-hosted box with no DB access.
+// copy in each group is kept. Not every match is a mistake - a charge can
+// legitimately hit twice on the same day - so each row can be ignored instead,
+// and the remove buttons only touch the rows still checked.
 function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [scan, setScan] = useState<DedupScan | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -393,26 +396,75 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
   useEffect(() => {
     let active = true;
     scanDuplicateTransactionsAction()
-      .then((r) => { if (active) setScan(r); })
+      .then((r) => {
+        if (!active) return;
+        setScan(r);
+        // Everything starts checked: the common case is that all of them really
+        // are duplicates, and unchecking is the exception.
+        setSelected(new Set(r.groups.map((g) => g.keepId)));
+      })
       .catch(() => { if (active) setError("Couldn't scan for duplicates."); });
     return () => { active = false; };
   }, []);
 
+  const toggle = (keepId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(keepId)) next.delete(keepId);
+      else next.add(keepId);
+      return next;
+    });
+  };
+
+  // Copies that would be removed by the buttons right now: the checked groups
+  // only. Drives the button labels so the scope is never a guess.
+  const selectedCount = (scan?.groups ?? [])
+    .filter((g) => selected.has(g.keepId))
+    .reduce((n, g) => n + g.removeIds.length, 0);
+
+  const ignore = async (g: DuplicateGroup) => {
+    setBusy(true);
+    setError(null);
+    const res = await ignoreDuplicateGroupAction([g.keepId, ...g.removeIds]);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? "Couldn't ignore that charge.");
+      return;
+    }
+    // Drop it from the list in place - re-scanning would just rebuild the same
+    // list minus this row, and it would lose the user's other checkboxes.
+    setScan((prev) =>
+      prev
+        ? {
+            groups: prev.groups.filter((x) => x.keepId !== g.keepId),
+            removableCount: prev.removableCount - g.removeIds.length,
+          }
+        : prev,
+    );
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(g.keepId);
+      return next;
+    });
+    onChanged();
+  };
+
   const remove = async (mode: "soft" | "hard") => {
     setBusy(true);
     setError(null);
-    const removable = scan?.removableCount ?? 0;
-    const res = await removeDuplicateTransactionsAction(mode);
+    const removed = selectedCount;
+    const res = await removeDuplicateTransactionsAction(mode, [...selected]);
     setBusy(false);
     if (!res.ok) {
       setError(res.error ?? "Couldn't remove the duplicates.");
       return;
     }
     setScan({ groups: [], removableCount: 0 });
+    setSelected(new Set());
     setDone(
       mode === "hard"
-        ? `Deleted ${removable} duplicate${removable === 1 ? "" : "s"}.`
-        : `Moved ${removable} duplicate${removable === 1 ? "" : "s"} to the trash.`,
+        ? `Deleted ${removed} duplicate${removed === 1 ? "" : "s"}.`
+        : `Moved ${removed} duplicate${removed === 1 ? "" : "s"} to the trash.`,
     );
     onChanged();
   };
@@ -435,9 +487,11 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
         ) : scan ? (
           <>
             <p className="text-sm text-muted">
-              Found <strong>{scan.removableCount}</strong> duplicate
-              {scan.removableCount === 1 ? "" : "s"} across {scan.groups.length} charge
-              {scan.groups.length === 1 ? "" : "s"}. The oldest copy of each is kept.
+              Found <strong>{scan.removableCount}</strong> extra cop
+              {scan.removableCount === 1 ? "y" : "ies"} across {scan.groups.length} charge
+              {scan.groups.length === 1 ? "" : "s"}. The oldest copy of each is always kept.
+              Uncheck a charge to leave it alone, or ignore it if both copies are real and you
+              never want it flagged again.
             </p>
             <ul className="max-h-[40vh] space-y-1 overflow-y-auto">
               {scan.groups.map((g) => (
@@ -445,6 +499,14 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
                   key={g.keepId}
                   className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 text-sm"
                 >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(g.keepId)}
+                    onChange={() => toggle(g.keepId)}
+                    disabled={busy}
+                    aria-label={`Remove extra copies of ${g.description || "this charge"}`}
+                    className="shrink-0"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{g.description || "(no description)"}</p>
                     <p className="truncate text-xs text-muted">
@@ -455,6 +517,14 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
                     {g.type === "INCOME" ? "+" : "−"}{formatUSD(g.amount)}
                   </span>
                   <span className="shrink-0 text-xs text-muted">×{g.removeIds.length + 1}</span>
+                  <button
+                    onClick={() => void ignore(g)}
+                    disabled={busy}
+                    title="Both charges are real - stop flagging this"
+                    className="btn-ghost shrink-0 text-xs"
+                  >
+                    Ignore
+                  </button>
                 </li>
               ))}
             </ul>
@@ -469,17 +539,25 @@ function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: ()
           ) : scan && scan.removableCount > 0 ? (
             <>
               <button onClick={onClose} disabled={busy} className="btn-ghost">Cancel</button>
-              <button onClick={() => void remove("soft")} disabled={busy} className="btn-ghost ml-auto">
+              <button
+                onClick={() => void remove("soft")}
+                disabled={busy || selectedCount === 0}
+                title="Removes the extra copies but keeps them in the trash, so you can restore them"
+                className="btn-ghost ml-auto"
+              >
                 {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-                Move to trash
+                Move {selectedCount} to trash
               </button>
               <button
                 onClick={confirmHardDelete.trigger}
-                disabled={busy}
+                disabled={busy || selectedCount === 0}
+                title="Deletes the extra copies outright - this cannot be undone"
                 className="btn-danger"
               >
                 {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-                {confirmHardDelete.armed ? "Click to confirm" : "Delete duplicates"}
+                {confirmHardDelete.armed
+                  ? "Click to confirm"
+                  : `Delete ${selectedCount} permanently`}
               </button>
             </>
           ) : null}

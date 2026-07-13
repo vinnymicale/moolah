@@ -40,6 +40,7 @@ import {
   searchTransactionsAction,
   scanDuplicateTransactionsAction,
   removeDuplicateTransactionsAction,
+  ignoreDuplicateGroupAction,
 } from "./transactions";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -98,8 +99,14 @@ describe("demo-mode guard", () => {
   });
 
   it("removeDuplicateTransactionsAction is a no-op success in demo mode", async () => {
-    expect(await removeDuplicateTransactionsAction("hard")).toEqual({ ok: true });
+    expect(await removeDuplicateTransactionsAction("hard", ["k1"])).toEqual({ ok: true });
     expect(txn.deleteMany).not.toHaveBeenCalled();
+    expect(txn.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("ignoreDuplicateGroupAction is a no-op success in demo mode", async () => {
+    expect(await ignoreDuplicateGroupAction(["k1", "d1"])).toEqual({ ok: true });
+    expect(requireUserMock).not.toHaveBeenCalled();
     expect(txn.updateMany).not.toHaveBeenCalled();
   });
 });
