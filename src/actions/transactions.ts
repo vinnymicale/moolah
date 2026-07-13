@@ -7,6 +7,7 @@ import { getDeletedTransactions, type DeletedTransactionDTO } from "@/lib/querie
 import {
   scanDuplicateTransactions,
   removeDuplicateTransactions,
+  ignoreDuplicateGroup,
   type DedupScan,
 } from "@/lib/dedup-transactions";
 import { requireUser } from "@/lib/session";
@@ -238,13 +239,28 @@ export async function scanDuplicateTransactionsAction(): Promise<DedupScan> {
   return scanDuplicateTransactions(userId);
 }
 
-// Remove the duplicate copies found above, keeping the oldest in each group.
-// Soft sends them to the trash (recoverable); hard deletes them outright.
-export async function removeDuplicateTransactionsAction(mode: "soft" | "hard"): Promise<ActionResult> {
+// Remove the duplicate copies of the selected groups, keeping the oldest in
+// each. `keepIds` names the groups (by their kept row) the user checked. Soft
+// sends the copies to the trash (recoverable); hard deletes them outright.
+export async function removeDuplicateTransactionsAction(
+  mode: "soft" | "hard",
+  keepIds: string[],
+): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { userId } = await requireUser();
-    await removeDuplicateTransactions(userId, mode);
+    await removeDuplicateTransactions(userId, mode, keepIds);
+    revalidateAll();
+  });
+}
+
+// Accept a duplicate group as legitimate (two identical charges that both
+// really happened) so it stops showing up in the scan.
+export async function ignoreDuplicateGroupAction(ids: string[]): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    await ignoreDuplicateGroup(userId, ids);
     revalidateAll();
   });
 }

@@ -15,7 +15,11 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { scanDuplicateTransactions, removeDuplicateTransactions } from "./dedup-transactions";
+import {
+  scanDuplicateTransactions,
+  removeDuplicateTransactions,
+  ignoreDuplicateGroup,
+} from "./dedup-transactions";
 import { prisma } from "@/lib/prisma";
 
 const findMany = vi.mocked(prisma.transaction.findMany);
@@ -33,6 +37,7 @@ function row(opts: {
   description?: string;
   createdAt: string;
   accountName?: string | null;
+  dedupIgnored?: boolean;
 }) {
   return {
     id: opts.id,
@@ -42,6 +47,7 @@ function row(opts: {
     description: opts.description ?? "COFFEE",
     type: opts.type ?? "EXPENSE",
     createdAt: new Date(opts.createdAt),
+    dedupIgnored: opts.dedupIgnored ?? false,
     account: { name: opts.accountName ?? "Checking" },
   };
 }
@@ -102,6 +108,51 @@ describe("scanDuplicateTransactions", () => {
       }),
     );
   });
+
+  it("skips a group the user accepted as legitimate", async () => {
+    findMany.mockResolvedValueOnce([
+      row({ id: "a", createdAt: "2026-06-01T00:00:00Z", dedupIgnored: true }),
+      row({ id: "b", createdAt: "2026-06-02T00:00:00Z", dedupIgnored: true }),
+    ] as never);
+
+    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+
+    expect(removableCount).toBe(0);
+    expect(groups).toHaveLength(0);
+  });
+
+  it("re-surfaces an accepted group when a new copy shows up", async () => {
+    findMany.mockResolvedValueOnce([
+      row({ id: "a", createdAt: "2026-06-01T00:00:00Z", dedupIgnored: true }),
+      row({ id: "b", createdAt: "2026-06-02T00:00:00Z", dedupIgnored: true }),
+      row({ id: "c", createdAt: "2026-06-03T00:00:00Z" }),
+    ] as never);
+
+    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+
+    expect(removableCount).toBe(2);
+    expect(groups[0].keepId).toBe("a");
+    expect(groups[0].removeIds).toEqual(["b", "c"]);
+  });
+});
+
+describe("ignoreDuplicateGroup", () => {
+  it("flags every row in the group, scoped to the user", async () => {
+    updateMany.mockResolvedValueOnce({ count: 2 } as never);
+
+    const n = await ignoreDuplicateGroup("u1", ["keep", "dupe"]);
+
+    expect(n).toBe(2);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["keep", "dupe"] }, userId: "u1" },
+      data: { dedupIgnored: true },
+    });
+  });
+
+  it("is a no-op with no ids", async () => {
+    expect(await ignoreDuplicateGroup("u1", [])).toBe(0);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("removeDuplicateTransactions", () => {
@@ -114,7 +165,7 @@ describe("removeDuplicateTransactions", () => {
     findMany.mockResolvedValueOnce(twoCopies as never);
     deleteMany.mockResolvedValueOnce({ count: 1 } as never);
 
-    const removed = await removeDuplicateTransactions("u1", "hard");
+    const removed = await removeDuplicateTransactions("u1", "hard", ["keep"]);
 
     expect(removed).toBe(1);
     expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["drop"] }, userId: "u1" } });
@@ -125,7 +176,7 @@ describe("removeDuplicateTransactions", () => {
     findMany.mockResolvedValueOnce(twoCopies as never);
     updateMany.mockResolvedValueOnce({ count: 1 } as never);
 
-    const removed = await removeDuplicateTransactions("u1", "soft");
+    const removed = await removeDuplicateTransactions("u1", "soft", ["keep"]);
 
     expect(removed).toBe(1);
     expect(updateMany).toHaveBeenCalledWith(
@@ -137,9 +188,31 @@ describe("removeDuplicateTransactions", () => {
     expect(deleteMany).not.toHaveBeenCalled();
   });
 
+  it("leaves groups the user did not select alone", async () => {
+    findMany.mockResolvedValueOnce([
+      ...twoCopies,
+      row({ id: "keep2", description: "TEA", createdAt: "2026-06-01T00:00:00Z" }),
+      row({ id: "drop2", description: "TEA", createdAt: "2026-06-25T00:00:00Z" }),
+    ] as never);
+    deleteMany.mockResolvedValueOnce({ count: 1 } as never);
+
+    const removed = await removeDuplicateTransactions("u1", "hard", ["keep2"]);
+
+    expect(removed).toBe(1);
+    expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["drop2"] }, userId: "u1" } });
+  });
+
+  it("is a no-op when nothing is selected", async () => {
+    findMany.mockResolvedValueOnce(twoCopies as never);
+    const removed = await removeDuplicateTransactions("u1", "hard", []);
+    expect(removed).toBe(0);
+    expect(deleteMany).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
   it("is a no-op when there is nothing to remove", async () => {
     findMany.mockResolvedValueOnce([] as never);
-    const removed = await removeDuplicateTransactions("u1", "hard");
+    const removed = await removeDuplicateTransactions("u1", "hard", ["keep"]);
     expect(removed).toBe(0);
     expect(deleteMany).not.toHaveBeenCalled();
     expect(updateMany).not.toHaveBeenCalled();
