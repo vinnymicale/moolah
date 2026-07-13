@@ -36,7 +36,9 @@ async function main() {
     if (groups.length > 50) console.log(`  ...and ${groups.length - 50} more charges`);
 
     if (apply) {
-      const removed = await removeDuplicateTransactions(u.id, mode);
+      // Every group the scan reported - groups the user ignored in the app are
+      // already filtered out of it.
+      const removed = await removeDuplicateTransactions(u.id, mode, groups.map((g) => g.keepId));
       console.log(`  -> ${mode === "hard" ? "deleted" : "trashed"} ${removed} rows`);
     }
   }

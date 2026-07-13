@@ -286,6 +286,12 @@ model Transaction {
   // duplicated.
   deletedAt       DateTime?
 
+  // Set on every row of a duplicate group the user reviewed and accepted as
+  // legitimate (two identical charges that both really happened). The dedup
+  // scan skips a group only when all of its rows carry this, so a genuinely new
+  // copy - which arrives unflagged - still surfaces for review.
+  dedupIgnored    Boolean       @default(false)
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
