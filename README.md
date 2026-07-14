@@ -31,20 +31,27 @@ Planned improvements, roughly in priority order:
 - **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
+- **Transaction tags** - free-form labels (e.g. "vacation 2026", "reimbursable", "tax-deductible")
+  that cut across categories, with tag-based filtering/totals in search and rule-based auto-tagging.
 
-Recently shipped: a **UI redesign** (grouped Track / Plan / Insights nav with drag-reorder, a
-mobile bottom tab bar, a display typeface for headings, tabular-mono currency, and subtle entrance
-motion throughout), **budget suggestions** (a modal that proposes limits from your recurring charges
-and typical variable spending), **notifications** (rule-based triggers with an in-app inbox and optional Discord delivery), **budget
-rollover**, a **transaction trash** with soft-delete/restore and a **duplicate finder**, a **command
-bar** (⌘K) for jump-to-page navigation and quick actions, and **PWA install** support. Before that:
-the **rules & automation center** (one place to define rules — description contains, amount range,
-account, type — that auto-categorize, mark transfers, split by ratio, or clean up messy payee names,
-with a dry-run preview and a "run on existing transactions" backfill), the Net Worth page (automatic
-daily snapshots, a history chart, and a 12-month forecast),
-[Docker support](#self-hosting-with-docker), the [read-only data API](#read-only-data-api),
-category splits, and [in-app backup
-restore](#backing-up-your-data-and-your-plaid-connections).
+### Recently shipped
+
+- **UI redesign** - grouped Track / Plan / Insights nav with drag-reorder, a mobile bottom tab
+  bar, a display typeface for headings, tabular-mono currency, and subtle entrance motion.
+- **Notifications** - rule-based triggers with an in-app inbox and optional Discord delivery.
+- **Budget suggestions** - a modal that proposes limits from your recurring charges and typical
+  variable spending. Plus **budget rollover** for carrying unspent amounts forward.
+- **Transaction trash & duplicate finder** - soft-delete with restore, and a scanner that finds
+  and cleans up duplicated imports.
+- **Command bar** - ⌘K for jump-to-page navigation, global transaction search, and quick actions.
+- **PWA install** - add Moolah to your phone's home screen.
+- **Rules & automation center** - define rules (description contains, amount range, account,
+  type) that auto-categorize, mark transfers, split by ratio, or clean up messy payee names, with
+  a dry-run preview and a "run on existing transactions" backfill.
+- **Net Worth page** - automatic daily snapshots, a history chart, and a 12-month forecast.
+- **Category splits** - divide one transaction across multiple categories.
+- [Docker support](#self-hosting-with-docker), the [read-only data API](#read-only-data-api), and
+  [in-app backup restore](#backing-up-your-data-and-your-plaid-connections).
 
 Have a request? Open an issue on GitHub.
 
