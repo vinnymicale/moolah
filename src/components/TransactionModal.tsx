@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Copy } from "lucide-react";
 import { Modal } from "./Modal";
 import { SplitEditor, EMPTY_SPLITS, type SplitRow } from "./SplitEditor";
+import { TagInput, type TagOption } from "./TagInput";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import {
   createTransactionAction,
@@ -29,6 +30,8 @@ export interface TransactionModalProps {
   defaultDate?: string;
   /** Existing transaction to edit. */
   transaction?: TransactionDTO | null;
+  /** All the user's tags, for autocomplete. */
+  tags?: TagOption[];
 }
 
 const FREQUENCIES: { value: Frequency; label: string }[] = [
@@ -40,7 +43,7 @@ const FREQUENCIES: { value: Frequency; label: string }[] = [
 ];
 
 export function TransactionModal(props: TransactionModalProps) {
-  const { open, onClose, accounts, categories, defaultDate, transaction } = props;
+  const { open, onClose, accounts, categories, defaultDate, transaction, tags = [] } = props;
   const editing = !!transaction;
   const alreadyRecurring = !!transaction?.recurringRuleId;
 
@@ -64,6 +67,7 @@ export function TransactionModal(props: TransactionModalProps) {
     frequency: "MONTHLY" as Frequency,
     interval: "1",
     endDate: "",
+    tags: transaction?.tags.map((t) => t.name) ?? ([] as string[]),
   });
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -97,6 +101,7 @@ export function TransactionModal(props: TransactionModalProps) {
     accountId: form.accountId || null,
     cleared: form.cleared,
     splits: buildSplits(),
+    tags: form.tags,
     recurring,
   });
 
@@ -280,6 +285,11 @@ export function TransactionModal(props: TransactionModalProps) {
             placeholder="Any extra detail…"
             rows={2}
           />
+        </div>
+
+        <div>
+          <label className="label">Tags</label>
+          <TagInput value={form.tags} onChange={(next) => set("tags", next)} options={tags} />
         </div>
 
         <label className="flex items-center gap-2 text-sm">

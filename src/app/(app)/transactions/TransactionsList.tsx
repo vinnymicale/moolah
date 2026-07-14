@@ -630,8 +630,8 @@ export function TransactionsList({
         </form>
       </Modal>
 
-      {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} />}
-      {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} />}
+      {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} tags={tags} />}
+      {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} tags={tags} />}
       <TrashDrawer open={trashOpen} onClose={() => setTrashOpen(false)} accounts={accounts} categories={categories} />
     </div>
   );
