@@ -43,6 +43,8 @@ function blankAction(type: RuleAction["type"]): RuleAction {
       return { type };
     case "split":
       return { type, parts: [{ categoryId: "", ratio: 1 }, { categoryId: "", ratio: 1 }] };
+    case "addTag":
+      return { type, tagId: "" };
   }
 }
 
@@ -74,6 +76,8 @@ function actionLabel(a: RuleAction, categories: CategoryDTO[]): string {
       return "mark as transfer";
     case "split":
       return `split across ${a.parts.length} categories`;
+    case "addTag":
+      return "add tag";
   }
 }
 
@@ -301,7 +305,7 @@ function RuleEditor({
         name: name.trim() || null,
         enabled: rule?.enabled ?? true,
         conditions,
-        actions,
+        actions: actions as RuleInput["actions"],
       };
       const res = rule ? await updateRuleAction(rule.id, input) : await createRuleAction(input);
       if (!res.ok) return onError(res.error);
