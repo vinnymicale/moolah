@@ -176,6 +176,7 @@ export function TransactionsList({
         statuses: [...statusFilter] as StatusOpt[],
         cats: [...catFilter],
         accts: [...acctFilter],
+        tags: [],
       },
     ];
     persistFilters(next);
