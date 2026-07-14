@@ -18,7 +18,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { createTransactionAction, updateTransactionAction } from "./transactions";
+import { createTransactionAction, updateTransactionAction, bulkAddTagAction, bulkRemoveTagAction } from "./transactions";
 
 const requireUserMock = vi.mocked(requireUser);
 
@@ -81,5 +81,47 @@ describe("updateTransactionAction tags", () => {
     expect(res.ok).toBe(true);
     const updateArg = vi.mocked(prisma.transaction.update).mock.calls[0][0];
     expect(updateArg.data.tags).toBeUndefined();
+  });
+});
+
+describe("bulkAddTagAction", () => {
+  it("errors when the tag is not owned", async () => {
+    vi.mocked(prisma.tag.findFirst).mockResolvedValue(null);
+    const res = await bulkAddTagAction(["x1"], "t1");
+    expect(res).toEqual({ ok: false, error: "Tag not found" });
+  });
+
+  it("connects the tag on owned rows that do not already have it", async () => {
+    vi.mocked(prisma.tag.findFirst).mockResolvedValue({ id: "t1", userId: "u1" } as never);
+    vi.mocked(prisma.transaction.findMany).mockResolvedValue([{ id: "x1" }, { id: "x2" }] as never);
+
+    const res = await bulkAddTagAction(["x1", "x2", "not-mine"], "t1");
+    expect(res).toEqual({ ok: true });
+    expect(prisma.transaction.findMany).toHaveBeenCalledWith({
+      where: { userId: "u1", id: { in: ["x1", "x2", "not-mine"] }, NOT: { tags: { some: { id: "t1" } } } },
+      select: { id: true },
+    });
+    expect(prisma.transaction.update).toHaveBeenCalledWith({
+      where: { id: "x1" },
+      data: { tags: { connect: { id: "t1" } } },
+    });
+  });
+});
+
+describe("bulkRemoveTagAction", () => {
+  it("disconnects the tag from owned rows that have it", async () => {
+    vi.mocked(prisma.tag.findFirst).mockResolvedValue({ id: "t1", userId: "u1" } as never);
+    vi.mocked(prisma.transaction.findMany).mockResolvedValue([{ id: "x1" }] as never);
+
+    const res = await bulkRemoveTagAction(["x1"], "t1");
+    expect(res).toEqual({ ok: true });
+    expect(prisma.transaction.findMany).toHaveBeenCalledWith({
+      where: { userId: "u1", id: { in: ["x1"] }, tags: { some: { id: "t1" } } },
+      select: { id: true },
+    });
+    expect(prisma.transaction.update).toHaveBeenCalledWith({
+      where: { id: "x1" },
+      data: { tags: { disconnect: { id: "t1" } } },
+    });
   });
 });

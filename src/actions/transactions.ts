@@ -310,6 +310,48 @@ export async function bulkSetCategoryAction(ids: string[], categoryId: string | 
   });
 }
 
+export async function bulkAddTagAction(ids: string[], tagId: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const list = idsSchema.parse(ids);
+    const tag = await prisma.tag.findFirst({ where: { id: tagId, userId } });
+    if (!tag) throw new UserError("Tag not found");
+    // updateMany cannot touch m2m relations, and connect on an existing pair
+    // violates the join table's unique constraint - per-row updates, new rows only.
+    const rows = await prisma.transaction.findMany({
+      where: { userId, id: { in: list }, NOT: { tags: { some: { id: tagId } } } },
+      select: { id: true },
+    });
+    await prisma.$transaction(
+      rows.map((t) =>
+        prisma.transaction.update({ where: { id: t.id }, data: { tags: { connect: { id: tagId } } } }),
+      ),
+    );
+    revalidateAll();
+  });
+}
+
+export async function bulkRemoveTagAction(ids: string[], tagId: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const list = idsSchema.parse(ids);
+    const tag = await prisma.tag.findFirst({ where: { id: tagId, userId } });
+    if (!tag) throw new UserError("Tag not found");
+    const rows = await prisma.transaction.findMany({
+      where: { userId, id: { in: list }, tags: { some: { id: tagId } } },
+      select: { id: true },
+    });
+    await prisma.$transaction(
+      rows.map((t) =>
+        prisma.transaction.update({ where: { id: t.id }, data: { tags: { disconnect: { id: tagId } } } }),
+      ),
+    );
+    revalidateAll();
+  });
+}
+
 export async function bulkSetAccountAction(ids: string[], accountId: string | null): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {

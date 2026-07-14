@@ -17,8 +17,9 @@ import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
-  pairTransfersAction, unpairTransferAction,
+  pairTransfersAction, unpairTransferAction, bulkAddTagAction, bulkRemoveTagAction,
 } from "@/actions/transactions";
+import { createTagAction } from "@/actions/tags";
 import type { AccountDTO, CategoryDTO, TagDTO, TransactionDTO, TransactionsPageDTO } from "@/lib/queries";
 import { categoryColor } from "@/lib/colors";
 import { toggleInSet } from "@/lib/collections";
@@ -450,6 +451,60 @@ export function TransactionsList({
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
           </select>
+
+          <select
+            className="input h-8 w-auto text-xs"
+            defaultValue=""
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              e.currentTarget.value = "";
+              if (!v) return;
+              if (v === "__create__") {
+                const name = window.prompt("New tag name");
+                if (!name?.trim()) return;
+                start(async () => {
+                  setBulkError(null);
+                  const created = await createTagAction({ name });
+                  if (!created.ok) return setBulkError(created.error);
+                  const res = await bulkAddTagAction([...selected], created.id);
+                  if (res.ok) clearSelection();
+                  else setBulkError(res.error ?? "Something went wrong.");
+                });
+                return;
+              }
+              runBulk((ids) => bulkAddTagAction(ids, v));
+            }}
+          >
+            <option value="" disabled>
+              Add tag…
+            </option>
+            <option value="__create__">＋ New tag…</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {tags.length > 0 && (
+            <select
+              className="input h-8 w-auto text-xs"
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                e.currentTarget.value = "";
+                if (v) runBulk((ids) => bulkRemoveTagAction(ids, v));
+              }}
+            >
+              <option value="" disabled>
+                Remove tag…
+              </option>
+              {tags.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button onClick={() => runBulk((ids) => bulkSetClearedAction(ids, true))} disabled={pending} className="btn-ghost h-8 text-xs" title="Mark as cleared">
             <CheckCircle2 size={14} /> Cleared
