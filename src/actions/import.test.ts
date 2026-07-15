@@ -16,10 +16,11 @@ vi.mock("@/lib/plaid-sync", () => ({ matchTransfers: vi.fn() }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    transaction: { findMany: vi.fn(), createManyAndReturn: vi.fn() },
+    transaction: { findMany: vi.fn(), createManyAndReturn: vi.fn(), create: vi.fn() },
     recurringRule: { findMany: vi.fn() },
     category: { findMany: vi.fn() },
     rule: { findMany: vi.fn() },
+    tag: { findMany: vi.fn() },
     financialAccount: { findFirst: vi.fn() },
   },
 }));
@@ -39,6 +40,7 @@ beforeEach(() => {
   vi.mocked(prisma.recurringRule.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.category.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.rule.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.tag.findMany).mockResolvedValue([] as never);
 });
 
 describe("analyzeImportAction", () => {

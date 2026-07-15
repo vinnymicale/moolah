@@ -19,6 +19,7 @@ interface EditableRow {
   categoryId: string;
   duplicate: boolean;
   duplicateReason: string | null;
+  tagIds: string[];
 }
 
 type Phase = "loading" | "review" | "empty" | "error" | "done";
@@ -104,6 +105,7 @@ export function ImportReview({ open, onClose, csvText, filename, accounts, categ
         amount: Number(r.amount),
         type: r.type,
         categoryId: r.categoryId || null,
+        tagIds: r.tagIds,
       }));
       const bad = payload.find((p) => !(p.amount > 0));
       if (bad) {
@@ -296,5 +298,6 @@ function toEditable(r: AnalyzedRow): EditableRow {
     categoryId: r.suggestedCategoryId ?? "",
     duplicate: r.duplicate,
     duplicateReason: r.duplicateReason,
+    tagIds: r.suggestedTagIds,
   };
 }

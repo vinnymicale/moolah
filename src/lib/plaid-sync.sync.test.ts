@@ -28,6 +28,7 @@ vi.mock("./prisma", () => ({
     financialAccount: { findMany: vi.fn(), update: vi.fn() },
     category: { findMany: vi.fn() },
     rule: { findMany: vi.fn() },
+    tag: { findMany: vi.fn() },
     recurringRule: { findMany: vi.fn() },
     transaction: {
       upsert: vi.fn(),
@@ -52,6 +53,7 @@ const linkedAccount = vi.mocked(prisma.plaidLinkedAccount);
 const account = vi.mocked(prisma.financialAccount);
 const category = vi.mocked(prisma.category);
 const automationRule = vi.mocked(prisma.rule);
+const tag = vi.mocked(prisma.tag);
 const recurringRule = vi.mocked(prisma.recurringRule);
 const txn = vi.mocked(prisma.transaction);
 const snapshot = vi.mocked(captureNetWorthSnapshot);
@@ -100,9 +102,11 @@ beforeEach(() => {
     { id: "cat-dining", name: "Dining Out" },
   ] as never);
   automationRule.findMany.mockResolvedValue([] as never);
+  tag.findMany.mockResolvedValue([] as never);
   recurringRule.findMany.mockResolvedValue([] as never);
   txn.upsert.mockResolvedValue({ id: "t-new" } as never);
   txn.findMany.mockResolvedValue([] as never);
+  txn.findUnique.mockResolvedValue({ tags: [] } as never);
   account.findMany.mockResolvedValue([] as never);
   plaidClient.transactionsSync.mockResolvedValue(syncPage());
   plaidClient.accountsBalanceGet.mockResolvedValue({ data: { accounts: [] } });
