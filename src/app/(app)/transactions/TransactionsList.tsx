@@ -455,6 +455,7 @@ export function TransactionsList({
           <select
             className="input h-8 w-auto text-xs"
             defaultValue=""
+            disabled={pending}
             onChange={(e) => {
               const v = e.currentTarget.value;
               e.currentTarget.value = "";
@@ -489,6 +490,7 @@ export function TransactionsList({
             <select
               className="input h-8 w-auto text-xs"
               defaultValue=""
+              disabled={pending}
               onChange={(e) => {
                 const v = e.currentTarget.value;
                 e.currentTarget.value = "";

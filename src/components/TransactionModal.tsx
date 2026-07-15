@@ -30,7 +30,11 @@ export interface TransactionModalProps {
   defaultDate?: string;
   /** Existing transaction to edit. */
   transaction?: TransactionDTO | null;
-  /** All the user's tags, for autocomplete. */
+  /**
+   * All the user's tags, for autocomplete. Omit entirely (rather than passing
+   * []) for callers, like the calendar, that don't manage tags - the tag
+   * editor is hidden and the save payload leaves tags untouched.
+   */
   tags?: TagOption[];
 }
 
@@ -43,7 +47,8 @@ const FREQUENCIES: { value: Frequency; label: string }[] = [
 ];
 
 export function TransactionModal(props: TransactionModalProps) {
-  const { open, onClose, accounts, categories, defaultDate, transaction, tags = [] } = props;
+  const { open, onClose, accounts, categories, defaultDate, transaction, tags } = props;
+  const tagsManaged = tags !== undefined;
   const editing = !!transaction;
   const alreadyRecurring = !!transaction?.recurringRuleId;
 
@@ -101,7 +106,10 @@ export function TransactionModal(props: TransactionModalProps) {
     accountId: form.accountId || null,
     cleared: form.cleared,
     splits: buildSplits(),
-    tags: form.tags,
+    // Only callers that pass the tags prop (and thus render the tag editor)
+    // send a tags key - otherwise omit it so the update leaves tags alone
+    // instead of wiping them (e.g. editing from the calendar).
+    ...(tagsManaged ? { tags: form.tags } : {}),
     recurring,
   });
 
@@ -287,10 +295,12 @@ export function TransactionModal(props: TransactionModalProps) {
           />
         </div>
 
-        <div>
-          <label className="label">Tags</label>
-          <TagInput value={form.tags} onChange={(next) => set("tags", next)} options={tags} />
-        </div>
+        {tagsManaged && (
+          <div>
+            <label className="label">Tags</label>
+            <TagInput value={form.tags} onChange={(next) => set("tags", next)} options={tags} />
+          </div>
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.cleared} onChange={(e) => set("cleared", e.target.checked)} />
