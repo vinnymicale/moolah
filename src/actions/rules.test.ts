@@ -31,6 +31,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     category: { count: vi.fn() },
     financialAccount: { count: vi.fn() },
+    tag: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     transaction: { findMany: vi.fn(), update: vi.fn() },
     transactionSplit: { createMany: vi.fn() },
     $transaction: vi.fn(async (ops) => (Array.isArray(ops) ? Promise.all(ops) : ops)),
@@ -46,15 +47,17 @@ import {
 } from "./rules";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { evaluateRules } from "@/lib/rules";
+import { evaluateRules, splitByRatio } from "@/lib/rules";
 import { matchTransfers } from "@/lib/plaid-sync";
 
 const requireUserMock = vi.mocked(requireUser);
 const rule = vi.mocked(prisma.rule);
 const category = vi.mocked(prisma.category);
 const account = vi.mocked(prisma.financialAccount);
+const tag = vi.mocked(prisma.tag);
 const txn = vi.mocked(prisma.transaction);
 const evaluateRulesMock = vi.mocked(evaluateRules);
+const splitByRatioMock = vi.mocked(splitByRatio);
 
 const setCategoryRule = {
   conditions: [{ type: "descriptionContains" as const, value: "costco" }],
@@ -80,7 +83,14 @@ describe("demo-mode guard", () => {
   });
 
   it("applyRulesAction returns zero counts in demo mode", async () => {
-    expect(await applyRulesAction()).toEqual({ ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0 });
+    expect(await applyRulesAction()).toEqual({
+      ok: true,
+      categorized: 0,
+      renamed: 0,
+      transfersMarked: 0,
+      split: 0,
+      tagged: 0,
+    });
     expect(txn.findMany).not.toHaveBeenCalled();
   });
 });
@@ -194,15 +204,15 @@ describe("applyRulesAction", () => {
   it("returns zero counts when the user has no rules", async () => {
     rule.findMany.mockResolvedValue([]);
     const result = await applyRulesAction();
-    expect(result).toEqual({ ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0 });
+    expect(result).toEqual({ ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0, tagged: 0 });
     expect(txn.findMany).not.toHaveBeenCalled();
   });
 
   it("fills an empty category but never clobbers a hand-set one", async () => {
     rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
     txn.findMany.mockResolvedValue([
-      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, splits: [] },
-      { id: "t2", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: "manual", isTransfer: false, splits: [] },
+      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, splits: [], tags: [] },
+      { id: "t2", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: "manual", isTransfer: false, splits: [], tags: [] },
     ] as never);
     evaluateRulesMock.mockReturnValue({ categoryId: "cat1" });
 
@@ -216,7 +226,7 @@ describe("applyRulesAction", () => {
   it("marks transfers and runs the pairing pass when any were marked", async () => {
     rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
     txn.findMany.mockResolvedValue([
-      { id: "t1", description: "Payment", amount: "100", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, splits: [] },
+      { id: "t1", description: "Payment", amount: "100", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, splits: [], tags: [] },
     ] as never);
     evaluateRulesMock.mockReturnValue({ markTransfer: true });
 
@@ -229,11 +239,67 @@ describe("applyRulesAction", () => {
   it("does not run the pairing pass when nothing was marked", async () => {
     rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
     txn.findMany.mockResolvedValue([
-      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, splits: [] },
+      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, splits: [], tags: [] },
     ] as never);
     evaluateRulesMock.mockReturnValue({ categoryId: "cat1" });
 
     await applyRulesAction();
     expect(matchTransfers).not.toHaveBeenCalled();
+  });
+
+  it("connects new tags from addTagIds, skipping already-connected and deleted ones", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      {
+        id: "t1",
+        description: "Costco",
+        amount: "50",
+        accountId: "a1",
+        type: "EXPENSE",
+        categoryId: "cat1",
+        isTransfer: false,
+        splits: [],
+        tags: [{ id: "tag-existing" }],
+      },
+    ] as never);
+    tag.findMany.mockResolvedValue([{ id: "tag-existing" }, { id: "tag-new" }] as never);
+    evaluateRulesMock.mockReturnValue({ addTagIds: ["tag-existing", "tag-new", "tag-deleted"] });
+
+    const result = await applyRulesAction();
+    expect(result).toMatchObject({ ok: true, tagged: 1 });
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { tags: { connect: [{ id: "tag-new" }] } },
+    });
+  });
+
+  it("connects tags on a split transaction without double-counting", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      {
+        id: "t1",
+        description: "Costco",
+        amount: "50",
+        accountId: "a1",
+        type: "EXPENSE",
+        categoryId: "cat1",
+        isTransfer: false,
+        splits: [],
+        tags: [],
+      },
+    ] as never);
+    tag.findMany.mockResolvedValue([{ id: "tag-new" }] as never);
+    evaluateRulesMock.mockReturnValue({
+      splits: [{ categoryId: "cat1", ratio: 1 }],
+      addTagIds: ["tag-new"],
+    });
+    splitByRatioMock.mockReturnValue([{ categoryId: "cat1", amountCents: 5000 }]);
+
+    const result = await applyRulesAction();
+    expect(result).toMatchObject({ ok: true, split: 1, tagged: 1 });
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { tags: { connect: [{ id: "tag-new" }] } },
+    });
   });
 });
