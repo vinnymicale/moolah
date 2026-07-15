@@ -25,7 +25,8 @@ export type RuleAction =
   | { type: "setCategory"; categoryId: string }
   | { type: "rewriteDescription"; to: string }
   | { type: "markTransfer" }
-  | { type: "split"; parts: SplitPart[] };
+  | { type: "split"; parts: SplitPart[] }
+  | { type: "addTag"; tagId: string };
 
 export interface RuleLike {
   id: string;
@@ -48,6 +49,7 @@ export interface RuleEffect {
   description?: string;
   markTransfer?: boolean;
   splits?: SplitPart[];
+  addTagIds?: string[];
 }
 
 function conditionMatches(cond: RuleCondition, facts: TxnFacts): boolean {
@@ -102,6 +104,10 @@ export function evaluateRules(facts: TxnFacts, rules: RuleLike[]): RuleEffect {
           break;
         case "split":
           if (effect.splits === undefined && action.parts.length > 0) effect.splits = action.parts;
+          break;
+        case "addTag":
+          if (!effect.addTagIds) effect.addTagIds = [];
+          if (!effect.addTagIds.includes(action.tagId)) effect.addTagIds.push(action.tagId);
           break;
       }
     }

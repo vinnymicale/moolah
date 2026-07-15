@@ -93,6 +93,73 @@ describe("evaluateRules", () => {
   });
 });
 
+describe("addTag actions", () => {
+  it("accumulates tags across matching rules and dedups", () => {
+    const rules: RuleLike[] = [
+      rule({ id: "r1", priority: 0, actions: [{ type: "addTag", tagId: "a" }] }),
+      rule({
+        id: "r2",
+        priority: 1,
+        actions: [
+          { type: "addTag", tagId: "b" },
+          { type: "addTag", tagId: "a" },
+        ],
+      }),
+    ];
+    expect(evaluateRules(facts(), rules).addTagIds).toEqual(["a", "b"]);
+  });
+
+  it("is exempt from first-wins: later rules still add tags", () => {
+    const rules: RuleLike[] = [
+      rule({
+        id: "r1",
+        priority: 0,
+        actions: [
+          { type: "setCategory", categoryId: "c1" },
+          { type: "addTag", tagId: "a" },
+        ],
+      }),
+      rule({
+        id: "r2",
+        priority: 1,
+        actions: [
+          { type: "setCategory", categoryId: "c2" },
+          { type: "addTag", tagId: "b" },
+        ],
+      }),
+    ];
+    const effect = evaluateRules(facts(), rules);
+    expect(effect.categoryId).toBe("c1");
+    expect(effect.addTagIds).toEqual(["a", "b"]);
+  });
+
+  it("keeps tags when a split clears the category", () => {
+    const rules: RuleLike[] = [
+      rule({
+        id: "r1",
+        priority: 0,
+        actions: [
+          {
+            type: "split",
+            parts: [
+              { categoryId: "c1", ratio: 0.5 },
+              { categoryId: "c2", ratio: 0.5 },
+            ],
+          },
+          { type: "addTag", tagId: "a" },
+        ],
+      }),
+    ];
+    const effect = evaluateRules(facts(), rules);
+    expect(effect.addTagIds).toEqual(["a"]);
+    expect(effect.categoryId).toBeUndefined();
+  });
+
+  it("leaves addTagIds undefined when no rule adds a tag", () => {
+    expect(evaluateRules(facts(), [rule({})]).addTagIds).toBeUndefined();
+  });
+});
+
 describe("splitByRatio", () => {
   it("produces cent-exact parts that sum to the total", () => {
     const parts = splitByRatio(10000, [

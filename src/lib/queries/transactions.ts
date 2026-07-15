@@ -32,6 +32,7 @@ export interface TransactionDTO {
   plaidTransactionId: string | null;
   /** Per-category split parts. Empty when the transaction has a single category. */
   splits: TransactionSplitDTO[];
+  tags: { id: string; name: string; color: string }[];
 }
 
 /** Sentinel filter values for "no category" / "no account" rows. */
@@ -48,6 +49,7 @@ export interface TransactionFilters {
   statuses: ("CLEARED" | "PENDING")[];
   categoryIds: string[];
   accountIds: string[];
+  tagIds: string[];
 }
 
 export const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
@@ -56,6 +58,7 @@ export const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   statuses: [],
   categoryIds: [],
   accountIds: [],
+  tagIds: [],
 };
 
 export const TRANSACTIONS_PAGE_SIZE = 100;
@@ -84,6 +87,9 @@ function transactionWhere(
     if (filters.accountIds.includes(NO_ACCOUNT_ID)) or.push({ accountId: null });
     and.push({ OR: or });
   }
+  if (filters.tagIds.length > 0) {
+    and.push({ tags: { some: { id: { in: filters.tagIds } } } });
+  }
   if (filters.search) {
     const q = filters.search;
     and.push({
@@ -103,7 +109,11 @@ function transactionWhere(
 }
 
 type TransactionRow = Prisma.TransactionGetPayload<{
-  include: { splits: true; account: { select: { type: true } } };
+  include: {
+    splits: true;
+    account: { select: { type: true } };
+    tags: { select: { id: true; name: true; color: true } };
+  };
 }>;
 
 function toTransactionDTO(t: TransactionRow): TransactionDTO {
@@ -126,6 +136,7 @@ function toTransactionDTO(t: TransactionRow): TransactionDTO {
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
     splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
+    tags: t.tags.map((x) => ({ id: x.id, name: x.name, color: x.color })),
   };
 }
 
@@ -138,7 +149,7 @@ export async function getTransactionsBetween(
   const rows = await prisma.transaction.findMany({
     where: transactionWhere(userId, startISO, endISO, filters),
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: { splits: true, account: { select: { type: true } } },
+    include: { splits: true, account: { select: { type: true } }, tags: { select: { id: true, name: true, color: true } } },
   });
   return rows.map(toTransactionDTO);
 }
@@ -187,7 +198,7 @@ export async function getTransactionsPage(
   const rows = await prisma.transaction.findMany({
     where,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: { splits: true, account: { select: { type: true } } },
+    include: { splits: true, account: { select: { type: true } }, tags: { select: { id: true, name: true, color: true } } },
     skip: (safePage - 1) * TRANSACTIONS_PAGE_SIZE,
     take: TRANSACTIONS_PAGE_SIZE,
   });

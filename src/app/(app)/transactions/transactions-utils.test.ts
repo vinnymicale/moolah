@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TransactionDTO } from "@/lib/queries";
+import { EMPTY_TRANSACTION_FILTERS } from "@/lib/queries";
 import {
   PAGE_SIZE, filterTransactionDTOs, paginateTransactionDTOs, parseTransactionFilters,
 } from "./transactions-utils";
@@ -21,6 +22,7 @@ function txn(overrides: Partial<TransactionDTO>): TransactionDTO {
     recurringRuleId: null,
     plaidTransactionId: null,
     splits: [],
+    tags: [],
     ...overrides,
   };
 }
@@ -43,7 +45,7 @@ describe("parseTransactionFilters", () => {
 
   it("returns empty filters for missing params", () => {
     const f = parseTransactionFilters({});
-    expect(f).toEqual({ search: "", types: [], statuses: [], categoryIds: [], accountIds: [] });
+    expect(f).toEqual({ search: "", types: [], statuses: [], categoryIds: [], accountIds: [], tagIds: [] });
   });
 });
 
@@ -100,6 +102,49 @@ describe("paginateTransactionDTOs", () => {
     const page = paginateTransactionDTOs(list, 1);
     expect(page.income).toBe(100);
     expect(page.expense).toBe(25);
+  });
+});
+
+describe("tag filters", () => {
+  const tagChip = (id: string) => ({ id, name: id, color: "#64748b" });
+  const dtoWithTags = (id: string, tags: { id: string; name: string; color: string }[]): TransactionDTO => ({
+    id,
+    type: "EXPENSE",
+    amount: 10,
+    date: "2026-07-01",
+    description: "x",
+    note: null,
+    accountId: null,
+    categoryId: null,
+    cleared: true,
+    isTransfer: false,
+    effectiveTransfer: false,
+    recurringRuleId: null,
+    plaidTransactionId: null,
+    splits: [],
+    tags,
+  });
+
+  it("parses the tag param into tagIds", () => {
+    expect(parseTransactionFilters({ tag: "t1, t2" }).tagIds).toEqual(["t1", "t2"]);
+    expect(parseTransactionFilters({}).tagIds).toEqual([]);
+  });
+
+  it("matches transactions with ANY selected tag (OR)", () => {
+    const f = { ...EMPTY_TRANSACTION_FILTERS, tagIds: ["a", "b"] };
+    const list = [
+      dtoWithTags("m1", [tagChip("a")]),
+      dtoWithTags("m2", [tagChip("b"), tagChip("c")]),
+      dtoWithTags("m3", [tagChip("c")]),
+      dtoWithTags("m4", []),
+    ];
+    const out = filterTransactionDTOs(list, f, new Map());
+    expect(out.map((t) => t.id)).toEqual(["m1", "m2"]);
+  });
+
+  it("ignores tags when no tag filter is set", () => {
+    const out = filterTransactionDTOs([dtoWithTags("m1", [])], EMPTY_TRANSACTION_FILTERS, new Map());
+    expect(out).toHaveLength(1);
   });
 });
 

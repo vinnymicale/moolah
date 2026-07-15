@@ -17,6 +17,7 @@ export function parseTransactionFilters(params: {
   status?: string;
   category?: string;
   account?: string;
+  tag?: string;
 }): TransactionFilters {
   return {
     search: (params.q ?? "").trim(),
@@ -24,6 +25,7 @@ export function parseTransactionFilters(params: {
     statuses: [...toSet(params.status ?? "")].filter((v) => STATUSES.has(v)) as TransactionFilters["statuses"],
     categoryIds: [...toSet(params.category ?? "")],
     accountIds: [...toSet(params.account ?? "")],
+    tagIds: [...toSet(params.tag ?? "")],
   };
 }
 
@@ -43,6 +45,7 @@ export function filterTransactionDTOs(
     if (f.statuses.length === 1 && (f.statuses[0] === "CLEARED") !== t.cleared) return false;
     if (f.categoryIds.length > 0 && !f.categoryIds.includes(t.categoryId ?? "__uncategorized__")) return false;
     if (f.accountIds.length > 0 && !f.accountIds.includes(t.accountId ?? "__none__")) return false;
+    if (f.tagIds.length > 0 && !t.tags.some((x) => f.tagIds.includes(x.id))) return false;
     if (q) {
       const cat = t.categoryId ? categoryNameById.get(t.categoryId) ?? "" : "";
       if (
@@ -78,6 +81,7 @@ export interface SavedFilter {
   statuses: StatusOpt[];
   cats: string[];
   accts: string[];
+  tags: string[];
 }
 
 /** Split a comma-separated query value into a Set of non-empty tokens. */
