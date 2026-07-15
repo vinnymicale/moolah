@@ -12,13 +12,13 @@ import {
   applyRulesAction,
   type RuleInput,
 } from "@/actions/rules";
-import type { CategoryDTO, AccountDTO, RuleDTO } from "@/lib/queries";
+import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
 import type { RuleCondition, RuleAction } from "@/lib/rules";
 
-type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[] };
+type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
 
 const CONDITION_TYPES = ["descriptionContains", "amountRange", "account", "type"] as const;
-const ACTION_TYPES = ["setCategory", "rewriteDescription", "markTransfer", "split"] as const;
+const ACTION_TYPES = ["setCategory", "rewriteDescription", "markTransfer", "split", "addTag"] as const;
 
 function blankCondition(type: RuleCondition["type"]): RuleCondition {
   switch (type) {
@@ -65,7 +65,7 @@ function conditionLabel(c: RuleCondition, accounts: AccountDTO[]): string {
   }
 }
 
-function actionLabel(a: RuleAction, categories: CategoryDTO[]): string {
+function actionLabel(a: RuleAction, categories: CategoryDTO[], tags: TagDTO[]): string {
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "(deleted)";
   switch (a.type) {
     case "setCategory":
@@ -77,7 +77,7 @@ function actionLabel(a: RuleAction, categories: CategoryDTO[]): string {
     case "split":
       return `split across ${a.parts.length} categories`;
     case "addTag":
-      return "add tag";
+      return `add tag ${tags.find((t) => t.id === a.tagId)?.name ?? "(deleted)"}`;
   }
 }
 
@@ -90,9 +90,10 @@ const TYPE_LABELS: Record<string, string> = {
   rewriteDescription: "Rename description",
   markTransfer: "Mark as transfer",
   split: "Split by ratio",
+  addTag: "Add tag",
 };
 
-export function RulesCard({ rules, categories, accounts }: Props) {
+export function RulesCard({ rules, categories, accounts, tags }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -126,6 +127,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
       if (res.wouldRename) parts.push(`rename ${res.wouldRename}`);
       if (res.wouldMarkTransfer) parts.push(`mark ${res.wouldMarkTransfer} transfer${res.wouldMarkTransfer === 1 ? "" : "s"}`);
       if (res.wouldSplit) parts.push(`split ${res.wouldSplit}`);
+      if (res.wouldTag) parts.push(`tag ${res.wouldTag}`);
       setNotice(
         parts.length === 0
           ? "No transactions in the last year would change."
@@ -144,6 +146,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
       if (res.renamed) parts.push(`renamed ${res.renamed}`);
       if (res.transfersMarked) parts.push(`marked ${res.transfersMarked} transfer${res.transfersMarked === 1 ? "" : "s"}`);
       if (res.split) parts.push(`split ${res.split}`);
+      if (res.tagged) parts.push(`tagged ${res.tagged}`);
       setNotice(parts.length === 0 ? "No transactions matched a rule." : `Done: ${parts.join(", ")}.`);
       router.refresh();
     });
@@ -188,6 +191,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
           <RuleEditor
             categories={categories}
             accounts={accounts}
+            tags={tags}
             onCancel={() => setEditing(null)}
             onError={setError}
             onSaved={() => {
@@ -208,6 +212,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
                     rule={rule}
                     categories={categories}
                     accounts={accounts}
+                    tags={tags}
                     onCancel={() => setEditing(null)}
                     onError={setError}
                     onSaved={() => {
@@ -238,7 +243,7 @@ export function RulesCard({ rules, categories, accounts }: Props) {
                       ))}
                       {rule.actions.map((a, i) => (
                         <span key={i} className="text-default">
-                          {actionLabel(a, categories)}
+                          {actionLabel(a, categories, tags)}
                           {i < rule.actions.length - 1 ? "," : ""}{" "}
                         </span>
                       ))}
@@ -274,6 +279,7 @@ function RuleEditor({
   rule,
   categories,
   accounts,
+  tags,
   onCancel,
   onSaved,
   onError,
@@ -281,6 +287,7 @@ function RuleEditor({
   rule?: RuleDTO;
   categories: CategoryDTO[];
   accounts: AccountDTO[];
+  tags: TagDTO[];
   onCancel: () => void;
   onSaved: () => void;
   onError: (msg: string) => void;
@@ -352,6 +359,7 @@ function RuleEditor({
               key={i}
               action={a}
               categories={categories}
+              tags={tags}
               onChange={(next) => updateAction(i, next)}
               onRemove={actions.length > 1 ? () => setActions((p) => p.filter((_, j) => j !== i)) : undefined}
             />
@@ -473,11 +481,13 @@ function ConditionRow({
 function ActionRow({
   action,
   categories,
+  tags,
   onChange,
   onRemove,
 }: {
   action: RuleAction;
   categories: CategoryDTO[];
+  tags: TagDTO[];
   onChange: (a: RuleAction) => void;
   onRemove?: () => void;
 }) {
@@ -517,6 +527,19 @@ function ActionRow({
 
       {action.type === "markTransfer" && (
         <span className="flex h-9 items-center text-sm text-muted">No options</span>
+      )}
+
+      {action.type === "addTag" && (
+        <select
+          className="input h-9 flex-1 text-sm"
+          value={action.tagId}
+          onChange={(e) => onChange({ type: "addTag", tagId: e.target.value })}
+        >
+          <option value="">Select tag…</option>
+          {tags.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
       )}
 
       {action.type === "split" && (
