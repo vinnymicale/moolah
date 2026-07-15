@@ -180,4 +180,29 @@ describe("commitImportAction", () => {
     expect(arg.data[0].categoryId).toBe("mine");
     expect(arg.data[1].categoryId).toBeNull();
   });
+
+  it("creates a row with valid tags via a per-row create, filtering out deleted tag ids", async () => {
+    vi.mocked(prisma.tag.findMany).mockResolvedValue([{ id: "mine" }] as never);
+    vi.mocked(prisma.transaction.createManyAndReturn).mockResolvedValue([{ id: "t1" }] as never);
+    vi.mocked(prisma.transaction.create).mockResolvedValue({ id: "t2" } as never);
+
+    const res = await commitImportAction({
+      rows: [
+        { date: "2026-01-01", description: "no tags", amount: 1, type: "EXPENSE" },
+        { date: "2026-01-02", description: "tagged", amount: 2, type: "EXPENSE", tagIds: ["mine", "deleted"] },
+      ],
+    });
+
+    expect(res).toEqual({ ok: true });
+    expect(prisma.transaction.createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ description: "no tags" })] }),
+    );
+    expect(prisma.transaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        description: "tagged",
+        tags: { connect: [{ id: "mine" }] },
+      }),
+      select: { id: true },
+    });
+  });
 });
