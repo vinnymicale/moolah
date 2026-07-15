@@ -154,5 +154,6 @@ export function eventToTxn(e: CalendarEvent): TransactionDTO {
     plaidTransactionId: e.plaidTransactionId,
     // Calendar events are single-category; the editor seeds an unsplit form.
     splits: [],
+    tags: [],
   };
 }

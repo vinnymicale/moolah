@@ -57,6 +57,7 @@ model User {
   notificationChannels NotificationChannel[]
   notificationRules    NotificationRule[]
   notifications        Notification[]
+  tags                 Tag[]
 }
 
 // Auth.js OAuth account link
@@ -279,6 +280,8 @@ model Transaction {
   // categoryId is null and the splits carry the per-category attribution; their
   // amounts sum to `amount`. No splits = the single categoryId applies.
   splits          TransactionSplit[]
+
+  tags            Tag[]
 
   // Soft delete: set when the user deletes a transaction. Deleted rows are
   // hidden everywhere but kept so they can be restored from the trash, and so a
@@ -539,4 +542,19 @@ model Notification {
   @@unique([ruleId, dedupeKey])
   @@index([userId, firedAt])
   @@index([userId, readAt])
+}
+
+model Tag {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  color     String   @default("#64748b")
+  createdAt DateTime @default(now())
+
+  transactions Transaction[]
+
+  @@unique([userId, name])
+  @@index([userId])
 }

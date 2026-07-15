@@ -203,6 +203,10 @@ export async function syncPlaidItem(
     actions: r.actions as unknown as RuleAction[],
   }));
 
+  const liveTagIds = new Set(
+    (await prisma.tag.findMany({ where: { userId: item.userId }, select: { id: true } })).map((t) => t.id),
+  );
+
   // Load recurring rules for matching. When a Plaid transaction lands on (or
   // within 2 days of) a rule's scheduled occurrence, we link the transaction
   // to that rule so the calendar suppresses the virtual projection in favour
@@ -319,6 +323,22 @@ export async function syncPlaidItem(
       });
       if (!opts?.recategorizeOnly) newTxnIds.push(row.id);
 
+      const tagIdsToAdd = (effect.addTagIds ?? []).filter((id) => liveTagIds.has(id));
+      if (tagIdsToAdd.length > 0) {
+        const current = await prisma.transaction.findUnique({
+          where: { id: row.id },
+          select: { tags: { select: { id: true } } },
+        });
+        const have = new Set(current?.tags.map((t) => t.id) ?? []);
+        const missing = tagIdsToAdd.filter((id) => !have.has(id));
+        if (missing.length > 0) {
+          await prisma.transaction.update({
+            where: { id: row.id },
+            data: { tags: { connect: missing.map((id) => ({ id })) } },
+          });
+        }
+      }
+
       // When a pending charge posts, Plaid delivers the settled version as a
       // new transaction (with its own id) that points back at the pending one
       // via pending_transaction_id. Plaid is supposed to also send the pending
@@ -373,6 +393,23 @@ export async function syncPlaidItem(
           ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
           : { amount, description: modDesc, date: modDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
       });
+
+      const modTagIds = (modEffect.addTagIds ?? []).filter((id) => liveTagIds.has(id));
+      if (modTagIds.length > 0) {
+        const target = await prisma.transaction.findFirst({
+          where: { plaidTransactionId: txn.transaction_id, userId: item.userId },
+          select: { id: true, tags: { select: { id: true } } },
+        });
+        if (target) {
+          const missing = modTagIds.filter((id) => !target.tags.some((x) => x.id === id));
+          if (missing.length > 0) {
+            await prisma.transaction.update({
+              where: { id: target.id },
+              data: { tags: { connect: missing.map((id) => ({ id })) } },
+            });
+          }
+        }
+      }
 
       // Same pending→posted reconciliation as in the added loop: drop the
       // pending row this settled transaction superseded.

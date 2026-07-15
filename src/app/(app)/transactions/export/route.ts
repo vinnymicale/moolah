@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     transactions = await getTransactionsBetween(userId, startISO, endISO, filters);
   }
 
-  const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note"];
+  const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note", "Tags"];
   const rows = transactions.map((t) => [
     t.date,
     t.type,
@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     csvField(t.accountId ? acctById.get(t.accountId) ?? "" : ""),
     t.cleared ? "yes" : "no",
     csvField(t.note ?? ""),
+    csvField(t.tags.map((x) => x.name).join("; ")),
   ]);
   const content = [header, ...rows].map((r) => r.join(",")).join("\n");
 

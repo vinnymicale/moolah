@@ -24,14 +24,18 @@ vi.mock("@/lib/prisma", () => ({
       updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
+    transactionSplit: { deleteMany: vi.fn() },
     financialAccount: { findFirst: vi.fn() },
     category: { findFirst: vi.fn(), count: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
 
+vi.mock("@/lib/tags", () => ({ resolveTagIds: vi.fn() }));
+
 import {
   createTransactionAction,
+  updateTransactionAction,
   deleteTransactionAction,
   setClearedAction,
   bulkDeleteTransactionsAction,
@@ -44,9 +48,11 @@ import {
 } from "./transactions";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { resolveTagIds } from "@/lib/tags";
 
 const requireUserMock = vi.mocked(requireUser);
 const txn = vi.mocked(prisma.transaction);
+const resolveTagIdsMock = vi.mocked(resolveTagIds);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -127,6 +133,56 @@ describe("existence / ownership checks", () => {
     const result = await setClearedAction("t1", false);
     expect(result).toEqual({ ok: true });
     expect(txn.update).toHaveBeenCalledWith({ where: { id: "t1" }, data: { cleared: false } });
+  });
+});
+
+describe("updateTransactionAction tag handling", () => {
+  const baseInput = {
+    type: "EXPENSE" as const,
+    amount: 10,
+    date: "2026-01-01",
+    description: "Coffee",
+  };
+
+  beforeEach(() => {
+    txn.findFirst.mockResolvedValue({ id: "t1", cleared: true } as never);
+    const $transaction = vi.mocked(prisma.$transaction);
+    $transaction.mockImplementation(async (cb: unknown) => {
+      if (typeof cb === "function") {
+        return cb({
+          transactionSplit: prisma.transactionSplit,
+          transaction: prisma.transaction,
+        });
+      }
+      return [];
+    });
+    txn.update.mockResolvedValue({} as never);
+  });
+
+  it("leaves tags untouched when the input has no tags field (calendar edit)", async () => {
+    const result = await updateTransactionAction("t1", baseInput);
+    expect(result).toEqual({ ok: true });
+    expect(resolveTagIdsMock).not.toHaveBeenCalled();
+    const call = txn.update.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data).not.toHaveProperty("tags");
+  });
+
+  it("sets tags when the input includes a tags array (tags-managed edit)", async () => {
+    resolveTagIdsMock.mockResolvedValue(["tag1", "tag2"]);
+    const result = await updateTransactionAction("t1", { ...baseInput, tags: ["work", "food"] });
+    expect(result).toEqual({ ok: true });
+    expect(resolveTagIdsMock).toHaveBeenCalledWith("u1", ["work", "food"]);
+    const call = txn.update.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data).toHaveProperty("tags", { set: [{ id: "tag1" }, { id: "tag2" }] });
+  });
+
+  it("clears tags when the input includes an explicit empty tags array", async () => {
+    resolveTagIdsMock.mockResolvedValue([]);
+    const result = await updateTransactionAction("t1", { ...baseInput, tags: [] });
+    expect(result).toEqual({ ok: true });
+    expect(resolveTagIdsMock).toHaveBeenCalledWith("u1", []);
+    const call = txn.update.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(call.data).toHaveProperty("tags", { set: [] });
   });
 });
 

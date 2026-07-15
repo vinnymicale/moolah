@@ -17,9 +17,10 @@ import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
-  pairTransfersAction, unpairTransferAction,
+  pairTransfersAction, unpairTransferAction, bulkAddTagAction, bulkRemoveTagAction,
 } from "@/actions/transactions";
-import type { AccountDTO, CategoryDTO, TransactionDTO, TransactionsPageDTO } from "@/lib/queries";
+import { createTagAction } from "@/actions/tags";
+import type { AccountDTO, CategoryDTO, TagDTO, TransactionDTO, TransactionsPageDTO } from "@/lib/queries";
 import { categoryColor } from "@/lib/colors";
 import { toggleInSet } from "@/lib/collections";
 import { usePersistentState } from "@/lib/usePersistentState";
@@ -34,6 +35,7 @@ export function TransactionsList({
   txnPage,
   accounts,
   categories,
+  tags,
   range,
   rangeLabel,
   monthISO,
@@ -44,6 +46,7 @@ export function TransactionsList({
   initialStatuses = "",
   initialAccountId = "",
   initialCategoryId = "",
+  initialTagId = "",
   focusId = "",
   customFrom = "",
   customTo = "",
@@ -51,6 +54,7 @@ export function TransactionsList({
   txnPage: TransactionsPageDTO;
   accounts: AccountDTO[];
   categories: CategoryDTO[];
+  tags: TagDTO[];
   range: string;
   rangeLabel: string;
   monthISO: string;
@@ -61,6 +65,7 @@ export function TransactionsList({
   initialStatuses?: string;
   initialAccountId?: string;
   initialCategoryId?: string;
+  initialTagId?: string;
   focusId?: string;
   customFrom?: string;
   customTo?: string;
@@ -86,6 +91,7 @@ export function TransactionsList({
   const statusFilter = useMemo(() => toSet(initialStatuses), [initialStatuses]);
   const catFilter = useMemo(() => toSet(initialCategoryId), [initialCategoryId]);
   const acctFilter = useMemo(() => toSet(initialAccountId), [initialAccountId]);
+  const tagFilter = useMemo(() => toSet(initialTagId), [initialTagId]);
   const [search, setSearch] = useState(initialSearch);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Keep the box in step with the URL (back button, saved filters) but never
@@ -119,6 +125,7 @@ export function TransactionsList({
     if (initialStatuses) p.status = initialStatuses;
     if (initialCategoryId) p.category = initialCategoryId;
     if (initialAccountId) p.account = initialAccountId;
+    if (initialTagId) p.tag = initialTagId;
     return p;
   };
   const urlWith = (overrides: Record<string, string | null>, path = "/transactions") => {
@@ -147,6 +154,7 @@ export function TransactionsList({
   const setStatusFilter = (s: Set<string>) => router.push(urlWith({ status: [...s].join(",") }));
   const setCatFilter = (s: Set<string>) => router.push(urlWith({ category: [...s].join(",") }));
   const setAcctFilter = (s: Set<string>) => router.push(urlWith({ account: [...s].join(",") }));
+  const setTagFilter = (s: Set<string>) => router.push(urlWith({ tag: [...s].join(",") }));
 
   // Saved filters (named filter combos), persisted in localStorage.
   const [savedFilters, persistFilters] = usePersistentState<SavedFilter[]>(SAVED_FILTERS_KEY, NO_FILTERS);
@@ -158,6 +166,7 @@ export function TransactionsList({
       status: f.statuses.join(","),
       category: f.cats.join(","),
       account: f.accts.join(","),
+      tag: (f.tags ?? []).join(",") || null,
     }));
   };
   const [namingFilter, setNamingFilter] = useState(false);
@@ -176,14 +185,15 @@ export function TransactionsList({
         statuses: [...statusFilter] as StatusOpt[],
         cats: [...catFilter],
         accts: [...acctFilter],
+        tags: [...tagFilter],
       },
     ];
     persistFilters(next);
   };
-  const hasActiveFilters = !!search.trim() || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0;
+  const hasActiveFilters = !!search.trim() || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0 || tagFilter.size > 0;
   const clearAllFilters = () => {
     setSearch("");
-    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null }));
+    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null, tag: null }));
   };
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
@@ -368,6 +378,15 @@ export function TransactionsList({
             ]}
           />
         )}
+        {tags.length > 0 && (
+          <MultiSelect
+            label="Tags"
+            allLabel="All tags"
+            options={tags.map((t) => ({ value: t.id, label: t.name, color: t.color }))}
+            selected={tagFilter}
+            onChange={setTagFilter}
+          />
+        )}
 
         {/* Saved filters */}
         {savedFilters.length > 0 && (
@@ -432,6 +451,62 @@ export function TransactionsList({
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
           </select>
+
+          <select
+            className="input h-8 w-auto text-xs"
+            defaultValue=""
+            disabled={pending}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              e.currentTarget.value = "";
+              if (!v) return;
+              if (v === "__create__") {
+                const name = window.prompt("New tag name");
+                if (!name?.trim()) return;
+                start(async () => {
+                  setBulkError(null);
+                  const created = await createTagAction({ name });
+                  if (!created.ok) return setBulkError(created.error);
+                  const res = await bulkAddTagAction([...selected], created.id);
+                  if (res.ok) clearSelection();
+                  else setBulkError(res.error ?? "Something went wrong.");
+                });
+                return;
+              }
+              runBulk((ids) => bulkAddTagAction(ids, v));
+            }}
+          >
+            <option value="" disabled>
+              Add tag…
+            </option>
+            <option value="__create__">＋ New tag…</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {tags.length > 0 && (
+            <select
+              className="input h-8 w-auto text-xs"
+              defaultValue=""
+              disabled={pending}
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                e.currentTarget.value = "";
+                if (v) runBulk((ids) => bulkRemoveTagAction(ids, v));
+              }}
+            >
+              <option value="" disabled>
+                Remove tag…
+              </option>
+              {tags.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button onClick={() => runBulk((ids) => bulkSetClearedAction(ids, true))} disabled={pending} className="btn-ghost h-8 text-xs" title="Mark as cleared">
             <CheckCircle2 size={14} /> Cleared
@@ -541,6 +616,15 @@ export function TransactionsList({
                           <ArrowLeftRight size={11} /> transfer
                         </span>
                       )}
+                      {t.tags.map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="ml-1 inline-flex items-center gap-1 rounded-full border border-line px-1.5 py-px align-middle text-[10px] font-normal text-muted"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                        </span>
+                      ))}
                     </p>
                     <p className="truncate text-xs text-muted">
                       {formatMonthDayYear(t.date)}
@@ -603,8 +687,8 @@ export function TransactionsList({
         </form>
       </Modal>
 
-      {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} />}
-      {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} />}
+      {adding && <TransactionModal open onClose={() => setAdding(false)} accounts={accounts} categories={categories} tags={tags} />}
+      {editing && <TransactionModal open onClose={() => setEditing(null)} accounts={accounts} categories={categories} transaction={editing} tags={tags} />}
       <TrashDrawer open={trashOpen} onClose={() => setTrashOpen(false)} accounts={accounts} categories={categories} />
     </div>
   );

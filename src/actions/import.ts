@@ -31,6 +31,8 @@ export interface AnalyzedRow extends ParsedRowInput {
   suggestedCategoryId: string | null;
   /** Suggested cleaned-up description from a rename rule, if any. */
   suggestedDescription: string | null;
+  /** Tag ids suggested by addTag rules. */
+  suggestedTagIds: string[];
 }
 
 /** Stable key for matching by direction + day + amount. */
@@ -136,8 +138,9 @@ export async function analyzeImportAction(
         (guessedName ? catByName.get(`${r.type}|${guessedName.toLowerCase()}`) ?? null : null);
       const suggestedDescription =
         effect.description && effect.description !== r.description ? effect.description : null;
+      const suggestedTagIds = effect.addTagIds ?? [];
 
-      return { ...r, duplicate, duplicateReason, suggestedCategoryId, suggestedDescription };
+      return { ...r, duplicate, duplicateReason, suggestedCategoryId, suggestedDescription, suggestedTagIds };
     });
 
     return { ok: true, rows: analyzed };
@@ -149,6 +152,7 @@ export async function analyzeImportAction(
 
 const commitRowSchema = parsedRowSchema.extend({
   categoryId: z.string().nullable().optional(),
+  tagIds: z.array(z.string()).max(20).optional(),
 });
 
 const commitSchema = z.object({
@@ -178,19 +182,41 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
         : [],
     );
 
-    const created = await prisma.transaction.createManyAndReturn({
-      data: rows.map((r) => ({
-        userId,
-        accountId: accountId || null,
-        categoryId: r.categoryId && validCatIds.has(r.categoryId) ? r.categoryId : null,
-        type: r.type as TxnType,
-        amount: r.amount,
-        date: parseISODay(r.date),
-        description: r.description,
-        cleared: true,
-      })),
-      select: { id: true },
+    const providedTags = [...new Set(rows.flatMap((r) => r.tagIds ?? []))];
+    const validTagIds = new Set(
+      providedTags.length
+        ? (await prisma.tag.findMany({ where: { userId, id: { in: providedTags } }, select: { id: true } })).map((t) => t.id)
+        : [],
+    );
+
+    const rowData = (r: (typeof rows)[number]) => ({
+      userId,
+      accountId: accountId || null,
+      categoryId: r.categoryId && validCatIds.has(r.categoryId) ? r.categoryId : null,
+      type: r.type as TxnType,
+      amount: r.amount,
+      date: parseISODay(r.date),
+      description: r.description,
+      cleared: true,
     });
+
+    const withTags = rows.filter((r) => (r.tagIds ?? []).some((id) => validTagIds.has(id)));
+    const plain = rows.filter((r) => !withTags.includes(r));
+
+    const created = plain.length
+      ? await prisma.transaction.createManyAndReturn({
+          data: plain.map(rowData),
+          select: { id: true },
+        })
+      : [];
+    for (const r of withTags) {
+      const ids = [...new Set((r.tagIds ?? []).filter((id) => validTagIds.has(id)))];
+      const t = await prisma.transaction.create({
+        data: { ...rowData(r), tags: { connect: ids.map((id) => ({ id })) } },
+        select: { id: true },
+      });
+      created.push(t);
+    }
 
     // Imported CC payments pair up the same way Plaid-synced ones do.
     await matchTransfers(userId);

@@ -9,7 +9,7 @@
 
 import type {
   AccountDTO, CategoryDTO, TransactionDTO, RecurringDTO,
-  BudgetLineDTO, SavingsGoalDTO, SnapshotDTO,
+  BudgetLineDTO, SavingsGoalDTO, SnapshotDTO, TagDTO,
 } from "@/lib/queries";
 import type {
   ChannelDTO, NotificationDTO, RuleDTO,
@@ -336,8 +336,12 @@ function txn(
     recurringRuleId,
     plaidTransactionId: null,
     splits: [],
+    tags: [],
   };
 }
+
+const TAG_VACATION = { id: "tag-vacation", name: "vacation 2026", color: "#0891b2" };
+const TAG_REIMBURSABLE = { id: "tag-reimbursable", name: "reimbursable", color: "#d97706" };
 
 export const DEMO_TRANSACTIONS: TransactionDTO[] = [
   // Current month — cleared
@@ -351,12 +355,12 @@ export const DEMO_TRANSACTIONS: TransactionDTO[] = [
       { categoryId: "cat-shopping", amount: 30 },
     ],
   },
-  txn("tx-03", 4, "EXPENSE", 54.18, "Dinner – Tavola", "cat-dining", "acct-cc"),
+  { ...txn("tx-03", 4, "EXPENSE", 54.18, "Dinner – Tavola", "cat-dining", "acct-cc"), tags: [TAG_VACATION] },
   txn("tx-04", 5, "EXPENSE", 500, "Auto-transfer to savings", "cat-savings", "acct-checking", true, "rec-savings-transfer"),
   txn("tx-05", 6, "EXPENSE", 42.3, "Shell gas", "cat-gas", "acct-cc"),
   txn("tx-06", 8, "EXPENSE", 15.99, "Netflix", "cat-subscriptions", "acct-cc", true, "rec-netflix"),
-  txn("tx-07", 9, "EXPENSE", 121.74, "Whole Foods", "cat-groceries", "acct-cc"),
-  txn("tx-08", 11, "EXPENSE", 64.0, "Pharmacy", "cat-health", "acct-cc"),
+  { ...txn("tx-07", 9, "EXPENSE", 121.74, "Whole Foods", "cat-groceries", "acct-cc"), tags: [TAG_VACATION] },
+  { ...txn("tx-08", 11, "EXPENSE", 64.0, "Pharmacy", "cat-health", "acct-cc"), tags: [TAG_REIMBURSABLE] },
   txn("tx-09", 12, "EXPENSE", 180, "Electric & Gas", "cat-utilities", "acct-checking", true, "rec-electric"),
   // Current month — upcoming / uncleared
   txn("tx-10", 13, "INCOME", 2600, "Paycheck", "cat-salary", "acct-checking", false, "rec-paycheck"),
@@ -377,6 +381,15 @@ export const DEMO_TRANSACTIONS: TransactionDTO[] = [
   txn("pf-03", 15, "EXPENSE", 24.99, "Planet Fitness", "cat-personal-care", "acct-cc", true, null, -3),
   txn("pf-04", 15, "EXPENSE", 24.99, "Planet Fitness", "cat-personal-care", "acct-cc", true, null, -4),
 ];
+
+export const DEMO_TAGS: TagDTO[] = [TAG_VACATION, TAG_REIMBURSABLE].map((chip) => {
+  const tagged = DEMO_TRANSACTIONS.filter((t) => t.tags.some((x) => x.id === chip.id));
+  return {
+    ...chip,
+    usageCount: tagged.length,
+    totalAmount: tagged.reduce((sum, t) => sum + t.amount, 0),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Budgets (current month)

@@ -28,6 +28,7 @@ vi.mock("./prisma", () => ({
     financialAccount: { findMany: vi.fn(), update: vi.fn() },
     category: { findMany: vi.fn() },
     rule: { findMany: vi.fn() },
+    tag: { findMany: vi.fn() },
     recurringRule: { findMany: vi.fn() },
     transaction: {
       upsert: vi.fn(),
@@ -52,6 +53,7 @@ const linkedAccount = vi.mocked(prisma.plaidLinkedAccount);
 const account = vi.mocked(prisma.financialAccount);
 const category = vi.mocked(prisma.category);
 const automationRule = vi.mocked(prisma.rule);
+const tag = vi.mocked(prisma.tag);
 const recurringRule = vi.mocked(prisma.recurringRule);
 const txn = vi.mocked(prisma.transaction);
 const snapshot = vi.mocked(captureNetWorthSnapshot);
@@ -100,9 +102,11 @@ beforeEach(() => {
     { id: "cat-dining", name: "Dining Out" },
   ] as never);
   automationRule.findMany.mockResolvedValue([] as never);
+  tag.findMany.mockResolvedValue([] as never);
   recurringRule.findMany.mockResolvedValue([] as never);
   txn.upsert.mockResolvedValue({ id: "t-new" } as never);
   txn.findMany.mockResolvedValue([] as never);
+  txn.findUnique.mockResolvedValue({ tags: [] } as never);
   account.findMany.mockResolvedValue([] as never);
   plaidClient.transactionsSync.mockResolvedValue(syncPage());
   plaidClient.accountsBalanceGet.mockResolvedValue({ data: { accounts: [] } });
@@ -222,6 +226,45 @@ describe("syncPlaidItem - added transactions", () => {
       where: { plaidTransactionId: "pend-1", userId: "u1" },
     });
   });
+
+  it("connects tags added by a matching automation rule to a live tag", async () => {
+    automationRule.findMany.mockResolvedValue([
+      {
+        id: "ar1",
+        priority: 1,
+        enabled: true,
+        conditions: [{ type: "descriptionContains", value: "wegmans" }],
+        actions: [{ type: "addTag", tagId: "tag-groceries" }],
+      },
+    ] as never);
+    tag.findMany.mockResolvedValue([{ id: "tag-groceries" }] as never);
+    plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
+
+    await syncPlaidItem("item1", "u1");
+
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t-new" },
+      data: { tags: { connect: [{ id: "tag-groceries" }] } },
+    });
+  });
+
+  it("does not connect a tag the rule references once it has been deleted", async () => {
+    automationRule.findMany.mockResolvedValue([
+      {
+        id: "ar1",
+        priority: 1,
+        enabled: true,
+        conditions: [{ type: "descriptionContains", value: "wegmans" }],
+        actions: [{ type: "addTag", tagId: "tag-deleted" }],
+      },
+    ] as never);
+    tag.findMany.mockResolvedValue([] as never); // tag-deleted is no longer live
+    plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
+
+    await syncPlaidItem("item1", "u1");
+
+    expect(txn.update).not.toHaveBeenCalled();
+  });
 });
 
 describe("syncPlaidItem - modified and removed", () => {
@@ -249,6 +292,28 @@ describe("syncPlaidItem - modified and removed", () => {
     expect(result.removed).toBe(1);
     expect(txn.deleteMany).toHaveBeenCalledWith({
       where: { plaidTransactionId: "ptx-gone", userId: "u1" },
+    });
+  });
+
+  it("connects tags added by a matching automation rule on a modified transaction", async () => {
+    automationRule.findMany.mockResolvedValue([
+      {
+        id: "ar1",
+        priority: 1,
+        enabled: true,
+        conditions: [{ type: "descriptionContains", value: "wegmans" }],
+        actions: [{ type: "addTag", tagId: "tag-groceries" }],
+      },
+    ] as never);
+    tag.findMany.mockResolvedValue([{ id: "tag-groceries" }] as never);
+    txn.findFirst.mockResolvedValue({ id: "t-mod", tags: [] } as never);
+    plaidClient.transactionsSync.mockResolvedValue(syncPage({ modified: [plaidTxn()] }));
+
+    await syncPlaidItem("item1", "u1");
+
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t-mod" },
+      data: { tags: { connect: [{ id: "tag-groceries" }] } },
     });
   });
 });

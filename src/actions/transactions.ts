@@ -15,6 +15,7 @@ import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { validateSplits } from "@/lib/splits";
+import { resolveTagIds } from "@/lib/tags";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
 
 const recurringSchema = z.object({
@@ -43,6 +44,9 @@ const txnSchema = z.object({
   // Optional category splits. When present (2+ parts summing to amount), the
   // transaction's own categoryId is cleared and these carry the attribution.
   splits: z.array(splitSchema).max(50).optional().nullable(),
+  // Raw max 80 so normalizeTagName produces the user-facing 40-char error,
+  // not a raw Zod one.
+  tags: z.array(z.string().max(80)).max(20).optional().nullable(),
 });
 
 export type TransactionInput = z.input<typeof txnSchema>;
@@ -104,6 +108,7 @@ export async function createTransactionAction(input: TransactionInput): Promise<
     const data = txnSchema.parse(input);
     await assertOwnership(userId, data.accountId, data.categoryId, data.type);
     const splits = await normalizeSplits(userId, data.type, data.amount, data.splits);
+    const tagIds = data.tags?.length ? await resolveTagIds(userId, data.tags) : [];
 
     await prisma.$transaction(async (tx) => {
       let recurringRuleId: string | undefined;
@@ -144,6 +149,7 @@ export async function createTransactionAction(input: TransactionInput): Promise<
           ...(splits.length > 0
             ? { splits: { create: splits.map((s) => ({ categoryId: s.categoryId, amount: s.amount })) } }
             : {}),
+          ...(tagIds.length > 0 ? { tags: { connect: tagIds.map((id) => ({ id })) } } : {}),
         },
       });
     });
@@ -160,6 +166,7 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
     const data = txnSchema.parse(input);
     await assertOwnership(userId, data.accountId, data.categoryId, data.type);
     const splits = await normalizeSplits(userId, data.type, data.amount, data.splits);
+    const tagIds = data.tags != null ? await resolveTagIds(userId, data.tags) : null;
 
     await prisma.$transaction(async (tx) => {
       // Replace any existing splits wholesale; the new set is authoritative.
@@ -178,6 +185,7 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
           ...(splits.length > 0
             ? { splits: { create: splits.map((s) => ({ categoryId: s.categoryId, amount: s.amount })) } }
             : {}),
+          ...(tagIds !== null ? { tags: { set: tagIds.map((id) => ({ id })) } } : {}),
         },
       });
     });
@@ -298,6 +306,48 @@ export async function bulkSetCategoryAction(ids: string[], categoryId: string | 
       prisma.transactionSplit.deleteMany({ where: { transaction: { userId, id: { in: list } } } }),
       prisma.transaction.updateMany({ where: { userId, id: { in: list } }, data: { categoryId } }),
     ]);
+    revalidateAll();
+  });
+}
+
+export async function bulkAddTagAction(ids: string[], tagId: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const list = idsSchema.parse(ids);
+    const tag = await prisma.tag.findFirst({ where: { id: tagId, userId } });
+    if (!tag) throw new UserError("Tag not found");
+    // updateMany cannot touch m2m relations, and connect on an existing pair
+    // violates the join table's unique constraint - per-row updates, new rows only.
+    const rows = await prisma.transaction.findMany({
+      where: { userId, id: { in: list }, NOT: { tags: { some: { id: tagId } } } },
+      select: { id: true },
+    });
+    await prisma.$transaction(
+      rows.map((t) =>
+        prisma.transaction.update({ where: { id: t.id }, data: { tags: { connect: { id: tagId } } } }),
+      ),
+    );
+    revalidateAll();
+  });
+}
+
+export async function bulkRemoveTagAction(ids: string[], tagId: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const list = idsSchema.parse(ids);
+    const tag = await prisma.tag.findFirst({ where: { id: tagId, userId } });
+    if (!tag) throw new UserError("Tag not found");
+    const rows = await prisma.transaction.findMany({
+      where: { userId, id: { in: list }, tags: { some: { id: tagId } } },
+      select: { id: true },
+    });
+    await prisma.$transaction(
+      rows.map((t) =>
+        prisma.transaction.update({ where: { id: t.id }, data: { tags: { disconnect: { id: tagId } } } }),
+      ),
+    );
     revalidateAll();
   });
 }
