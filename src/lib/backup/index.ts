@@ -65,6 +65,7 @@ export async function exportAllData(databaseUrl?: string): Promise<BackupPayload
 const CHILD_FILTERS: Record<string, string> = {
   AccountSnapshot: '"accountId" IN (SELECT id FROM "FinancialAccount" WHERE "userId" = $1)',
   PlaidLinkedAccount: '"plaidItemId" IN (SELECT id FROM "PlaidItem" WHERE "userId" = $1)',
+  _TagToTransaction: '"A" IN (SELECT id FROM "Tag" WHERE "userId" = $1)',
 };
 
 /**
