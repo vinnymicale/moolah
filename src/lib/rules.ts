@@ -105,6 +105,10 @@ export function evaluateRules(facts: TxnFacts, rules: RuleLike[]): RuleEffect {
         case "split":
           if (effect.splits === undefined && action.parts.length > 0) effect.splits = action.parts;
           break;
+        case "addTag":
+          if (!effect.addTagIds) effect.addTagIds = [];
+          if (!effect.addTagIds.includes(action.tagId)) effect.addTagIds.push(action.tagId);
+          break;
       }
     }
   }
