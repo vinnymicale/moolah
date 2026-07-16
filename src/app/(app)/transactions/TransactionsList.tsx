@@ -423,7 +423,7 @@ export function TransactionsList({
 
       {/* Bulk action bar (replaces the totals row while selecting) */}
       {selected.size > 0 ? (
-        <div className="sticky top-16 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand/40 bg-brand/5 px-3 py-2">
+        <div className="sticky top-[61px] z-20 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand/40 bg-[color-mix(in_srgb,var(--brand)_5%,var(--surface))] px-3 py-2 shadow-rest md:top-0">
           <span className="text-sm font-medium">{selected.size} selected</span>
 
           <select
