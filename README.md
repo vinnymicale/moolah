@@ -31,11 +31,11 @@ Planned improvements, roughly in priority order:
 - **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
-- **Transaction tags** - free-form labels (e.g. "vacation 2026", "reimbursable", "tax-deductible")
-  that cut across categories, with tag-based filtering/totals in search and rule-based auto-tagging.
 
 ### Recently shipped
 
+- **Transaction tags** - free-form labels (e.g. "vacation 2026", "reimbursable", "tax-deductible")
+  that cut across categories, with tag-based filtering/totals in search and rule-based auto-tagging.
 - **UI redesign** - grouped Track / Plan / Insights nav with drag-reorder, a mobile bottom tab
   bar, a display typeface for headings, tabular-mono currency, and subtle entrance motion.
 - **Notifications** - rule-based triggers with an in-app inbox and optional Discord delivery.
