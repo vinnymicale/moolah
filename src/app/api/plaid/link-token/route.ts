@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "@/lib/plaid";
+import { decryptSecret } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
         client_name: "Moolah",
         country_codes: PLAID_COUNTRY_CODES,
         language: "en",
-        access_token: item.accessToken,
+        access_token: decryptSecret(item.accessToken),
       };
     } else {
       // Fresh link - connect a new bank.

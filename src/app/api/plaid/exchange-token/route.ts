@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
 import { syncPlaidItem } from "@/lib/plaid-sync";
+import { encryptSecret } from "@/lib/crypto";
 
 const LIABILITY_SUBTYPES = new Set(["credit card", "auto loan", "student loan", "mortgage", "line of credit", "home equity line of credit"]);
 const LIABILITY_TYPES = new Set(["credit", "loan"]);
@@ -66,13 +67,13 @@ export async function POST(req: NextRequest) {
       where: { itemId: item_id },
       create: {
         userId: session.user.id,
-        accessToken: access_token,
+        accessToken: encryptSecret(access_token),
         itemId: item_id,
         institutionId,
         institutionName,
       },
       update: {
-        accessToken: access_token,
+        accessToken: encryptSecret(access_token),
         institutionId,
         institutionName,
         error: null,

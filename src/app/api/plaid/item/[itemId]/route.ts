@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
+import { decryptSecret } from "@/lib/crypto";
 
 export async function DELETE(
   _req: NextRequest,
@@ -21,7 +22,7 @@ export async function DELETE(
   try {
     // Tell Plaid to revoke the access token.
     const plaidClient = await getPlaidClient(session.user.id);
-    await plaidClient.itemRemove({ access_token: item.accessToken });
+    await plaidClient.itemRemove({ access_token: decryptSecret(item.accessToken) });
   } catch {
     // Non-fatal - the item may already be removed on Plaid's side.
   }
