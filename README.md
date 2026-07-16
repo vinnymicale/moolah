@@ -31,6 +31,9 @@ Planned improvements, roughly in priority order:
 - **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
+- **Receipt & document attachments** - upload a photo or PDF of a receipt and attach it to a
+  transaction, so refunds, warranties, and expense reports have proof on hand without digging
+  through email or a shoebox.
 
 ### Recently shipped
 
