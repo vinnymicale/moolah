@@ -23,8 +23,16 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Reject oversized uploads from the declared length before buffering the
+  // body; the byte-size check after reading covers requests that lie about or
+  // omit Content-Length.
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BYTES) {
+    return NextResponse.json({ error: "Backup file is too large." }, { status: 413 });
+  }
+
   const text = await req.text();
-  if (text.length > MAX_BYTES) {
+  if (Buffer.byteLength(text, "utf8") > MAX_BYTES) {
     return NextResponse.json({ error: "Backup file is too large." }, { status: 413 });
   }
 

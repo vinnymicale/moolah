@@ -6,6 +6,7 @@
 // the browser).
 
 import { getPlaidClient } from "./plaid";
+import { decryptSecret } from "./crypto";
 import { prisma } from "./prisma";
 import { parseISODay, isoDay } from "./dates";
 import { expandOccurrences } from "./recurrence";
@@ -172,7 +173,7 @@ export async function syncPlaidItem(
   userId: string,
   opts?: SyncOptions,
 ): Promise<SyncResult> {
-  const item = await prisma.plaidItem.findUniqueOrThrow({
+  const itemRow = await prisma.plaidItem.findUniqueOrThrow({
     where: { id: plaidItemId, userId },
     include: {
       linkedAccounts: {
@@ -180,7 +181,8 @@ export async function syncPlaidItem(
       },
     },
   });
-
+  // Tokens are encrypted at rest; decryptSecret passes legacy plaintext through.
+  const item = { ...itemRow, accessToken: decryptSecret(itemRow.accessToken) };
 
   const plaidClient = await getPlaidClient(item.userId);
 
