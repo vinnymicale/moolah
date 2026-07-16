@@ -1,6 +1,13 @@
 import { compare, hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { ensureDefaultCategories, nameToEmail } from "@/lib/user-setup";
+
+// Attempts per account name per window before sign-in/sign-up is refused.
+// Auth.js authorize() has no request IP, so the key is the normalized name -
+// enough to stop online password guessing against a known account.
+const SIGNIN_MAX_ATTEMPTS = 10;
+const SIGNIN_WINDOW_MS = 60_000;
 
 export interface AuthorizedUser {
   id: string;
@@ -45,6 +52,10 @@ export async function authorizeLocalUser(
   }
 
   if (!password) return null;
+
+  if (!checkRateLimit(`signin:${email}`, SIGNIN_MAX_ATTEMPTS, SIGNIN_WINDOW_MS).allowed) {
+    return null;
+  }
 
   if (isSignup) {
     const existing = await prisma.user.findUnique({ where: { email }, select: { passwordHash: true } });

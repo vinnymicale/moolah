@@ -90,11 +90,15 @@ export async function authenticateApiRequest(authHeader: string | null): Promise
     where: { apiTokenSelector: parsed.selector },
     select: { id: true, apiTokenVerifierHash: true },
   });
-  if (!user?.apiTokenVerifierHash) return null;
+  const stored = user?.apiTokenVerifierHash ?? DUMMY_VERIFIER_HASH;
 
-  if (!verifyApiTokenVerifier(parsed.verifier, user.apiTokenVerifierHash)) return null;
-  return { userId: user.id };
+  if (!verifyApiTokenVerifier(parsed.verifier, stored)) return null;
+  return user ? { userId: user.id } : null;
 }
+
+// Burned on requests whose selector matches no user, so those take the same
+// scrypt time as a real verify instead of returning early.
+const DUMMY_VERIFIER_HASH = hashApiTokenVerifier(randomBytes(VERIFIER_BYTES).toString("base64url"));
 
 /**
  * Non-secret rate-limit key for a raw token: its selector. The selector is
