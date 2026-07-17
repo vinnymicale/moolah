@@ -15,7 +15,8 @@ export default async function CategoriesPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { tab } = await searchParams;
-  const showTags = tab === "tags";
+  // Rules don't exist in demo mode, so fall back to the categories tab there.
+  const active = tab === "tags" ? "tags" : tab === "rules" && !DEMO_MODE ? "rules" : "categories";
 
   let categories;
   let rules: RuleDTO[] = [];
@@ -36,30 +37,37 @@ export default async function CategoriesPage({
 
   return (
     <div className="stagger mx-auto max-w-5xl">
-      <PageHeader title="Categories" subtitle="Organize how you classify income and spending." />
+      <PageHeader title="Categories & Rules" subtitle="Organize categories, tags and automation rules." />
 
       <div className="mb-5 flex w-fit gap-1 rounded-lg border border-line bg-surface2 p-1 text-sm">
         <Link
           href="/categories"
-          className={`rounded-md px-3 py-1 ${!showTags ? "bg-surface font-medium" : "text-muted"}`}
+          className={`rounded-md px-3 py-1 ${active === "categories" ? "bg-surface font-medium" : "text-muted"}`}
         >
           Categories
         </Link>
         <Link
           href="/categories?tab=tags"
-          className={`rounded-md px-3 py-1 ${showTags ? "bg-surface font-medium" : "text-muted"}`}
+          className={`rounded-md px-3 py-1 ${active === "tags" ? "bg-surface font-medium" : "text-muted"}`}
         >
           Tags
         </Link>
+        {!DEMO_MODE && (
+          <Link
+            href="/categories?tab=rules"
+            className={`rounded-md px-3 py-1 ${active === "rules" ? "bg-surface font-medium" : "text-muted"}`}
+          >
+            Rules
+          </Link>
+        )}
       </div>
 
-      {showTags ? (
+      {active === "tags" ? (
         <TagsManager tags={tags} />
+      ) : active === "rules" ? (
+        <RulesCard rules={rules} categories={categories} accounts={accounts} tags={tags} />
       ) : (
-        <>
-          <CategoriesManager categories={categories} />
-          {!DEMO_MODE && <RulesCard rules={rules} categories={categories} accounts={accounts} tags={tags} />}
-        </>
+        <CategoriesManager categories={categories} />
       )}
     </div>
   );
