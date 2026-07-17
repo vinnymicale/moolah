@@ -12,17 +12,19 @@ const STALE_MS = 60 * 60 * 1000; // 1 hour
  * Syncs every linked bank for the signed-in user that is "stale" (never
  * synced, or last synced longer ago than STALE_MS). Best-effort: one item
  * failing doesn't stop the others. Called in the background from the app on
- * load - see AutoPlaidSync.
+ * load - see AutoPlaidSync. Pass ?force=1 to sync every bank regardless of
+ * staleness (the manual sync button - see SyncButton).
  */
-export async function POST() {
+export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const force = new URL(req.url).searchParams.get("force") === "1";
   const cutoff = new Date(Date.now() - STALE_MS);
   const items = await prisma.plaidItem.findMany({
     where: {
       userId: session.user.id,
-      OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: cutoff } }],
+      ...(force ? {} : { OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: cutoff } }] }),
     },
     select: { id: true },
   });

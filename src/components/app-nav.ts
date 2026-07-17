@@ -17,7 +17,7 @@ export const NAV = [
   { href: "/debt", label: "Debt payoff", icon: TrendingDown, group: "plan" as NavGroupId },
   { href: "/networth", label: "Net worth", icon: Wallet, group: "insights" as NavGroupId },
   { href: "/trends", label: "Trends", icon: LineChart, group: "insights" as NavGroupId },
-  { href: "/categories", label: "Categories", icon: Tags, group: "insights" as NavGroupId },
+  { href: "/categories", label: "Categories & Rules", icon: Tags, group: "insights" as NavGroupId },
   { href: "/settings", label: "Settings", icon: Settings, group: "system" as NavGroupId },
 ];
 

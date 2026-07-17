@@ -12,6 +12,7 @@ import { ShortcutsModal } from "./ShortcutsModal";
 import { DemoWelcomeModal } from "./DemoWelcomeModal";
 import { ChatPanel } from "./ChatPanel";
 import { Sidebar } from "./Sidebar";
+import { SyncButton } from "./SyncButton";
 import { ToastProvider } from "./Toast";
 import {
   NAV, NAV_ORDER_KEY, NAV_COLLAPSED_KEY, DEFAULT_ORDER, NAV_BY_HREF, mergeNavOrder, type NavItem,
@@ -247,6 +248,7 @@ export function AppChrome({
             <span className="font-display text-[15px] font-semibold">Moolah</span>
           </div>
           <div className="flex-1" />
+          {!demoMode && <SyncButton variant="icon" />}
           <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 p-0!" aria-label="Search">
             <Search size={18} />
           </button>

@@ -7,6 +7,7 @@ import {
   Plus, Search, Upload, ChevronsLeft, GripVertical, RotateCcw, Keyboard, LogOut, Coffee,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { SyncButton } from "./SyncButton";
 import { Avatar } from "./Avatar";
 import { NAV_GROUPS, type NavGroupId, type NavItem } from "./app-nav";
 
@@ -182,6 +183,7 @@ export function Sidebar({
         >
           <Upload size={15} /> {!compact && "Import CSV"}
         </button>
+        {!demoMode && <SyncButton variant="sidebar" compact={compact} />}
       </div>
       <nav className={`flex flex-1 flex-col overflow-y-auto py-2 ${compact ? "px-2" : "px-3"}`}>
         {NAV_GROUPS.map((group) => {
