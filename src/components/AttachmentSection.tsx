@@ -56,8 +56,9 @@ export function AttachmentSection(props: AttachmentSectionProps) {
     if (!files) return;
     setError(null);
     void (async () => {
+      let next = staged;
       for (const file of Array.from(files)) {
-        const currentCount = transactionId ? items.length : staged.length;
+        const currentCount = transactionId ? items.length : next.length;
         const invalid = validateAttachmentUpload({
           mimeType: file.type,
           size: file.size,
@@ -68,7 +69,8 @@ export function AttachmentSection(props: AttachmentSectionProps) {
           return;
         }
         if (!transactionId) {
-          onStagedChange([...staged, file]);
+          next = [...next, file];
+          onStagedChange(next);
           continue;
         }
         setBusy(true);

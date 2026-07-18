@@ -109,6 +109,19 @@ describe("GET /api/attachments/[id]", () => {
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
+
+  it("serves a unicode filename without crashing, ASCII-safe with a filename* fallback", async () => {
+    attFind.mockResolvedValue({
+      id: "a1", filename: "レシート ☕.jpg", mimeType: "image/jpeg", size: 3,
+      data: Buffer.from([1, 2, 3]),
+    } as never);
+    const res = await GET(new NextRequest("http://localhost/api/attachments/a1"), params("a1"));
+    expect(res.status).toBe(200);
+    const disposition = res.headers.get("Content-Disposition") ?? "";
+    expect(disposition).toMatch(/^[\x20-\x7E]*$/);
+    expect(disposition).toContain("filename*=UTF-8''");
+    expect(disposition).toContain(encodeURIComponent("レシート ☕.jpg"));
+  });
 });
 
 describe("DELETE /api/attachments/[id]", () => {

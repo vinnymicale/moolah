@@ -15,15 +15,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const att = await prisma.attachment.findFirst({ where: { id, userId } });
   if (!att) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  // filename lands inside a quoted header value; strip quotes so it can't
-  // break out of it.
-  const safeName = att.filename.replace(/["\r\n]/g, "");
+  // filename lands inside a quoted header value; strip quotes/backslashes so
+  // it can't break out of it, and drop anything outside printable ASCII since
+  // header values must be ByteStrings. The RFC 5987 filename* param carries
+  // the full unicode name for browsers that support it.
+  const safeName = att.filename.replace(/["\\\r\n]/g, "").replace(/[^\x20-\x7E]/g, "_");
+  const encodedName = encodeURIComponent(att.filename);
   return new NextResponse(new Uint8Array(att.data), {
     status: 200,
     headers: {
       "Content-Type": att.mimeType,
       "Content-Length": String(att.data.length),
-      "Content-Disposition": `inline; filename="${safeName}"`,
+      "Content-Disposition": `inline; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=3600",
     },
