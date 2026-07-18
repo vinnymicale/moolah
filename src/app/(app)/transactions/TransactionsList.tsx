@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Search, Plus, Download, Clock,
-  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight, Pencil,
+  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight, Pencil, Paperclip,
 } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
 import { TrashDrawer } from "./TrashDrawer";
@@ -605,6 +605,9 @@ export function TransactionsList({
                       {t.description}
                       {t.note && (
                         <StickyNote size={12} className="ml-1.5 inline align-middle text-muted" aria-label="Has a note" />
+                      )}
+                      {t.attachments.length > 0 && (
+                        <Paperclip size={12} className="ml-1.5 inline align-middle text-muted" aria-label="Has attachments" />
                       )}
                       {!t.cleared && (
                         <span className="ml-2 inline-flex items-center gap-1 align-middle text-[11px] text-warning">
