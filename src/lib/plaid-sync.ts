@@ -119,7 +119,7 @@ export interface MatchableRule {
  * - EXPENSE: description must share a token with the rule name
  *   (prevents coincidental amount matches, e.g. Shell ~ YouTube)
  * - INCOME: no description check (bank ACH descriptions never match
- *   human-readable names like "Alex's Paycheck")
+ *   human-readable names like "Vinny's Paycheck")
  */
 export function matchRecurringRule(
   rules: MatchableRule[],

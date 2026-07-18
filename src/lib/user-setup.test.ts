@@ -5,7 +5,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 
 describe("nameToEmail", () => {
   it("lowercases and appends the local domain", () => {
-    expect(nameToEmail("Alex")).toBe("alex@moolah.local");
+    expect(nameToEmail("Vinny")).toBe("vinny@moolah.local");
   });
 
   it("joins multi-word names with dots", () => {

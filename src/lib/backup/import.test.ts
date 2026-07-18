@@ -66,7 +66,7 @@ const payload: BackupPayload = {
   version: 1,
   exportedAt: "2026-06-14T00:00:00.000Z",
   tables: [
-    { table: "User", rows: [{ id: "u1", name: "alex" }] },
+    { table: "User", rows: [{ id: "u1", name: "vinny" }] },
     { table: "Transaction", rows: [{ id: "t1", userId: "u1", amount: 5 }] },
   ],
 };
