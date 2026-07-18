@@ -62,3 +62,6 @@ moolah-backup-*.json
 /test-results/
 /playwright-report/
 .worktrees/
+
+# superpowers skill scratch docs (plans/specs), not for source control
+/docs/superpowers
