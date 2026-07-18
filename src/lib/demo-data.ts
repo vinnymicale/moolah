@@ -337,6 +337,7 @@ function txn(
     plaidTransactionId: null,
     splits: [],
     tags: [],
+    attachments: [],
   };
 }
 

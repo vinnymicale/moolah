@@ -23,6 +23,7 @@ function txn(overrides: Partial<TransactionDTO>): TransactionDTO {
     plaidTransactionId: null,
     splits: [],
     tags: [],
+    attachments: [],
     ...overrides,
   };
 }
@@ -123,6 +124,7 @@ describe("tag filters", () => {
     plaidTransactionId: null,
     splits: [],
     tags,
+    attachments: [],
   });
 
   it("parses the tag param into tagIds", () => {

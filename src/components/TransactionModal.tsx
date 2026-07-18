@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { Modal } from "./Modal";
 import { SplitEditor, EMPTY_SPLITS, type SplitRow } from "./SplitEditor";
 import { TagInput, type TagOption } from "./TagInput";
+import { AttachmentSection, uploadAttachment } from "./AttachmentSection";
 import type { AccountDTO, CategoryDTO, TransactionDTO } from "@/lib/queries";
 import {
   createTransactionAction,
@@ -82,6 +83,7 @@ export function TransactionModal(props: TransactionModalProps) {
     initialSplits.length > 0 ? initialSplits : EMPTY_SPLITS,
   );
   const [error, setError] = useState<string | null>(null);
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [pending, start] = useTransition();
   const { toast } = useToast();
 
@@ -137,6 +139,16 @@ export function TransactionModal(props: TransactionModalProps) {
         setError(res.error ?? "Something went wrong.");
         return;
       }
+      // Files picked before the transaction existed upload now, keyed to the
+      // new id. Failures keep the saved transaction and just report the file.
+      if (!editing && stagedFiles.length > 0 && "id" in res && res.id) {
+        const newId = res.id as string;
+        for (const file of stagedFiles) {
+          const up = await uploadAttachment(newId, file);
+          if (!up.ok) toast({ message: `Couldn't attach ${file.name}: ${up.error}` });
+        }
+      }
+      setStagedFiles([]);
       // When editing an existing one-off, turning on "recurring" promotes it to
       // a series (the create path handles its own recurring inline).
       if (editing && form.recurring && !alreadyRecurring) {
@@ -294,6 +306,14 @@ export function TransactionModal(props: TransactionModalProps) {
             rows={2}
           />
         </div>
+
+        <AttachmentSection
+          key={transaction?.id ?? "new"}
+          transactionId={transaction?.id ?? null}
+          initial={transaction?.attachments ?? []}
+          staged={stagedFiles}
+          onStagedChange={setStagedFiles}
+        />
 
         {tagsManaged && (
           <div>

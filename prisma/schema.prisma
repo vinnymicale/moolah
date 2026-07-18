@@ -58,6 +58,7 @@ model User {
   notificationRules    NotificationRule[]
   notifications        Notification[]
   tags                 Tag[]
+  attachments          Attachment[]
 }
 
 // Auth.js OAuth account link
@@ -282,6 +283,7 @@ model Transaction {
   splits          TransactionSplit[]
 
   tags            Tag[]
+  attachments     Attachment[]
 
   // Soft delete: set when the user deletes a transaction. Deleted rows are
   // hidden everywhere but kept so they can be restored from the trash, and so a
@@ -318,6 +320,28 @@ model TransactionSplit {
 
   @@index([transactionId])
   @@index([categoryId])
+}
+
+// A receipt or document file attached to a transaction. Bytes live in the DB
+// so the feature works on both Vercel and self-host, and rides along with the
+// whole-schema backup dump.
+model Attachment {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  filename      String
+  mimeType      String
+  size          Int
+  data          Bytes
+
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([userId])
 }
 
 model RecurringRule {

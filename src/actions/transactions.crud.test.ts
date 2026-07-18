@@ -88,13 +88,14 @@ beforeEach(() => {
   demoMode.value = false;
   requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
   recurring.create.mockResolvedValue({ id: "rr1" } as never);
+  txn.create.mockResolvedValue({ id: "t1" } as never);
 });
 
 describe("createTransactionAction", () => {
   it("creates a plain transaction with parsed date and cleared defaulting to true", async () => {
     const result = await createTransactionAction(baseInput);
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, id: "t1" });
     const data = txn.create.mock.calls[0][0].data;
     expect(data).toMatchObject({
       userId: "u1",
@@ -139,7 +140,7 @@ describe("createTransactionAction", () => {
       recurring: { frequency: "MONTHLY", interval: 1, dayOfMonth: 1 },
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, id: "t1" });
     expect(recurring.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         userId: "u1",
@@ -169,7 +170,7 @@ describe("createTransactionAction", () => {
       ],
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, id: "t1" });
     const data = txn.create.mock.calls[0][0].data;
     expect(data.categoryId).toBeNull();
     expect(data.splits).toEqual({
