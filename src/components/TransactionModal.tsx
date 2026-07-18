@@ -148,6 +148,7 @@ export function TransactionModal(props: TransactionModalProps) {
           if (!up.ok) toast({ message: `Couldn't attach ${file.name}: ${up.error}` });
         }
       }
+      setStagedFiles([]);
       // When editing an existing one-off, turning on "recurring" promotes it to
       // a series (the create path handles its own recurring inline).
       if (editing && form.recurring && !alreadyRecurring) {
