@@ -99,7 +99,7 @@ describe("matchRecurringRule", () => {
   });
 
   it("skips the description check for income", () => {
-    const paycheck = rule({ id: "pay", type: "INCOME", description: "Vinny's Paycheck" });
+    const paycheck = rule({ id: "pay", type: "INCOME", description: "Alex's Paycheck" });
     expect(matchRecurringRule([paycheck], "INCOME", date, 100, "ACH DEPOSIT XYZ")).toBe("pay");
   });
 

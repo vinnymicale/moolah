@@ -62,3 +62,7 @@ moolah-backup-*.json
 /test-results/
 /playwright-report/
 .worktrees/
+
+# local planning docs, not for version control
+docs/superpowers/
+.superpowers/
