@@ -4,6 +4,7 @@ import { isoDay } from "@/lib/dates";
 import { isEffectiveTransfer } from "@/lib/transfers";
 import type { TxnType } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
+import type { AttachmentDTO } from "@/lib/attachments";
 
 export interface TransactionSplitDTO {
   categoryId: string | null;
@@ -33,6 +34,8 @@ export interface TransactionDTO {
   /** Per-category split parts. Empty when the transaction has a single category. */
   splits: TransactionSplitDTO[];
   tags: { id: string; name: string; color: string }[];
+  /** Attachment metadata for the paperclip indicator and the modal list. */
+  attachments: AttachmentDTO[];
 }
 
 /** Sentinel filter values for "no category" / "no account" rows. */
@@ -108,11 +111,14 @@ function transactionWhere(
   };
 }
 
+const ATTACHMENT_SELECT = { select: { id: true, filename: true, mimeType: true, size: true } } as const;
+
 type TransactionRow = Prisma.TransactionGetPayload<{
   include: {
     splits: true;
     account: { select: { type: true } };
     tags: { select: { id: true; name: true; color: true } };
+    attachments: { select: { id: true; filename: true; mimeType: true; size: true } };
   };
 }>;
 
@@ -137,6 +143,7 @@ function toTransactionDTO(t: TransactionRow): TransactionDTO {
     plaidTransactionId: t.plaidTransactionId,
     splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
     tags: t.tags.map((x) => ({ id: x.id, name: x.name, color: x.color })),
+    attachments: t.attachments.map((a) => ({ id: a.id, filename: a.filename, mimeType: a.mimeType, size: a.size })),
   };
 }
 
@@ -149,7 +156,12 @@ export async function getTransactionsBetween(
   const rows = await prisma.transaction.findMany({
     where: transactionWhere(userId, startISO, endISO, filters),
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: { splits: true, account: { select: { type: true } }, tags: { select: { id: true, name: true, color: true } } },
+    include: {
+      splits: true,
+      account: { select: { type: true } },
+      tags: { select: { id: true, name: true, color: true } },
+      attachments: ATTACHMENT_SELECT,
+    },
   });
   return rows.map(toTransactionDTO);
 }
@@ -198,7 +210,12 @@ export async function getTransactionsPage(
   const rows = await prisma.transaction.findMany({
     where,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: { splits: true, account: { select: { type: true } }, tags: { select: { id: true, name: true, color: true } } },
+    include: {
+      splits: true,
+      account: { select: { type: true } },
+      tags: { select: { id: true, name: true, color: true } },
+      attachments: ATTACHMENT_SELECT,
+    },
     skip: (safePage - 1) * TRANSACTIONS_PAGE_SIZE,
     take: TRANSACTIONS_PAGE_SIZE,
   });

@@ -17,7 +17,7 @@ vi.mock("pg", () => ({
   },
 }));
 
-import { exportUserData } from "./index";
+import { exportUserData, encodeBackupRow, decodeBackupValue } from "./index";
 
 // pg_tables and information_schema lookups come first, in source order. The
 // per-table SELECTs follow. We drive responses by matching on the SQL text so
@@ -131,5 +131,29 @@ describe("exportUserData", () => {
     expect(payload.version).toBe(1);
     expect(payload.tables).toEqual([{ table: "Transaction", rows: [{ id: "t1", userId: "u1" }] }]);
     expect(end).toHaveBeenCalledOnce();
+  });
+});
+
+describe("bytea round-trip", () => {
+  it("encodes Buffer values to a base64 marker and decodes them back", () => {
+    const buf = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
+    const row = { id: "a1", data: buf, size: 4, createdAt: new Date("2026-07-18T00:00:00Z") };
+    const encoded = encodeBackupRow(row);
+    expect(Buffer.isBuffer(encoded.data)).toBe(false);
+
+    // Survive the JSON round-trip the backup file goes through.
+    const revived = JSON.parse(JSON.stringify(encoded)) as Record<string, unknown>;
+    const decoded = decodeBackupValue(revived.data);
+    expect(Buffer.isBuffer(decoded)).toBe(true);
+    expect((decoded as Buffer).equals(buf)).toBe(true);
+  });
+
+  it("passes non-Buffer values through unchanged", () => {
+    expect(decodeBackupValue("plain")).toBe("plain");
+    expect(decodeBackupValue(42)).toBe(42);
+    expect(decodeBackupValue(null)).toBeNull();
+    const obj = { a: 1 };
+    expect(decodeBackupValue(obj)).toBe(obj);
+    expect(encodeBackupRow({ x: "y" })).toEqual({ x: "y" });
   });
 });

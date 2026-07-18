@@ -30,6 +30,33 @@ export interface ImportResult {
   tables: number;
 }
 
+// bytea columns come off the wire as Buffers, which JSON.stringify mangles
+// into {type:"Buffer",data:[...]}. Wrap them in a marker object with base64
+// instead, and unwrap on import, so binary columns survive the round-trip.
+const BYTEA_MARKER = "__moolah_bytea__";
+
+export function encodeBackupRow(row: Record<string, unknown>): Record<string, unknown> {
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (Buffer.isBuffer(v)) {
+      out[k] = { [BYTEA_MARKER]: v.toString("base64") };
+      changed = true;
+    } else {
+      out[k] = v;
+    }
+  }
+  return changed ? out : row;
+}
+
+export function decodeBackupValue(v: unknown): unknown {
+  if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+    const b64 = (v as Record<string, unknown>)[BYTEA_MARKER];
+    if (typeof b64 === "string") return Buffer.from(b64, "base64");
+  }
+  return v;
+}
+
 function requireUrl(url?: string): string {
   const u = url ?? process.env.DATABASE_URL;
   if (!u) throw new Error("DATABASE_URL is not set");
@@ -53,7 +80,7 @@ export async function exportAllData(databaseUrl?: string): Promise<BackupPayload
     for (const { tablename } of tables) {
       if (EXCLUDE.has(tablename)) continue;
       const { rows } = await client.query(`SELECT * FROM "${tablename}"`);
-      out.push({ table: tablename, rows });
+      out.push({ table: tablename, rows: rows.map(encodeBackupRow) });
     }
     return { app: "moolah", version: 1, exportedAt: new Date().toISOString(), tables: out };
   } finally {
@@ -97,7 +124,7 @@ export async function exportUserData(userId: string, databaseUrl?: string): Prom
       else if (CHILD_FILTERS[tablename]) where = CHILD_FILTERS[tablename];
       else continue;
       const { rows } = await client.query(`SELECT * FROM "${tablename}" WHERE ${where}`, [userId]);
-      out.push({ table: tablename, rows });
+      out.push({ table: tablename, rows: rows.map(encodeBackupRow) });
     }
     return { app: "moolah", version: 1, exportedAt: new Date().toISOString(), tables: out };
   } finally {
@@ -263,7 +290,7 @@ export async function importAllData(
         if (cols.length === 0) continue;
         const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
         const colList = cols.map((c) => colIdentOf(table, c)).join(",");
-        const values = cols.map((c) => row[c]);
+        const values = cols.map((c) => decodeBackupValue(row[c]));
         await client.query(
           `INSERT INTO ${tableIdent} (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
           values,

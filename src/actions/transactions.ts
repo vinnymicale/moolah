@@ -101,9 +101,12 @@ export async function normalizeSplits(
   return cleaned;
 }
 
-export async function createTransactionAction(input: TransactionInput): Promise<ActionResult> {
+export async function createTransactionAction(
+  input: TransactionInput,
+): Promise<ActionResult & { id?: string }> {
   if (isDemoMode()) return { ok: true };
-  return run(async () => {
+  let createdId: string | undefined;
+  const res = await run(async () => {
     const { userId } = await requireUser();
     const data = txnSchema.parse(input);
     await assertOwnership(userId, data.accountId, data.categoryId, data.type);
@@ -133,7 +136,7 @@ export async function createTransactionAction(input: TransactionInput): Promise<
         recurringRuleId = rule.id;
       }
 
-      await tx.transaction.create({
+      const created = await tx.transaction.create({
         data: {
           userId,
           accountId: data.accountId || null,
@@ -152,9 +155,11 @@ export async function createTransactionAction(input: TransactionInput): Promise<
           ...(tagIds.length > 0 ? { tags: { connect: tagIds.map((id) => ({ id })) } } : {}),
         },
       });
+      createdId = created.id;
     });
     revalidateAll();
   });
+  return res.ok ? { ...res, id: createdId } : res;
 }
 
 export async function updateTransactionAction(id: string, input: TransactionInput): Promise<ActionResult> {
