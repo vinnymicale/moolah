@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Modal } from "@/components/Modal";
 import { addSnapshotAction } from "@/actions/accounts";
 import type { AccountDTO } from "@/lib/queries";
@@ -9,19 +10,22 @@ export function SnapshotForm({ account, onClose }: { account: AccountDTO; onClos
   const [balance, setBalance] = useState(String(account.currentBalance));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
-  const [pending, start] = useTransition();
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  const submit = () =>
-    start(async () => {
-      setError(null);
-      const res = await addSnapshotAction({ accountId: account.id, balance, date, note, setCurrent: true });
-      if (!res.ok) {
-        setError("error" in res ? (res.error as string) : "Error");
-        return;
-      }
-      onClose();
-    });
+  const submit = async () => {
+    setError(null);
+    setPending(true);
+    const res = await addSnapshotAction({ accountId: account.id, balance, date, note, setCurrent: true });
+    if (!res.ok) {
+      setError("error" in res ? (res.error as string) : "Error");
+      setPending(false);
+      return;
+    }
+    router.refresh();
+    onClose();
+  };
 
   return (
     <Modal open onClose={onClose} title={`Update balance - ${account.name}`}>

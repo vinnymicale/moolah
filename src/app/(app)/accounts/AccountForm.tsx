@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Archive, Trash2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import {
@@ -40,6 +41,7 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
   const [touchedCash, setTouchedCash] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const router = useRouter();
 
   const isLiability = !ACCOUNT_TYPE_OPTIONS.find((o) => o.value === form.type)?.isAsset;
 
@@ -66,11 +68,13 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
         setError(res.error ?? "Error");
         return;
       }
+      router.refresh();
       onClose();
     });
 
   const removeOrArchive = (fn: () => Promise<unknown>) => start(async () => {
     await fn();
+    router.refresh();
     onClose();
   });
 
