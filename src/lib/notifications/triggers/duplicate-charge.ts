@@ -1,10 +1,8 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { formatUSD, toNumber } from "@/lib/money";
-import { addUTCDays } from "@/lib/dates";
+import { addUTCDays, daysBetween } from "@/lib/dates";
 import type { TriggerDef, TriggerEvent } from "../types";
-
-const DAY_MS = 86_400_000;
 
 export const duplicateCharge: TriggerDef = {
   id: "duplicate-charge",
@@ -50,7 +48,7 @@ export const duplicateCharge: TriggerDef = {
         orderBy: { date: "desc" },
       });
       if (!prior) continue;
-      const daysApart = Math.round((t.date.getTime() - prior.date.getTime()) / DAY_MS);
+      const daysApart = daysBetween(prior.date, t.date);
       events.push({
         dedupeKey: `duplicate-charge:${t.id}`,
         vars: {

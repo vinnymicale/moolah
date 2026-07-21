@@ -26,6 +26,20 @@ describe("duplicate-charge", () => {
       { dedupeKey: "duplicate-charge:t2",
         vars: { merchant: "Spotify", amount: "$9.99", account: "Checking", days_apart: "1" } },
     ]);
+    expect(prisma.transaction.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "u1",
+          deletedAt: null,
+          isTransfer: false,
+          dedupIgnored: false,
+          description: "Spotify",
+          amount: 9.99,
+          id: { notIn: ["t2"] },
+          date: { gte: new Date("2026-07-06"), lte: new Date("2026-07-09") },
+        }),
+      }),
+    );
   });
 
   it("is silent with no earlier match", async () => {
