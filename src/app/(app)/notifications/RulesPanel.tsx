@@ -107,7 +107,10 @@ export function RulesPanel({
                             setTestedId(null);
                             act(async () => {
                               const res = await testRuleAction(rule.id);
-                              if (res.ok) setTestedId(rule.id);
+                              if (res.ok) {
+                                setTestedId(rule.id);
+                                setTimeout(() => setTestedId((id) => (id === rule.id ? null : id)), 2000);
+                              }
                               return res;
                             });
                           }}
