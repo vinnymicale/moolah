@@ -153,3 +153,13 @@ export async function markReadAction(ids: string[] | "all"): Promise<ActionResul
     revalidatePath("/", "layout");
   });
 }
+
+export async function deleteNotificationAction(id: string): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    await prisma.notification.deleteMany({ where: { id, userId } });
+    // The layout renders the sidebar badge, so refresh the whole tree.
+    revalidatePath("/", "layout");
+  });
+}
