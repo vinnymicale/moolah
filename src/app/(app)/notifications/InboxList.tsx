@@ -2,9 +2,10 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BellOff, CheckCheck } from "lucide-react";
+import { BellOff, CheckCheck, Trash2 } from "lucide-react";
 import type { NotificationDTO } from "@/lib/queries/notifications";
-import { markReadAction } from "@/actions/notifications";
+import { markReadAction, deleteNotificationAction } from "@/actions/notifications";
+import { useConfirmAction } from "@/lib/useConfirmAction";
 
 function timeAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -13,6 +14,64 @@ function timeAgo(iso: string): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function InboxRow({
+  n,
+  readOnly,
+  pending,
+  onMarkRead,
+  onDelete,
+}: {
+  n: NotificationDTO;
+  readOnly: boolean;
+  pending: boolean;
+  onMarkRead: (ids: string[]) => void;
+  onDelete: (id: string) => void;
+}) {
+  const unread = !n.readAt;
+  const confirmDelete = useConfirmAction(() => onDelete(n.id));
+
+  return (
+    <div
+      onClick={readOnly ? undefined : () => unread && onMarkRead([n.id])}
+      className={`block w-full px-4 py-3 text-left transition-colors ${
+        readOnly ? "" : unread ? "cursor-pointer bg-brand/5 hover:bg-brand/10" : "cursor-pointer hover:bg-surface2"
+      } ${unread && readOnly ? "bg-brand/5" : ""}`}
+    >
+      <div className="flex items-start gap-2">
+        {unread && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}>{n.title}</p>
+            <span className="shrink-0 text-xs text-muted">{timeAgo(n.firedAt)}</span>
+          </div>
+          <p className="mt-0.5 whitespace-pre-line text-sm text-muted">{n.body}</p>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted">
+            <div className="flex items-center gap-2">
+              <span>{n.ruleName}</span>
+              {n.deliveryStatus === "sent" && <span>· sent to Discord</span>}
+              {n.deliveryStatus === "failed" && (
+                <span className="text-warning">· delivery failed: {n.deliveryError}</span>
+              )}
+            </div>
+            {!readOnly && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  confirmDelete.trigger();
+                }}
+                disabled={pending}
+                className="btn-ghost text-xs text-expense"
+              >
+                <Trash2 size={13} /> {confirmDelete.armed ? "Click to confirm" : "Delete"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function InboxList({
@@ -29,6 +88,14 @@ export function InboxList({
     if (readOnly) return;
     startTransition(async () => {
       await markReadAction(ids);
+      router.refresh();
+    });
+  };
+
+  const remove = (id: string) => {
+    if (readOnly) return;
+    startTransition(async () => {
+      await deleteNotificationAction(id);
       router.refresh();
     });
   };
@@ -54,37 +121,16 @@ export function InboxList({
         </div>
       )}
       <div className="card divide-y divide-line">
-        {notifications.map((n) => {
-          const unread = !n.readAt;
-          const Row = readOnly ? "div" : "button";
-          return (
-            <Row
-              key={n.id}
-              onClick={readOnly ? undefined : () => unread && markRead([n.id])}
-              className={`block w-full px-4 py-3 text-left transition-colors ${
-                readOnly ? "" : unread ? "bg-brand/5 hover:bg-brand/10" : "hover:bg-surface2"
-              } ${unread && readOnly ? "bg-brand/5" : ""}`}
-            >
-              <div className="flex items-start gap-2">
-                {unread && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}>{n.title}</p>
-                    <span className="shrink-0 text-xs text-muted">{timeAgo(n.firedAt)}</span>
-                  </div>
-                  <p className="mt-0.5 whitespace-pre-line text-sm text-muted">{n.body}</p>
-                  <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
-                    <span>{n.ruleName}</span>
-                    {n.deliveryStatus === "sent" && <span>· sent to Discord</span>}
-                    {n.deliveryStatus === "failed" && (
-                      <span className="text-warning">· delivery failed: {n.deliveryError}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Row>
-          );
-        })}
+        {notifications.map((n) => (
+          <InboxRow
+            key={n.id}
+            n={n}
+            readOnly={readOnly}
+            pending={pending}
+            onMarkRead={markRead}
+            onDelete={remove}
+          />
+        ))}
       </div>
     </div>
   );
