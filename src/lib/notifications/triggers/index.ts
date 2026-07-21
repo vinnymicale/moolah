@@ -23,6 +23,7 @@ import { savingsGoal } from "./savings-goal";
 import { bankFee } from "./bank-fee";
 import { noSpendStreak } from "./no-spend-streak";
 import { digest } from "./digest";
+import { monthEndCashflow } from "./month-end-cashflow";
 
 export const TRIGGERS: TriggerDef[] = [
   plaidReauth, syncFailing, accountStale,
@@ -30,6 +31,7 @@ export const TRIGGERS: TriggerDef[] = [
   billDue, ccDue, recurringPriceChange, recurringMissing, paycheckMissing,
   largeTransaction, merchantFrequency, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike, categoryFirstUse, savingsGoal, bankFee, noSpendStreak,
   digest,
+  monthEndCashflow,
 ];
 
 export const TRIGGER_BY_ID = new Map(TRIGGERS.map((t) => [t.id, t]));
