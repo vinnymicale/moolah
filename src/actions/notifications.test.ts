@@ -46,6 +46,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     notification: {
       updateMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
   },
 }));
@@ -58,6 +59,7 @@ import {
   deleteRuleAction,
   testRuleAction,
   markReadAction,
+  deleteNotificationAction,
 } from "./notifications";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -98,10 +100,12 @@ describe("demo-mode guard", () => {
     expect(await deleteRuleAction("r1")).toEqual({ ok: true });
     expect(await testRuleAction("r1")).toEqual({ ok: true });
     expect(await markReadAction("all")).toEqual({ ok: true });
+    expect(await deleteNotificationAction("n1")).toEqual({ ok: true });
     expect(requireUserMock).not.toHaveBeenCalled();
     expect(channel.create).not.toHaveBeenCalled();
     expect(rule.create).not.toHaveBeenCalled();
     expect(notification.updateMany).not.toHaveBeenCalled();
+    expect(notification.deleteMany).not.toHaveBeenCalled();
   });
 });
 
@@ -314,6 +318,28 @@ describe("markReadAction", () => {
 
   it("refreshes the whole layout so the sidebar badge updates", async () => {
     await markReadAction("all");
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+  });
+});
+
+describe("deleteNotificationAction", () => {
+  it("deletes the caller's notification scoped to the user", async () => {
+    notification.deleteMany.mockResolvedValue({ count: 1 } as never);
+    const result = await deleteNotificationAction("n1");
+    expect(result).toEqual({ ok: true });
+    expect(notification.deleteMany).toHaveBeenCalledWith({ where: { id: "n1", userId: "u1" } });
+  });
+
+  it("is a no-op success when the id belongs to another user", async () => {
+    notification.deleteMany.mockResolvedValue({ count: 0 } as never);
+    const result = await deleteNotificationAction("n1");
+    expect(result).toEqual({ ok: true });
+    expect(notification.deleteMany).toHaveBeenCalledWith({ where: { id: "n1", userId: "u1" } });
+  });
+
+  it("refreshes the whole layout so the sidebar badge updates", async () => {
+    notification.deleteMany.mockResolvedValue({ count: 1 } as never);
+    await deleteNotificationAction("n1");
     expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 });
