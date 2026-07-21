@@ -16,13 +16,14 @@ import { ccUtilization } from "./cc-utilization";
 import { incomeReceived } from "./income-received";
 import { duplicateCharge } from "./duplicate-charge";
 import { spendingSpike } from "./spending-spike";
+import { categoryFirstUse } from "./category-first-use";
 import { digest } from "./digest";
 
 export const TRIGGERS: TriggerDef[] = [
   plaidReauth, syncFailing, accountStale,
   budgetExceeded, budgetThreshold, budgetPace,
   billDue, ccDue, recurringPriceChange, recurringMissing,
-  largeTransaction, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike,
+  largeTransaction, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike, categoryFirstUse,
   digest,
 ];
 
