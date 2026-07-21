@@ -9,6 +9,7 @@ import { billDue } from "./bill-due";
 import { ccDue } from "./cc-due";
 import { recurringPriceChange } from "./recurring-price-change";
 import { recurringMissing } from "./recurring-missing";
+import { paycheckMissing } from "./paycheck-missing";
 import { largeTransaction } from "./large-transaction";
 import { merchantFrequency } from "./merchant-frequency";
 import { newMerchant } from "./new-merchant";
@@ -24,7 +25,7 @@ import { digest } from "./digest";
 export const TRIGGERS: TriggerDef[] = [
   plaidReauth, syncFailing, accountStale,
   budgetExceeded, budgetThreshold, budgetPace,
-  billDue, ccDue, recurringPriceChange, recurringMissing,
+  billDue, ccDue, recurringPriceChange, recurringMissing, paycheckMissing,
   largeTransaction, merchantFrequency, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike, categoryFirstUse, savingsGoal,
   digest,
 ];
