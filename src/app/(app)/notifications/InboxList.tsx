@@ -32,9 +32,24 @@ function InboxRow({
   const unread = !n.readAt;
   const confirmDelete = useConfirmAction(() => onDelete(n.id));
 
+  const markThisRead = readOnly ? undefined : () => unread && onMarkRead([n.id]);
+
   return (
     <div
-      onClick={readOnly ? undefined : () => unread && onMarkRead([n.id])}
+      onClick={markThisRead}
+      role={readOnly ? undefined : "button"}
+      tabIndex={readOnly ? undefined : 0}
+      onKeyDown={
+        readOnly
+          ? undefined
+          : (e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                markThisRead?.();
+              }
+            }
+      }
       className={`block w-full px-4 py-3 text-left transition-colors ${
         readOnly ? "" : unread ? "cursor-pointer bg-brand/5 hover:bg-brand/10" : "cursor-pointer hover:bg-surface2"
       } ${unread && readOnly ? "bg-brand/5" : ""}`}
