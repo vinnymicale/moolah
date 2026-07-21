@@ -21,13 +21,14 @@ import { spendingSpike } from "./spending-spike";
 import { categoryFirstUse } from "./category-first-use";
 import { savingsGoal } from "./savings-goal";
 import { bankFee } from "./bank-fee";
+import { noSpendStreak } from "./no-spend-streak";
 import { digest } from "./digest";
 
 export const TRIGGERS: TriggerDef[] = [
   plaidReauth, syncFailing, accountStale,
   budgetExceeded, budgetThreshold, budgetPace,
   billDue, ccDue, recurringPriceChange, recurringMissing, paycheckMissing,
-  largeTransaction, merchantFrequency, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike, categoryFirstUse, savingsGoal, bankFee,
+  largeTransaction, merchantFrequency, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike, categoryFirstUse, savingsGoal, bankFee, noSpendStreak,
   digest,
 ];
 
