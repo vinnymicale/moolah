@@ -148,6 +148,20 @@ export function matchRecurringRule(
   return null;
 }
 
+/**
+ * Decide a transaction's final category. Order of precedence:
+ * - an explicit automation-rule category (the most specific user intent)
+ * - the category assigned to a matched recurring rule
+ * - the category mapped from Plaid's own classification
+ */
+export function resolveCategoryId(args: {
+  ruleCategoryId: string | null;
+  recurringCategoryId: string | null;
+  plaidCategoryId: string | null;
+}): string | null {
+  return args.ruleCategoryId ?? args.recurringCategoryId ?? args.plaidCategoryId;
+}
+
 // ── Main sync function ────────────────────────────────────────────────────────
 
 export interface SyncResult {
@@ -219,6 +233,7 @@ export async function syncPlaidItem(
 
   const matchRule = (type: TxnType, date: Date, amount: number, description: string) =>
     matchRecurringRule(rules, type, date, amount, description);
+  const recurringCategoryById = new Map(rules.map((r) => [r.id, r.categoryId]));
 
   const result: SyncResult = { added: 0, modified: 0, removed: 0, balancesUpdated: 0 };
   const newTxnIds: string[] = [];
@@ -259,14 +274,18 @@ export async function syncPlaidItem(
         automationRules,
       );
       const description = effect.description ?? rawDescription;
-      const categoryId = effect.categoryId
-        ?? (catName ? catByName.get(catName.toLowerCase())?.id ?? null : null);
       const isTransfer = effect.markTransfer ?? false;
 
       // Use authorized_date when available - it's when the user actually made
       // the purchase, vs. date which is the posting date for settled txns.
       const txnDate = parseISODay(txn.authorized_date ?? txn.date);
       const recurringRuleId = matchRule(type, txnDate, amount, description);
+      const plaidCategoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
+      const categoryId = resolveCategoryId({
+        ruleCategoryId: effect.categoryId ?? null,
+        recurringCategoryId: recurringRuleId ? recurringCategoryById.get(recurringRuleId) ?? null : null,
+        plaidCategoryId,
+      });
 
       // A full re-pull (recategorizeOnly resets the cursor) can return charges
       // we already have under a brand-new transaction_id - Plaid does not keep
@@ -384,10 +403,14 @@ export async function syncPlaidItem(
         automationRules,
       );
       const modDesc = modEffect.description ?? rawModDesc;
-      const categoryId = modEffect.categoryId
-        ?? (catName ? catByName.get(catName.toLowerCase())?.id ?? null : null);
       const isTransfer = modEffect.markTransfer ?? false;
       const modRuleId = matchRule(type, modDate, amount, modDesc);
+      const modPlaidCategoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
+      const categoryId = resolveCategoryId({
+        ruleCategoryId: modEffect.categoryId ?? null,
+        recurringCategoryId: modRuleId ? recurringCategoryById.get(modRuleId) ?? null : null,
+        plaidCategoryId: modPlaidCategoryId,
+      });
 
       await prisma.transaction.updateMany({
         where: { plaidTransactionId: txn.transaction_id, userId: item.userId },
