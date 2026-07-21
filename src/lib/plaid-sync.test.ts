@@ -4,6 +4,7 @@ import {
   tokens,
   descriptionMatches,
   matchRecurringRule,
+  resolveCategoryId,
   type MatchableRule,
 } from "./plaid-sync";
 import { parseISODay } from "./dates";
@@ -116,5 +117,31 @@ describe("matchRecurringRule", () => {
   it("returns the first matching rule", () => {
     const rules = [rule({ id: "a" }), rule({ id: "b" })];
     expect(matchRecurringRule(rules, "EXPENSE", date, 100, "NETFLIX")).toBe("a");
+  });
+});
+
+describe("resolveCategoryId", () => {
+  it("prefers the matched recurring rule's category over Plaid's", () => {
+    expect(
+      resolveCategoryId({ ruleCategoryId: null, recurringCategoryId: "rec", plaidCategoryId: "plaid" }),
+    ).toBe("rec");
+  });
+
+  it("lets an explicit automation rule category win over the recurring rule", () => {
+    expect(
+      resolveCategoryId({ ruleCategoryId: "auto", recurringCategoryId: "rec", plaidCategoryId: "plaid" }),
+    ).toBe("auto");
+  });
+
+  it("falls back to Plaid's category when the recurring rule has none", () => {
+    expect(
+      resolveCategoryId({ ruleCategoryId: null, recurringCategoryId: null, plaidCategoryId: "plaid" }),
+    ).toBe("plaid");
+  });
+
+  it("returns null when nothing supplies a category", () => {
+    expect(
+      resolveCategoryId({ ruleCategoryId: null, recurringCategoryId: null, plaidCategoryId: null }),
+    ).toBeNull();
   });
 });
