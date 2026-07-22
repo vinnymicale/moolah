@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { formatUSD, toNumber } from "@/lib/money";
-import { addUTCDays, endOfUTCMonth, parseISODay, startOfUTCMonth } from "@/lib/dates";
+import { endOfUTCMonth, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import type { TriggerDef } from "../types";
 
 async function sumFor(userId: string, type: "INCOME" | "EXPENSE", start: Date, end: Date): Promise<number> {
@@ -37,9 +37,8 @@ export const monthEndCashflow: TriggerDef = {
     const monthEnd = endOfUTCMonth(today);
     if (isoDayLocal(today) !== isoDayLocal(monthEnd)) return [];
     const monthStart = startOfUTCMonth(today);
-    const rangeEnd = addUTCDays(monthEnd, 1);
-    const income = await sumFor(ctx.userId, "INCOME", monthStart, rangeEnd);
-    const expenses = await sumFor(ctx.userId, "EXPENSE", monthStart, rangeEnd);
+    const income = await sumFor(ctx.userId, "INCOME", monthStart, monthEnd);
+    const expenses = await sumFor(ctx.userId, "EXPENSE", monthStart, monthEnd);
     const month = ctx.todayISO.slice(0, 7);
     return [
       {
