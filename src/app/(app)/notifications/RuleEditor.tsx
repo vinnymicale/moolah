@@ -168,6 +168,13 @@ export function RuleEditor({
                       onChange={(e) => setParams((p) => ({ ...p, [field.key]: e.target.value }))}
                       className="w-full rounded-lg border border-line bg-surface2 px-3 py-2"
                     />
+                  ) : field.kind === "text" ? (
+                    <input
+                      type="text"
+                      value={params[field.key] ?? ""}
+                      onChange={(e) => setParams((p) => ({ ...p, [field.key]: e.target.value }))}
+                      className="w-full rounded-lg border border-line bg-surface2 px-3 py-2"
+                    />
                   ) : (
                     <select
                       value={params[field.key] ?? ""}
