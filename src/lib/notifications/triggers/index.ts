@@ -9,19 +9,29 @@ import { billDue } from "./bill-due";
 import { ccDue } from "./cc-due";
 import { recurringPriceChange } from "./recurring-price-change";
 import { recurringMissing } from "./recurring-missing";
+import { paycheckMissing } from "./paycheck-missing";
 import { largeTransaction } from "./large-transaction";
+import { merchantFrequency } from "./merchant-frequency";
 import { newMerchant } from "./new-merchant";
 import { lowBalance } from "./low-balance";
 import { ccUtilization } from "./cc-utilization";
 import { incomeReceived } from "./income-received";
+import { duplicateCharge } from "./duplicate-charge";
+import { spendingSpike } from "./spending-spike";
+import { categoryFirstUse } from "./category-first-use";
+import { savingsGoal } from "./savings-goal";
+import { bankFee } from "./bank-fee";
+import { noSpendStreak } from "./no-spend-streak";
 import { digest } from "./digest";
+import { monthEndCashflow } from "./month-end-cashflow";
 
 export const TRIGGERS: TriggerDef[] = [
   plaidReauth, syncFailing, accountStale,
   budgetExceeded, budgetThreshold, budgetPace,
-  billDue, ccDue, recurringPriceChange, recurringMissing,
-  largeTransaction, newMerchant, lowBalance, ccUtilization, incomeReceived,
+  billDue, ccDue, recurringPriceChange, recurringMissing, paycheckMissing,
+  largeTransaction, merchantFrequency, newMerchant, lowBalance, ccUtilization, incomeReceived, duplicateCharge, spendingSpike, categoryFirstUse, savingsGoal, bankFee, noSpendStreak,
   digest,
+  monthEndCashflow,
 ];
 
 export const TRIGGER_BY_ID = new Map(TRIGGERS.map((t) => [t.id, t]));

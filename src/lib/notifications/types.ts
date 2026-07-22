@@ -8,7 +8,7 @@ export type Severity = "info" | "warning" | "critical";
 export interface ParamField {
   key: string;
   label: string;
-  kind: "number" | "select";
+  kind: "number" | "select" | "text";
   min?: number;
   max?: number;
   step?: number;
