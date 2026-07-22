@@ -43,7 +43,7 @@ export const paycheckMissing: TriggerDef = {
       if (!expected) continue;
       const matched = await prisma.transaction.findFirst({
         where: {
-          userId: ctx.userId, recurringRuleId: rule.id, deletedAt: null,
+          userId: ctx.userId, recurringRuleId: rule.id, deletedAt: null, isTransfer: false,
           date: { gte: addUTCDays(expected, -4) },
         },
         select: { id: true },
