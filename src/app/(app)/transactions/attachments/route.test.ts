@@ -114,4 +114,31 @@ describe("attachments zip route", () => {
       expect.objectContaining({ where: { id: "att1", userId: "u1" } }),
     );
   });
+
+  it("dedupes colliding filenames and reflects them in the manifest", async () => {
+    (getTransactionsBetween as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        ...txnWithAtt,
+        attachments: [
+          { id: "att1", filename: "receipt.jpg", mimeType: "image/jpeg", size: 3 },
+          { id: "att2", filename: "receipt.jpg", mimeType: "image/jpeg", size: 3 },
+        ],
+      },
+    ]);
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const files = unzipSync(buf);
+    const names = Object.keys(files);
+    expect(names).toContain("2026-07-14_Costco_-82.40_a3f1c2_receipt.jpg");
+    expect(names).toContain("2026-07-14_Costco_-82.40_a3f1c2_receipt-2.jpg");
+
+    const manifest = strFromU8(files["manifest.csv"]);
+    const fileColumn = manifest
+      .split("\n")
+      .slice(1)
+      .map((line) => line.split(",")[0]);
+    expect(fileColumn).toContain("2026-07-14_Costco_-82.40_a3f1c2_receipt.jpg");
+    expect(fileColumn).toContain("2026-07-14_Costco_-82.40_a3f1c2_receipt-2.jpg");
+  });
 });
