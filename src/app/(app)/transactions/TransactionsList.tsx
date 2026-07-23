@@ -267,6 +267,9 @@ export function TransactionsList({
   const exportCsv = () => {
     window.location.href = urlWith({}, "/transactions/export");
   };
+  const exportAttachments = () => {
+    window.location.href = urlWith({}, "/transactions/attachments");
+  };
 
   return (
     <div>
@@ -322,6 +325,9 @@ export function TransactionsList({
           </button>
           <button onClick={exportCsv} className="btn-ghost h-9" title="Export CSV">
             <Download size={15} /> <span className="hidden sm:inline">Export</span>
+          </button>
+          <button onClick={exportAttachments} className="btn-ghost h-9" title="Export attachments (.zip)">
+            <Paperclip size={15} /> <span className="hidden sm:inline">Attachments</span>
           </button>
           <button onClick={() => setAdding(true)} className="btn-primary h-9">
             <Plus size={16} /> Add
