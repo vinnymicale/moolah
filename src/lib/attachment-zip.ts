@@ -25,6 +25,7 @@ export interface ZipAttachmentMeta {
 export function sanitizeComponent(s: string, maxLen: number): string {
   const cleaned = s
     .replace(/[/\\ -]/g, "_")
+    .replace(/[\x00-\x1f\x7f]/g, "_")
     .replace(/[:*?"<>|]/g, "")
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")

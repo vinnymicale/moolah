@@ -27,6 +27,9 @@ describe("sanitizeComponent", () => {
   it("strips path separators and control chars", () => {
     expect(sanitizeComponent("a/b\\c d", 40)).toBe("a_b_c_d");
   });
+  it("replaces control chars with underscores", () => {
+    expect(sanitizeComponent("a\x00b\x1fc\x7fd", 40)).toBe("a_b_c_d");
+  });
   it("removes filesystem-illegal chars and collapses whitespace", () => {
     expect(sanitizeComponent('a: *?"<>|  b', 40)).toBe("a_b");
   });
