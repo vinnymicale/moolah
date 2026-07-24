@@ -10,7 +10,7 @@ import {
 import { TransactionModal } from "@/components/TransactionModal";
 import { TrashDrawer } from "./TrashDrawer";
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { MultiSelect } from "@/components/MultiSelect";
+import { FilterPopover, type FilterGroup } from "./FilterPopover";
 import { formatUSD } from "@/lib/money";
 import { monthLabel, formatMonthDayYear } from "@/lib/dates";
 import { useConfirmAction } from "@/lib/useConfirmAction";
@@ -85,7 +85,7 @@ export function TransactionsList({
   }, [focusId]);
 
   // Filters live in the URL so the server can filter and page the query; the
-  // MultiSelects render straight from the props and every change navigates.
+  // FilterPopover renders straight from the props and every change navigates.
   // Only the search box keeps local state, debounced into router.replace.
   const typeFilter = useMemo(() => toSet(initialTypes), [initialTypes]);
   const statusFilter = useMemo(() => toSet(initialStatuses), [initialStatuses]);
@@ -155,6 +155,60 @@ export function TransactionsList({
   const setCatFilter = (s: Set<string>) => router.push(urlWith({ category: [...s].join(",") }));
   const setAcctFilter = (s: Set<string>) => router.push(urlWith({ account: [...s].join(",") }));
   const setTagFilter = (s: Set<string>) => router.push(urlWith({ tag: [...s].join(",") }));
+
+  const filterGroups: FilterGroup[] = [
+    {
+      key: "type",
+      label: "Type",
+      selected: typeFilter,
+      onChange: setTypeFilter,
+      options: [
+        { value: "EXPENSE", label: "Expenses" },
+        { value: "INCOME", label: "Income" },
+      ],
+    },
+    {
+      key: "status",
+      label: "Status",
+      selected: statusFilter,
+      onChange: setStatusFilter,
+      options: [
+        { value: "CLEARED", label: "Cleared" },
+        { value: "PENDING", label: "Pending" },
+      ],
+    },
+    {
+      key: "category",
+      label: "Categories",
+      selected: catFilter,
+      onChange: setCatFilter,
+      options: [
+        { value: "__uncategorized__", label: "Uncategorized" },
+        ...categories.map((c) => ({ value: c.id, label: c.name, color: c.color, icon: c.icon })),
+      ],
+    },
+    ...(accounts.length > 0
+      ? [{
+          key: "account",
+          label: "Accounts",
+          selected: acctFilter,
+          onChange: setAcctFilter,
+          options: [
+            ...accounts.map((a) => ({ value: a.id, label: a.name, color: a.color })),
+            { value: "__none__", label: "No account" },
+          ],
+        }]
+      : []),
+    ...(tags.length > 0
+      ? [{
+          key: "tag",
+          label: "Tags",
+          selected: tagFilter,
+          onChange: setTagFilter,
+          options: tags.map((t) => ({ value: t.id, label: t.name, color: t.color })),
+        }]
+      : []),
+  ];
 
   // Saved filters (named filter combos), persisted in localStorage.
   const [savedFilters, persistFilters] = usePersistentState<SavedFilter[]>(SAVED_FILTERS_KEY, NO_FILTERS);
@@ -342,57 +396,7 @@ export function TransactionsList({
           <input ref={searchInputRef} data-search="true" className="input pl-9" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
 
-        <MultiSelect
-          label="Type"
-          allLabel="All types"
-          selected={typeFilter}
-          onChange={setTypeFilter}
-          options={[
-            { value: "EXPENSE", label: "Expenses" },
-            { value: "INCOME", label: "Income" },
-          ]}
-        />
-        <MultiSelect
-          label="Status"
-          allLabel="All status"
-          selected={statusFilter}
-          onChange={setStatusFilter}
-          options={[
-            { value: "CLEARED", label: "Cleared" },
-            { value: "PENDING", label: "Pending" },
-          ]}
-        />
-        <MultiSelect
-          label="Categories"
-          allLabel="All categories"
-          selected={catFilter}
-          onChange={setCatFilter}
-          options={[
-            { value: "__uncategorized__", label: "Uncategorized" },
-            ...categories.map((c) => ({ value: c.id, label: c.name, color: c.color, icon: c.icon })),
-          ]}
-        />
-        {accounts.length > 0 && (
-          <MultiSelect
-            label="Accounts"
-            allLabel="All accounts"
-            selected={acctFilter}
-            onChange={setAcctFilter}
-            options={[
-              ...accounts.map((a) => ({ value: a.id, label: a.name, color: a.color })),
-              { value: "__none__", label: "No account" },
-            ]}
-          />
-        )}
-        {tags.length > 0 && (
-          <MultiSelect
-            label="Tags"
-            allLabel="All tags"
-            options={tags.map((t) => ({ value: t.id, label: t.name, color: t.color }))}
-            selected={tagFilter}
-            onChange={setTagFilter}
-          />
-        )}
+        <FilterPopover groups={filterGroups} />
 
         {/* Saved filters */}
         {savedFilters.length > 0 && (
