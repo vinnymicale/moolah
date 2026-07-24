@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
 import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
@@ -103,7 +104,17 @@ function TagRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{tag.name}</p>
         <p className="text-xs text-muted">
-          {tag.usageCount} transaction{tag.usageCount === 1 ? "" : "s"} · {formatUSD(tag.totalAmount)}
+          {tag.usageCount > 0 ? (
+            <Link
+              href={`/transactions?tag=${tag.id}&range=all`}
+              className="underline-offset-2 hover:text-text hover:underline"
+            >
+              {tag.usageCount} transaction{tag.usageCount === 1 ? "" : "s"}
+            </Link>
+          ) : (
+            <>{tag.usageCount} transactions</>
+          )}{" "}
+          · {formatUSD(tag.totalAmount)}
         </p>
       </div>
       <button className="btn-ghost text-xs" onClick={onEdit}>
