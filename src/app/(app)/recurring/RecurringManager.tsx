@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2 } from "lucide-react";
 import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
@@ -159,6 +160,7 @@ function SuggestionRow({
   onDismiss: (key: string) => void;
 }) {
   const [pending, start] = useTransition();
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   // The rule the user picked from the dropdown, held until they confirm. Linking
@@ -185,16 +187,18 @@ function SuggestionRow({
       });
       // On success the page revalidates and this suggestion drops out (it now
       // matches an existing rule); on failure surface the message.
-      if (!res.ok) setError(res.error);
+      if (!res.ok) return setError(res.error);
+      router.refresh();
     });
 
   const linkTo = (ruleId: string) =>
     start(async () => {
       setError(null);
       const res = await linkSuggestionToRuleAction(ruleId, s.key);
-      if (!res.ok) setError(res.error);
+      if (!res.ok) return setError(res.error);
       // On success the page revalidates: the matched transactions are now linked,
       // so this suggestion drops out on its own.
+      router.refresh();
     });
 
   return (
@@ -301,6 +305,7 @@ function RecurringForm({
   const [endDate, setEndDate] = useState(rule?.endDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const router = useRouter();
 
   const catOptions = categories.filter((c) => c.kind === type);
 
@@ -313,13 +318,16 @@ function RecurringForm({
       };
       const res = editing ? await updateRecurringAction(rule!.id, input) : await createRecurringAction(input);
       if (!res.ok) return setError(res.error);
+      router.refresh();
       onClose();
     });
 
   const remove = () =>
     start(async () => {
       if (!rule) return;
-      await deleteRecurringAction(rule.id, false);
+      const res = await deleteRecurringAction(rule.id, false);
+      if (!res.ok) return setError(res.error);
+      router.refresh();
       onClose();
     });
 

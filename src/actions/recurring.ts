@@ -84,6 +84,50 @@ export async function deleteRecurringAction(id: string, deleteOccurrences = fals
 }
 
 /**
+ * Ids of the unlinked candidates whose normalized description matches
+ * `normalized`, skipping `excludeId`. Descriptions made entirely of noise (say
+ * "POS Debit") normalize to "", which would otherwise match every other such
+ * description and sweep up unrelated transactions - an empty key matches nothing.
+ */
+function matchingCandidateIds(
+  candidates: { id: string; description: string }[],
+  normalized: string,
+  excludeId?: string,
+): string[] {
+  if (!normalized) return [];
+  return candidates
+    .filter((t) => t.id !== excludeId && normalizeDescription(t.description) === normalized)
+    .map((t) => t.id);
+}
+
+/**
+ * Link every unlinked transaction of `type` whose normalized description matches
+ * `normalized` to `ruleId`, skipping `excludeId`. The normalized grouping isn't
+ * expressible in SQL, so candidates are matched in memory. Returns the count.
+ */
+async function linkMatchingTransactions(
+  userId: string,
+  type: TxnType,
+  normalized: string,
+  ruleId: string,
+  excludeId?: string,
+): Promise<number> {
+  const candidates = await prisma.transaction.findMany({
+    where: { userId, deletedAt: null, type, recurringRuleId: null },
+    select: { id: true, description: true },
+  });
+  const ids = matchingCandidateIds(candidates, normalized, excludeId);
+
+  if (ids.length > 0) {
+    await prisma.transaction.updateMany({
+      where: { id: { in: ids }, userId },
+      data: { recurringRuleId: ruleId },
+    });
+  }
+  return ids.length;
+}
+
+/**
  * Tie a recurring suggestion to an existing rule the user already has. The
  * suggestion's transactions (same type, same normalized description, not yet
  * linked) are attached to the rule, which both records the history and stops the
@@ -108,23 +152,107 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
       throw new UserError("Invalid suggestion");
     }
 
-    // The normalized grouping isn't expressible in SQL, so match in memory.
-    const candidates = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, type: type as TxnType, recurringRuleId: null },
-      select: { id: true, description: true },
-    });
-    const ids = candidates
-      .filter((t) => normalizeDescription(t.description) === normalized)
-      .map((t) => t.id);
-
-    if (ids.length > 0) {
-      await prisma.transaction.updateMany({
-        where: { id: { in: ids }, userId },
-        data: { recurringRuleId: ruleId },
-      });
-    }
+    await linkMatchingTransactions(userId, type as TxnType, normalized, ruleId);
     revalidateAll();
   });
+}
+
+/**
+ * Tie one transaction to an existing rule, or clear the tie when `ruleId` is
+ * null. With `alsoMatching`, the other unlinked transactions sharing its
+ * normalized description are swept in too, which is how a merchant the
+ * suggestion detector never flagged gets its whole history attached at once.
+ *
+ * Unlink is always single-transaction: a bulk unlink would be far too easy to
+ * fire by accident, so `alsoMatching` is ignored on that path.
+ */
+export async function linkTransactionToRuleAction(
+  transactionId: string,
+  ruleId: string | null,
+  alsoMatching = false,
+): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+
+    const txn = await prisma.transaction.findFirst({
+      where: { id: transactionId, userId, deletedAt: null },
+      select: { id: true, type: true, description: true },
+    });
+    if (!txn) throw new UserError("Transaction not found");
+
+    if (ruleId) {
+      const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, userId } });
+      if (!rule) throw new UserError("Recurring rule not found");
+    }
+
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: { recurringRuleId: ruleId },
+    });
+
+    if (ruleId && alsoMatching) {
+      await linkMatchingTransactions(
+        userId,
+        txn.type,
+        normalizeDescription(txn.description),
+        ruleId,
+        transactionId,
+      );
+    }
+
+    revalidateAll();
+  });
+}
+
+export interface LinkableRule {
+  id: string;
+  description: string;
+  frequency: Frequency;
+  interval: number;
+}
+
+export type LinkOptions =
+  | { ok: true; rules: LinkableRule[]; matchCount: number }
+  | { ok: false; error: string };
+
+/**
+ * What the transaction modal needs to offer a link: the rules of the same type
+ * (only those can plausibly be the same series) and how many other unlinked
+ * transactions share this description, which labels the "also link N others"
+ * checkbox. Both are fetched together because the modal always wants both.
+ */
+export async function getTransactionLinkOptionsAction(transactionId: string): Promise<LinkOptions> {
+  if (isDemoMode()) return { ok: true, rules: [], matchCount: 0 };
+  try {
+    const { userId } = await requireUser();
+
+    const txn = await prisma.transaction.findFirst({
+      where: { id: transactionId, userId, deletedAt: null },
+      select: { id: true, type: true, description: true },
+    });
+    if (!txn) return { ok: false, error: "Transaction not found" };
+
+    const [rules, candidates] = await Promise.all([
+      prisma.recurringRule.findMany({
+        where: { userId, type: txn.type, archived: false },
+        select: { id: true, description: true, frequency: true, interval: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.transaction.findMany({
+        where: { userId, deletedAt: null, type: txn.type, recurringRuleId: null },
+        select: { id: true, description: true },
+      }),
+    ]);
+
+    const normalized = normalizeDescription(txn.description);
+    const matchCount = matchingCandidateIds(candidates, normalized, transactionId).length;
+
+    return { ok: true, rules, matchCount };
+  } catch (e) {
+    console.error("Action failed:", e);
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
 }
 
 function revalidateAll() {
