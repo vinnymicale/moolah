@@ -142,6 +142,54 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
   });
 }
 
+/**
+ * Tie one transaction to an existing rule, or clear the tie when `ruleId` is
+ * null. With `alsoMatching`, the other unlinked transactions sharing its
+ * normalized description are swept in too, which is how a merchant the
+ * suggestion detector never flagged gets its whole history attached at once.
+ *
+ * Unlink is always single-transaction: a bulk unlink would be far too easy to
+ * fire by accident, so `alsoMatching` is ignored on that path.
+ */
+export async function linkTransactionToRuleAction(
+  transactionId: string,
+  ruleId: string | null,
+  alsoMatching = false,
+): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+
+    const txn = await prisma.transaction.findFirst({
+      where: { id: transactionId, userId, deletedAt: null },
+      select: { id: true, type: true, description: true },
+    });
+    if (!txn) throw new UserError("Transaction not found");
+
+    if (ruleId) {
+      const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, userId } });
+      if (!rule) throw new UserError("Recurring rule not found");
+    }
+
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: { recurringRuleId: ruleId },
+    });
+
+    if (ruleId && alsoMatching) {
+      await linkMatchingTransactions(
+        userId,
+        txn.type,
+        normalizeDescription(txn.description),
+        ruleId,
+        transactionId,
+      );
+    }
+
+    revalidateAll();
+  });
+}
+
 function revalidateAll() {
   revalidatePath("/");
   revalidatePath("/calendar");
