@@ -113,6 +113,25 @@ export function RecurringLinkSection({
         </div>
       )}
 
+      {linked && pendingLink?.ruleId && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-muted">
+            Will be moved to{" "}
+            <span className="font-medium text-text">{chosenRule?.description ?? "the chosen rule"}</span> on save.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              onPendingLinkChange(null);
+              setOpen(false);
+            }}
+            className="btn-ghost h-8 text-xs"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
       {!linked && (
         <>
           <label className="flex items-center gap-2 text-sm font-medium">
@@ -177,7 +196,7 @@ export function RecurringLinkSection({
                 ))}
               </select>
 
-              {pendingLink?.ruleId && matchCount > 0 && (
+              {!linked && pendingLink?.ruleId && matchCount > 0 && (
                 <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"

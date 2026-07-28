@@ -231,6 +231,23 @@ describe("linkTransactionToRuleAction", () => {
     });
   });
 
+  it("sweeps nothing when the target description normalizes to empty", async () => {
+    // "POS Debit" is all noise tokens, so it normalizes to "" - which must not
+    // match the other all-noise descriptions.
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "POS Debit" } as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "POS Debit" },
+      { id: "t2", description: "Bill Pay" },
+      { id: "t3", description: "ACH Payment 1234" },
+    ] as never);
+
+    const result = await linkTransactionToRuleAction("t1", "r1", true);
+
+    expect(result).toEqual({ ok: true });
+    expect(txn.update).toHaveBeenCalledWith({ where: { id: "t1" }, data: { recurringRuleId: "r1" } });
+    expect(txn.updateMany).not.toHaveBeenCalled();
+  });
+
   it("errors when the transaction does not belong to the user", async () => {
     txn.findFirst.mockResolvedValue(null);
     const result = await linkTransactionToRuleAction("t1", "r1");
@@ -289,6 +306,17 @@ describe("getTransactionLinkOptionsAction", () => {
       where: { userId: "u1", deletedAt: null, type: "EXPENSE", recurringRuleId: null },
       select: { id: true, description: true },
     });
+  });
+
+  it("counts nothing when the target description normalizes to empty", async () => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "POS Debit" } as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "POS Debit" },
+      { id: "t2", description: "Bill Pay" },
+      { id: "t3", description: "ACH Payment 1234" },
+    ] as never);
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toMatchObject({ ok: true, matchCount: 0 });
   });
 
   it("errors when the transaction does not belong to the user", async () => {

@@ -84,6 +84,23 @@ export async function deleteRecurringAction(id: string, deleteOccurrences = fals
 }
 
 /**
+ * Ids of the unlinked candidates whose normalized description matches
+ * `normalized`, skipping `excludeId`. Descriptions made entirely of noise (say
+ * "POS Debit") normalize to "", which would otherwise match every other such
+ * description and sweep up unrelated transactions - an empty key matches nothing.
+ */
+function matchingCandidateIds(
+  candidates: { id: string; description: string }[],
+  normalized: string,
+  excludeId?: string,
+): string[] {
+  if (!normalized) return [];
+  return candidates
+    .filter((t) => t.id !== excludeId && normalizeDescription(t.description) === normalized)
+    .map((t) => t.id);
+}
+
+/**
  * Link every unlinked transaction of `type` whose normalized description matches
  * `normalized` to `ruleId`, skipping `excludeId`. The normalized grouping isn't
  * expressible in SQL, so candidates are matched in memory. Returns the count.
@@ -99,9 +116,7 @@ async function linkMatchingTransactions(
     where: { userId, deletedAt: null, type, recurringRuleId: null },
     select: { id: true, description: true },
   });
-  const ids = candidates
-    .filter((t) => t.id !== excludeId && normalizeDescription(t.description) === normalized)
-    .map((t) => t.id);
+  const ids = matchingCandidateIds(candidates, normalized, excludeId);
 
   if (ids.length > 0) {
     await prisma.transaction.updateMany({
@@ -231,9 +246,7 @@ export async function getTransactionLinkOptionsAction(transactionId: string): Pr
     ]);
 
     const normalized = normalizeDescription(txn.description);
-    const matchCount = candidates.filter(
-      (c) => c.id !== transactionId && normalizeDescription(c.description) === normalized,
-    ).length;
+    const matchCount = matchingCandidateIds(candidates, normalized, transactionId).length;
 
     return { ok: true, rules, matchCount };
   } catch (e) {
