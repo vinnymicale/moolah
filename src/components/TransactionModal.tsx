@@ -329,7 +329,7 @@ export function TransactionModal(props: TransactionModalProps) {
         </div>
 
         <AttachmentSection
-          key={transaction?.id ?? "new"}
+          key={`attachments-${transaction?.id ?? "new"}`}
           transactionId={transaction?.id ?? null}
           initial={transaction?.attachments ?? []}
           staged={stagedFiles}
@@ -349,7 +349,7 @@ export function TransactionModal(props: TransactionModalProps) {
         </label>
 
         <RecurringLinkSection
-          key={transaction?.id ?? "new"}
+          key={`recurring-${transaction?.id ?? "new"}`}
           transactionId={transaction?.id ?? null}
           linkedRuleId={transaction?.recurringRuleId ?? null}
           type={form.type}
