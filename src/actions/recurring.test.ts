@@ -285,6 +285,10 @@ describe("getTransactionLinkOptionsAction", () => {
     ] as never);
     const result = await getTransactionLinkOptionsAction("t1");
     expect(result).toMatchObject({ ok: true, matchCount: 1 });
+    expect(txn.findMany).toHaveBeenCalledWith({
+      where: { userId: "u1", deletedAt: null, type: "EXPENSE", recurringRuleId: null },
+      select: { id: true, description: true },
+    });
   });
 
   it("errors when the transaction does not belong to the user", async () => {
