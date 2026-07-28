@@ -84,6 +84,35 @@ export async function deleteRecurringAction(id: string, deleteOccurrences = fals
 }
 
 /**
+ * Link every unlinked transaction of `type` whose normalized description matches
+ * `normalized` to `ruleId`, skipping `excludeId`. The normalized grouping isn't
+ * expressible in SQL, so candidates are matched in memory. Returns the count.
+ */
+async function linkMatchingTransactions(
+  userId: string,
+  type: TxnType,
+  normalized: string,
+  ruleId: string,
+  excludeId?: string,
+): Promise<number> {
+  const candidates = await prisma.transaction.findMany({
+    where: { userId, deletedAt: null, type, recurringRuleId: null },
+    select: { id: true, description: true },
+  });
+  const ids = candidates
+    .filter((t) => t.id !== excludeId && normalizeDescription(t.description) === normalized)
+    .map((t) => t.id);
+
+  if (ids.length > 0) {
+    await prisma.transaction.updateMany({
+      where: { id: { in: ids }, userId },
+      data: { recurringRuleId: ruleId },
+    });
+  }
+  return ids.length;
+}
+
+/**
  * Tie a recurring suggestion to an existing rule the user already has. The
  * suggestion's transactions (same type, same normalized description, not yet
  * linked) are attached to the rule, which both records the history and stops the
@@ -108,21 +137,7 @@ export async function linkSuggestionToRuleAction(ruleId: string, suggestionKey: 
       throw new UserError("Invalid suggestion");
     }
 
-    // The normalized grouping isn't expressible in SQL, so match in memory.
-    const candidates = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, type: type as TxnType, recurringRuleId: null },
-      select: { id: true, description: true },
-    });
-    const ids = candidates
-      .filter((t) => normalizeDescription(t.description) === normalized)
-      .map((t) => t.id);
-
-    if (ids.length > 0) {
-      await prisma.transaction.updateMany({
-        where: { id: { in: ids }, userId },
-        data: { recurringRuleId: ruleId },
-      });
-    }
+    await linkMatchingTransactions(userId, type as TxnType, normalized, ruleId);
     revalidateAll();
   });
 }
