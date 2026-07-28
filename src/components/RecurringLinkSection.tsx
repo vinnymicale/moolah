@@ -152,9 +152,12 @@ export function RecurringLinkSection({
           </label>
           {children}
           {!recurring && !open && !typeChanged && (
-            <button type="button" onClick={openPicker} className="btn-ghost h-8 px-0! text-xs text-muted hover:text-text">
-              <Link2 size={13} /> or link to an existing rule
-            </button>
+            <p className="flex items-center gap-2 text-xs text-muted">
+              or
+              <button type="button" onClick={openPicker} className="btn-ghost h-8 gap-1.5 px-3 text-xs">
+                <Link2 size={13} /> link to an existing rule
+              </button>
+            </p>
           )}
         </>
       )}
