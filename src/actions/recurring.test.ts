@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     recurringRule: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -34,6 +35,7 @@ import {
   deleteRecurringAction,
   linkSuggestionToRuleAction,
   linkTransactionToRuleAction,
+  getTransactionLinkOptionsAction,
 } from "./recurring";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -248,5 +250,58 @@ describe("linkTransactionToRuleAction", () => {
     expect(await linkTransactionToRuleAction("t1", "r1")).toEqual({ ok: true });
     expect(requireUserMock).not.toHaveBeenCalled();
     expect(txn.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTransactionLinkOptionsAction", () => {
+  beforeEach(() => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix" } as never);
+    rule.findMany.mockResolvedValue([
+      { id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 },
+    ] as never);
+    txn.findMany.mockResolvedValue([] as never);
+  });
+
+  it("returns only same-type non-archived rules", async () => {
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toEqual({
+      ok: true,
+      rules: [{ id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 }],
+      matchCount: 0,
+    });
+    expect(rule.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "u1", type: "EXPENSE", archived: false },
+      }),
+    );
+  });
+
+  it("counts other unlinked transactions with the same normalized description", async () => {
+    // t1 is the target and must not count itself; "Spotify" does not match.
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Netflix" },
+      { id: "t2", description: "NETFLIX 4085" },
+      { id: "t3", description: "Spotify" },
+    ] as never);
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toMatchObject({ ok: true, matchCount: 1 });
+  });
+
+  it("errors when the transaction does not belong to the user", async () => {
+    txn.findFirst.mockResolvedValue(null);
+    expect(await getTransactionLinkOptionsAction("t1")).toEqual({
+      ok: false,
+      error: "Transaction not found",
+    });
+  });
+
+  it("returns empty options in demo mode", async () => {
+    demoMode.value = true;
+    expect(await getTransactionLinkOptionsAction("t1")).toEqual({
+      ok: true,
+      rules: [],
+      matchCount: 0,
+    });
+    expect(requireUserMock).not.toHaveBeenCalled();
   });
 });

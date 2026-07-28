@@ -190,6 +190,58 @@ export async function linkTransactionToRuleAction(
   });
 }
 
+export interface LinkableRule {
+  id: string;
+  description: string;
+  frequency: Frequency;
+  interval: number;
+}
+
+export type LinkOptions =
+  | { ok: true; rules: LinkableRule[]; matchCount: number }
+  | { ok: false; error: string };
+
+/**
+ * What the transaction modal needs to offer a link: the rules of the same type
+ * (only those can plausibly be the same series) and how many other unlinked
+ * transactions share this description, which labels the "also link N others"
+ * checkbox. Both are fetched together because the modal always wants both.
+ */
+export async function getTransactionLinkOptionsAction(transactionId: string): Promise<LinkOptions> {
+  if (isDemoMode()) return { ok: true, rules: [], matchCount: 0 };
+  try {
+    const { userId } = await requireUser();
+
+    const txn = await prisma.transaction.findFirst({
+      where: { id: transactionId, userId, deletedAt: null },
+      select: { id: true, type: true, description: true },
+    });
+    if (!txn) return { ok: false, error: "Transaction not found" };
+
+    const [rules, candidates] = await Promise.all([
+      prisma.recurringRule.findMany({
+        where: { userId, type: txn.type, archived: false },
+        select: { id: true, description: true, frequency: true, interval: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.transaction.findMany({
+        where: { userId, deletedAt: null, type: txn.type, recurringRuleId: null },
+        select: { id: true, description: true },
+      }),
+    ]);
+
+    const normalized = normalizeDescription(txn.description);
+    const matchCount = candidates.filter(
+      (c) => c.id !== transactionId && normalizeDescription(c.description) === normalized,
+    ).length;
+
+    return { ok: true, rules, matchCount };
+  } catch (e) {
+    console.error("Action failed:", e);
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+}
+
 function revalidateAll() {
   revalidatePath("/");
   revalidatePath("/calendar");
