@@ -13,6 +13,7 @@ export function RecurringLinkSection({
   transactionId,
   linkedRuleId,
   type,
+  savedType,
   recurring,
   onRecurringChange,
   pendingLink,
@@ -21,7 +22,10 @@ export function RecurringLinkSection({
 }: {
   transactionId: string | null;
   linkedRuleId: string | null;
+  /** The type currently selected in the form. */
   type: TxnType;
+  /** The type stored on the transaction, which is what the server keys rules off. */
+  savedType: TxnType | null;
   recurring: boolean;
   onRecurringChange: (v: boolean) => void;
   pendingLink: PendingLink;
@@ -50,6 +54,11 @@ export function RecurringLinkSection({
     setOpen(true);
     load();
   };
+
+  // The server picks rules by the transaction's stored type, so once the form
+  // type is switched the loaded rules are the wrong kind and a refetch would
+  // return that same wrong kind. Hide the picker until the type is saved.
+  const typeChanged = savedType !== null && savedType !== type;
 
   const linked = linkedRuleId ?? null;
   const chosen = pendingLink ? pendingLink.ruleId : linked;
@@ -110,13 +119,20 @@ export function RecurringLinkSection({
             <input
               type="checkbox"
               checked={recurring}
-              onChange={(e) => onRecurringChange(e.target.checked)}
-              disabled={!!pendingLink?.ruleId}
+              onChange={(e) => {
+                onRecurringChange(e.target.checked);
+                // Converting and linking both write recurringRuleId, so turning
+                // one on drops whatever the other had staged.
+                if (e.target.checked) {
+                  setOpen(false);
+                  onPendingLinkChange(null);
+                }
+              }}
             />
             Make this recurring
           </label>
           {children}
-          {!recurring && !open && (
+          {!recurring && !open && !typeChanged && (
             <button type="button" onClick={openPicker} className="btn-ghost h-8 px-0! text-xs text-muted hover:text-text">
               <Link2 size={13} /> or link to an existing rule
             </button>
@@ -124,7 +140,14 @@ export function RecurringLinkSection({
         </>
       )}
 
-      {open && (
+      {typeChanged && (
+        <p className="text-xs text-muted">
+          Save the change from {savedType === "EXPENSE" ? "expense" : "income"} to{" "}
+          {type === "EXPENSE" ? "expense" : "income"} before linking to a recurring rule.
+        </p>
+      )}
+
+      {open && !recurring && !typeChanged && (
         <div className="space-y-2 rounded-lg bg-surface2 px-3 py-2">
           {loading && (
             <p className="flex items-center gap-2 text-xs text-muted">

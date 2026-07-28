@@ -225,6 +225,8 @@ export function TransactionModal(props: TransactionModalProps) {
                 // Categories are kind-specific, so clear them; keep the amounts
                 // since the split allocation is still valid against the total.
                 setSplits((rows) => rows.map((r) => ({ ...r, categoryId: "" })));
+                // Rules are type-specific too, so a staged link no longer applies.
+                setPendingLink(null);
               }}
               className={`btn text-sm ${form.type === t
                   ? t === "EXPENSE"
@@ -347,9 +349,11 @@ export function TransactionModal(props: TransactionModalProps) {
         </label>
 
         <RecurringLinkSection
+          key={transaction?.id ?? "new"}
           transactionId={transaction?.id ?? null}
           linkedRuleId={transaction?.recurringRuleId ?? null}
           type={form.type}
+          savedType={transaction?.type ?? null}
           recurring={form.recurring}
           onRecurringChange={(v) => set("recurring", v)}
           pendingLink={pendingLink}
