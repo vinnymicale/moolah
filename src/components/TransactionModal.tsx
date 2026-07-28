@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Copy } from "lucide-react";
 import { Modal } from "./Modal";
+import { RecurringLinkSection, type PendingLink } from "./RecurringLinkSection";
 import { SplitEditor, EMPTY_SPLITS, type SplitRow } from "./SplitEditor";
 import { TagInput, type TagOption } from "./TagInput";
 import { AttachmentSection, uploadAttachment } from "./AttachmentSection";
@@ -14,6 +16,7 @@ import {
   restoreTransactionAction,
   convertToRecurringAction,
 } from "@/actions/transactions";
+import { linkTransactionToRuleAction } from "@/actions/recurring";
 import { validateSplits } from "@/lib/splits";
 import { useConfirmAction } from "@/lib/useConfirmAction";
 import { useToast } from "./Toast";
@@ -84,7 +87,9 @@ export function TransactionModal(props: TransactionModalProps) {
   );
   const [error, setError] = useState<string | null>(null);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [pendingLink, setPendingLink] = useState<PendingLink>(null);
   const [pending, start] = useTransition();
+  const router = useRouter();
   const { toast } = useToast();
 
   const catOptions = categories.filter((c) => c.kind === form.type);
@@ -158,6 +163,20 @@ export function TransactionModal(props: TransactionModalProps) {
           return;
         }
       }
+      // Apply the staged link last: the transaction must exist and be saved
+      // before it can be tied to a rule.
+      if (pendingLink && transaction) {
+        const link = await linkTransactionToRuleAction(
+          transaction.id,
+          pendingLink.ruleId,
+          pendingLink.alsoMatching,
+        );
+        if (!link.ok) {
+          setError(link.error ?? "Saved, but couldn't update the recurring link.");
+          return;
+        }
+      }
+      router.refresh();
       onClose();
     });
 
@@ -206,6 +225,8 @@ export function TransactionModal(props: TransactionModalProps) {
                 // Categories are kind-specific, so clear them; keep the amounts
                 // since the split allocation is still valid against the total.
                 setSplits((rows) => rows.map((r) => ({ ...r, categoryId: "" })));
+                // Rules are type-specific too, so a staged link no longer applies.
+                setPendingLink(null);
               }}
               className={`btn text-sm ${form.type === t
                   ? t === "EXPENSE"
@@ -327,47 +348,45 @@ export function TransactionModal(props: TransactionModalProps) {
           <span>Already {form.type === "INCOME" ? "received" : "paid"} (uncheck if it&apos;s expected/upcoming)</span>
         </label>
 
-        {alreadyRecurring && (
-          <p className="rounded-lg border border-line bg-surface2/50 px-3 py-2 text-xs text-muted">
-            Part of a recurring series. Edit the schedule on the Recurring page.
-          </p>
-        )}
-
-        {!alreadyRecurring && (
-          <div className="rounded-lg border border-line p-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" checked={form.recurring} onChange={(e) => set("recurring", e.target.checked)} />
-              Make this recurring
-            </label>
-            {editing && form.recurring && (
-              <p className="mt-2 text-xs text-muted">
-                Creates a recurring series starting on this transaction&apos;s date.
-              </p>
-            )}
-            {form.recurring && (
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Frequency</label>
-                  <select className="input" value={form.frequency} onChange={(e) => set("frequency", e.target.value as Frequency)}>
-                    {FREQUENCIES.map((f) => (
-                      <option key={f.value} value={f.value}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Repeat every</label>
-                  <input className="input" inputMode="numeric" value={form.interval} onChange={(e) => set("interval", e.target.value)} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">End date (optional)</label>
-                  <input className="input" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
-                </div>
+        <RecurringLinkSection
+          key={transaction?.id ?? "new"}
+          transactionId={transaction?.id ?? null}
+          linkedRuleId={transaction?.recurringRuleId ?? null}
+          type={form.type}
+          savedType={transaction?.type ?? null}
+          recurring={form.recurring}
+          onRecurringChange={(v) => set("recurring", v)}
+          pendingLink={pendingLink}
+          onPendingLinkChange={setPendingLink}
+        >
+          {editing && form.recurring && (
+            <p className="mt-2 text-xs text-muted">
+              Creates a recurring series starting on this transaction&apos;s date.
+            </p>
+          )}
+          {form.recurring && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Frequency</label>
+                <select className="input" value={form.frequency} onChange={(e) => set("frequency", e.target.value as Frequency)}>
+                  {FREQUENCIES.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
-          </div>
-        )}
+              <div>
+                <label className="label">Repeat every</label>
+                <input className="input" inputMode="numeric" value={form.interval} onChange={(e) => set("interval", e.target.value)} />
+              </div>
+              <div className="col-span-2">
+                <label className="label">End date (optional)</label>
+                <input className="input" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
+              </div>
+            </div>
+          )}
+        </RecurringLinkSection>
 
         {error && <p className="text-sm text-expense">{error}</p>}
 

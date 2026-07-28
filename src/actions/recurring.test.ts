@@ -15,12 +15,15 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     recurringRule: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
     transaction: {
+      findFirst: vi.fn(),
       findMany: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
@@ -31,6 +34,8 @@ import {
   createRecurringAction,
   deleteRecurringAction,
   linkSuggestionToRuleAction,
+  linkTransactionToRuleAction,
+  getTransactionLinkOptionsAction,
 } from "./recurring";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -175,5 +180,160 @@ describe("linkSuggestionToRuleAction", () => {
     rule.findFirst.mockResolvedValue(null);
     const result = await linkSuggestionToRuleAction("r1", "EXPENSE|netflix");
     expect(result).toEqual({ ok: false, error: "Recurring rule not found" });
+  });
+});
+
+describe("linkTransactionToRuleAction", () => {
+  beforeEach(() => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix" } as never);
+    rule.findFirst.mockResolvedValue({ id: "r1", type: "EXPENSE" } as never);
+  });
+
+  it("links the single transaction to the rule", async () => {
+    const result = await linkTransactionToRuleAction("t1", "r1");
+    expect(result).toEqual({ ok: true });
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { recurringRuleId: "r1" },
+    });
+    expect(txn.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("unlinks when the rule id is null", async () => {
+    const result = await linkTransactionToRuleAction("t1", null);
+    expect(result).toEqual({ ok: true });
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { recurringRuleId: null },
+    });
+    expect(rule.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("ignores alsoMatching when unlinking", async () => {
+    await linkTransactionToRuleAction("t1", null, true);
+    expect(txn.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("sweeps other unlinked transactions when alsoMatching is set", async () => {
+    // "NETFLIX 4085" normalizes to "netflix" and matches; "Spotify" does not.
+    // t1 is the target itself and is excluded from the sweep.
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Netflix" },
+      { id: "t2", description: "NETFLIX 4085" },
+      { id: "t3", description: "Spotify" },
+    ] as never);
+
+    await linkTransactionToRuleAction("t1", "r1", true);
+
+    expect(txn.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["t2"] }, userId: "u1" },
+      data: { recurringRuleId: "r1" },
+    });
+  });
+
+  it("sweeps nothing when the target description normalizes to empty", async () => {
+    // "POS Debit" is all noise tokens, so it normalizes to "" - which must not
+    // match the other all-noise descriptions.
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "POS Debit" } as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "POS Debit" },
+      { id: "t2", description: "Bill Pay" },
+      { id: "t3", description: "ACH Payment 1234" },
+    ] as never);
+
+    const result = await linkTransactionToRuleAction("t1", "r1", true);
+
+    expect(result).toEqual({ ok: true });
+    expect(txn.update).toHaveBeenCalledWith({ where: { id: "t1" }, data: { recurringRuleId: "r1" } });
+    expect(txn.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("errors when the transaction does not belong to the user", async () => {
+    txn.findFirst.mockResolvedValue(null);
+    const result = await linkTransactionToRuleAction("t1", "r1");
+    expect(result).toEqual({ ok: false, error: "Transaction not found" });
+    expect(txn.update).not.toHaveBeenCalled();
+  });
+
+  it("errors when the rule does not belong to the user", async () => {
+    rule.findFirst.mockResolvedValue(null);
+    const result = await linkTransactionToRuleAction("t1", "r1");
+    expect(result).toEqual({ ok: false, error: "Recurring rule not found" });
+    expect(txn.update).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op success in demo mode", async () => {
+    demoMode.value = true;
+    expect(await linkTransactionToRuleAction("t1", "r1")).toEqual({ ok: true });
+    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(txn.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTransactionLinkOptionsAction", () => {
+  beforeEach(() => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix" } as never);
+    rule.findMany.mockResolvedValue([
+      { id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 },
+    ] as never);
+    txn.findMany.mockResolvedValue([] as never);
+  });
+
+  it("returns only same-type non-archived rules", async () => {
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toEqual({
+      ok: true,
+      rules: [{ id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 }],
+      matchCount: 0,
+    });
+    expect(rule.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "u1", type: "EXPENSE", archived: false },
+      }),
+    );
+  });
+
+  it("counts other unlinked transactions with the same normalized description", async () => {
+    // t1 is the target and must not count itself; "Spotify" does not match.
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Netflix" },
+      { id: "t2", description: "NETFLIX 4085" },
+      { id: "t3", description: "Spotify" },
+    ] as never);
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toMatchObject({ ok: true, matchCount: 1 });
+    expect(txn.findMany).toHaveBeenCalledWith({
+      where: { userId: "u1", deletedAt: null, type: "EXPENSE", recurringRuleId: null },
+      select: { id: true, description: true },
+    });
+  });
+
+  it("counts nothing when the target description normalizes to empty", async () => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "POS Debit" } as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "POS Debit" },
+      { id: "t2", description: "Bill Pay" },
+      { id: "t3", description: "ACH Payment 1234" },
+    ] as never);
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toMatchObject({ ok: true, matchCount: 0 });
+  });
+
+  it("errors when the transaction does not belong to the user", async () => {
+    txn.findFirst.mockResolvedValue(null);
+    expect(await getTransactionLinkOptionsAction("t1")).toEqual({
+      ok: false,
+      error: "Transaction not found",
+    });
+  });
+
+  it("returns empty options in demo mode", async () => {
+    demoMode.value = true;
+    expect(await getTransactionLinkOptionsAction("t1")).toEqual({
+      ok: true,
+      rules: [],
+      matchCount: 0,
+    });
+    expect(requireUserMock).not.toHaveBeenCalled();
   });
 });
