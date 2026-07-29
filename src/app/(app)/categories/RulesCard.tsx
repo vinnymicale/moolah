@@ -13,6 +13,7 @@ import {
   applyRulesAction,
   type RuleInput,
 } from "@/actions/rules";
+import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
 import type { RuleCondition, RuleAction } from "@/lib/rules";
 import { moveInArray, reconcileOrder } from "@/lib/collections";
@@ -478,6 +479,7 @@ function RuleEditor({
               tags={tags}
               onChange={(next) => updateAction(i, next)}
               onRemove={actions.length > 1 ? () => setActions((p) => p.filter((_, j) => j !== i)) : undefined}
+              onError={onError}
             />
           ))}
         </div>
@@ -600,13 +602,16 @@ function ActionRow({
   tags,
   onChange,
   onRemove,
+  onError,
 }: {
   action: RuleAction;
   categories: CategoryDTO[];
   tags: TagDTO[];
   onChange: (a: RuleAction) => void;
   onRemove?: () => void;
+  onError: (msg: string) => void;
 }) {
+  const router = useRouter();
   return (
     <div className="flex flex-wrap items-start gap-2">
       <select
@@ -649,9 +654,22 @@ function ActionRow({
         <select
           className="input h-9 flex-1 text-sm"
           value={action.tagId}
-          onChange={(e) => onChange({ type: "addTag", tagId: e.target.value })}
+          onChange={async (e) => {
+            const value = e.target.value;
+            if (value !== "__create__") {
+              onChange({ type: "addTag", tagId: value });
+              return;
+            }
+            const name = window.prompt("New tag name");
+            if (!name?.trim()) return;
+            const created = await createTagAction({ name });
+            if (!created.ok) return onError(created.error);
+            onChange({ type: "addTag", tagId: created.id });
+            router.refresh();
+          }}
         >
           <option value="">Select tag…</option>
+          <option value="__create__">＋ New tag…</option>
           {tags.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
