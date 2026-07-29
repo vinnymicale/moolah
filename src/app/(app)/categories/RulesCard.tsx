@@ -630,6 +630,14 @@ function ActionRow({
   onError: (msg: string) => void;
 }) {
   const router = useRouter();
+  // Tags created inline are held here so the new <option> exists in the same render
+  // that selects it. Waiting for the refreshed `tags` prop leaves the controlled
+  // select with a value it has no option for, and it silently snaps back to blank.
+  const [createdTags, setCreatedTags] = useState<{ id: string; name: string }[]>([]);
+  const tagOptions: { id: string; name: string }[] = [
+    ...tags,
+    ...createdTags.filter((c) => !tags.some((t) => t.id === c.id)),
+  ];
   return (
     <div className="flex flex-wrap items-start gap-2">
       <select
@@ -682,13 +690,14 @@ function ActionRow({
             if (!name?.trim()) return;
             const created = await createTagAction({ name });
             if (!created.ok) return onError(created.error);
+            setCreatedTags((prev) => [...prev, { id: created.id, name: name.trim() }]);
             onChange({ type: "addTag", tagId: created.id });
             router.refresh();
           }}
         >
           <option value="">Select tag…</option>
           <option value="__create__">＋ New tag…</option>
-          {tags.map((t) => (
+          {tagOptions.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
