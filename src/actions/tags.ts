@@ -38,8 +38,8 @@ async function assertNameFree(userId: string, name: string, excludeId?: string) 
 export async function createTagAction(input: {
   name: string;
   color?: string;
-}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  if (isDemoMode()) return { ok: true, id: "demo-tag" };
+}): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+  if (isDemoMode()) return { ok: true, id: "demo-tag", name: normalizeTagName(input.name) };
   try {
     const { userId } = await requireUser();
     const name = normalizeTagName(input.name);
@@ -47,7 +47,7 @@ export async function createTagAction(input: {
     await assertNameFree(userId, name);
     const tag = await prisma.tag.create({ data: { userId, name, color }, select: { id: true } });
     revalidateTagPages();
-    return { ok: true, id: tag.id };
+    return { ok: true, id: tag.id, name };
   } catch (e) {
     if (e instanceof UserError) return { ok: false, error: e.message };
     console.error(e);

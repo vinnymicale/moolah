@@ -148,17 +148,21 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
       if (!res.ok) {
         setOrder(previous);
         setError(res.error);
+        router.refresh();
         return;
       }
       router.refresh();
     });
   };
 
+  // Reordering is always computed against `ordered`'s ids, not raw `order`, so
+  // the client can never submit an id it isn't actually rendering a row for.
   const move = (id: string, delta: -1 | 1) => {
-    const from = order.indexOf(id);
+    const ids = ordered.map((r) => r.id);
+    const from = ids.indexOf(id);
     const to = from + delta;
-    if (from < 0 || to < 0 || to >= order.length) return;
-    commitOrder(moveInArray(order, from, to));
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    commitOrder(moveInArray(ids, from, to));
   };
 
   const handleDrop = (targetId: string) => {
@@ -166,10 +170,11 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
     setDragId(null);
     setOverId(null);
     if (!sourceId || sourceId === targetId) return;
-    const from = order.indexOf(sourceId);
-    const to = order.indexOf(targetId);
+    const ids = ordered.map((r) => r.id);
+    const from = ids.indexOf(sourceId);
+    const to = ids.indexOf(targetId);
     if (from < 0 || to < 0) return;
-    commitOrder(moveInArray(order, from, to));
+    commitOrder(moveInArray(ids, from, to));
   };
 
   const canReorder = rules.length > 1;
@@ -630,6 +635,7 @@ function ActionRow({
   onError: (msg: string) => void;
 }) {
   const router = useRouter();
+  const [creatingTag, startCreateTag] = useTransition();
   // Tags created inline are held here so the new <option> exists in the same render
   // that selects it. Waiting for the refreshed `tags` prop leaves the controlled
   // select with a value it has no option for, and it silently snaps back to blank.
@@ -680,7 +686,8 @@ function ActionRow({
         <select
           className="input h-9 flex-1 text-sm"
           value={action.tagId}
-          onChange={async (e) => {
+          disabled={creatingTag}
+          onChange={(e) => {
             const value = e.target.value;
             if (value !== "__create__") {
               onChange({ type: "addTag", tagId: value });
@@ -688,11 +695,13 @@ function ActionRow({
             }
             const name = window.prompt("New tag name");
             if (!name?.trim()) return;
-            const created = await createTagAction({ name });
-            if (!created.ok) return onError(created.error);
-            setCreatedTags((prev) => [...prev, { id: created.id, name: name.trim() }]);
-            onChange({ type: "addTag", tagId: created.id });
-            router.refresh();
+            startCreateTag(async () => {
+              const created = await createTagAction({ name });
+              if (!created.ok) return onError(created.error);
+              setCreatedTags((prev) => [...prev, { id: created.id, name: created.name }]);
+              onChange({ type: "addTag", tagId: created.id });
+              router.refresh();
+            });
           }}
         >
           <option value="">Select tag…</option>

@@ -35,12 +35,20 @@ describe("moveInArray", () => {
   });
 
   it("returns a copy when from equals to", () => {
-    expect(moveInArray(["a", "b"], 1, 1)).toEqual(["a", "b"]);
+    const input = ["a", "b"];
+    const result = moveInArray(input, 1, 1);
+    expect(result).toEqual(["a", "b"]);
+    expect(result).not.toBe(input);
   });
 
   it("returns a copy when either index is out of range", () => {
-    expect(moveInArray(["a", "b"], -1, 0)).toEqual(["a", "b"]);
-    expect(moveInArray(["a", "b"], 0, 5)).toEqual(["a", "b"]);
+    const input = ["a", "b"];
+    const result1 = moveInArray(input, -1, 0);
+    expect(result1).toEqual(["a", "b"]);
+    expect(result1).not.toBe(input);
+    const result2 = moveInArray(input, 0, 5);
+    expect(result2).toEqual(["a", "b"]);
+    expect(result2).not.toBe(input);
   });
 });
 

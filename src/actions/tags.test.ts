@@ -53,7 +53,7 @@ describe("createTagAction", () => {
     tagFindFirst.mockResolvedValue(null);
     tagCreate.mockResolvedValue({ id: "t9" } as never);
     const res = await createTagAction({ name: "  vacation   2026 " });
-    expect(res).toEqual({ ok: true, id: "t9" });
+    expect(res).toEqual({ ok: true, id: "t9", name: "vacation 2026" });
     expect(tagCreate).toHaveBeenCalledWith({
       data: { userId: "u1", name: "vacation 2026", color: "#64748b" },
       select: { id: true },
