@@ -283,13 +283,13 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                 <li
                   key={rule.id}
                   onDragOver={(e) => {
-                    if (!canReorder || !dragId) return;
+                    if (!canReorder || !dragId || pending) return;
                     e.preventDefault();
                     const over = dragId === rule.id ? null : rule.id;
                     if (overId !== over) setOverId(over);
                   }}
                   onDrop={(e) => {
-                    if (!canReorder) return;
+                    if (!canReorder || pending) return;
                     e.preventDefault();
                     handleDrop(rule.id);
                   }}
@@ -299,8 +299,9 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                 >
                   {canReorder && (
                     <span
-                      draggable
+                      draggable={!pending}
                       onDragStart={(e) => {
+                        if (pending) return;
                         setDragId(rule.id);
                         e.dataTransfer.effectAllowed = "move";
                       }}
@@ -309,7 +310,9 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                         setOverId(null);
                       }}
                       title="Drag to reorder"
-                      className="shrink-0 cursor-grab text-muted active:cursor-grabbing"
+                      className={`shrink-0 text-muted ${
+                        pending ? "cursor-not-allowed opacity-30" : "cursor-grab active:cursor-grabbing"
+                      }`}
                     >
                       <GripVertical size={14} />
                     </span>
