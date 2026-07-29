@@ -1,19 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2, Plus, Trash2, Loader2, Play, Pencil, Eye, X } from "lucide-react";
+import { Wand2, Plus, Trash2, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
 import {
   createRuleAction,
   updateRuleAction,
   deleteRuleAction,
   setRuleEnabledAction,
+  reorderRulesAction,
   previewRulesAction,
   applyRulesAction,
   type RuleInput,
 } from "@/actions/rules";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
 import type { RuleCondition, RuleAction } from "@/lib/rules";
+import { moveInArray, reconcileOrder } from "@/lib/collections";
 
 type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
 
@@ -100,6 +102,61 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [pending, start] = useTransition();
 
+  // Rules run top to bottom, so their order is their priority. Keep a local
+  // copy so a drag or arrow click moves the row before the save comes back.
+  const [order, setOrder] = useState<string[]>(() => rules.map((r) => r.id));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  const ruleIds = rules.map((r) => r.id).join();
+  useEffect(() => {
+    // Reconciling local drag order against the server's rule list can't be done
+    // during render: it depends on the previous local order, not just props.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrder((prev) => reconcileOrder(prev, ruleIds ? ruleIds.split(",") : []));
+  }, [ruleIds]);
+
+  const byId = new Map(rules.map((r) => [r.id, r]));
+  const ordered = order.flatMap((id) => {
+    const rule = byId.get(id);
+    return rule ? [rule] : [];
+  });
+
+  const commitOrder = (next: string[]) => {
+    const previous = order;
+    setOrder(next);
+    start(async () => {
+      setError(null);
+      const res = await reorderRulesAction(next);
+      if (!res.ok) {
+        setOrder(previous);
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const move = (id: string, delta: -1 | 1) => {
+    const from = order.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    commitOrder(moveInArray(order, from, to));
+  };
+
+  const handleDrop = (targetId: string) => {
+    const sourceId = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (!sourceId || sourceId === targetId) return;
+    const from = order.indexOf(sourceId);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    commitOrder(moveInArray(order, from, to));
+  };
+
+  const canReorder = rules.length > 1;
+
   const setEnabled = (id: string, enabled: boolean) =>
     start(async () => {
       setError(null);
@@ -182,6 +239,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
         <p className="mb-3 text-xs text-muted">
           When every condition of a rule holds, its actions run automatically on bank sync, CSV import, and
           via &quot;Apply to existing&quot;. Rules run top to bottom and never overwrite a category you set by hand.
+          Drag a rule or use the arrows to change which one takes priority.
         </p>
 
         {error && <p className="mb-2 text-sm text-expense">{error}</p>}
@@ -205,7 +263,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
           <p className="py-2 text-center text-sm text-muted">No rules yet.</p>
         ) : (
           <ul className="divide-y divide-line">
-            {rules.map((rule) =>
+            {ordered.map((rule, index) =>
               editing === rule.id ? (
                 <li key={rule.id} className="py-3">
                   <RuleEditor
@@ -222,7 +280,40 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                   />
                 </li>
               ) : (
-                <li key={rule.id} className="flex items-center gap-3 py-2.5">
+                <li
+                  key={rule.id}
+                  onDragOver={(e) => {
+                    if (!canReorder || !dragId) return;
+                    e.preventDefault();
+                    const over = dragId === rule.id ? null : rule.id;
+                    if (overId !== over) setOverId(over);
+                  }}
+                  onDrop={(e) => {
+                    if (!canReorder) return;
+                    e.preventDefault();
+                    handleDrop(rule.id);
+                  }}
+                  className={`flex items-center gap-2 py-2.5 ${
+                    overId === rule.id ? "rounded-lg ring-2 ring-brand/50" : ""
+                  } ${dragId === rule.id ? "opacity-50" : ""}`}
+                >
+                  {canReorder && (
+                    <span
+                      draggable
+                      onDragStart={(e) => {
+                        setDragId(rule.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setOverId(null);
+                      }}
+                      title="Drag to reorder"
+                      className="shrink-0 cursor-grab text-muted active:cursor-grabbing"
+                    >
+                      <GripVertical size={14} />
+                    </span>
+                  )}
                   <input
                     type="checkbox"
                     checked={rule.enabled}
@@ -249,6 +340,28 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                       ))}
                     </div>
                   </div>
+                  {canReorder && (
+                    <>
+                      <button
+                        onClick={() => move(rule.id, -1)}
+                        disabled={pending || index === 0}
+                        className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand disabled:opacity-30"
+                        title="Move up"
+                        aria-label="Move rule up"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        onClick={() => move(rule.id, 1)}
+                        disabled={pending || index === ordered.length - 1}
+                        className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand disabled:opacity-30"
+                        title="Move down"
+                        aria-label="Move rule down"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => setEditing(rule.id)}
                     disabled={pending}
