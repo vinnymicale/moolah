@@ -39,8 +39,8 @@ export async function createTagAction(input: {
   name: string;
   color?: string;
 }): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
-  if (isDemoMode()) return { ok: true, id: "demo-tag", name: normalizeTagName(input.name) };
   try {
+    if (isDemoMode()) return { ok: true, id: "demo-tag", name: normalizeTagName(input.name) };
     const { userId } = await requireUser();
     const name = normalizeTagName(input.name);
     const color = colorSchema.parse(input.color ?? DEFAULT_TAG_COLOR);
