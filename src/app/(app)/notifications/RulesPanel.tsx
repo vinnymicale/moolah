@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Pencil, Plus, Send } from "lucide-react";
 import type { ChannelDTO, RuleDTO } from "@/lib/queries/notifications";
 import { deleteRuleAction, setRuleEnabledAction, testRuleAction } from "@/actions/notifications";
 import type { OptionItem, TriggerMeta } from "./NotificationCenter";
 import { RuleEditor } from "./RuleEditor";
 import { ChannelsPanel } from "./ChannelsPanel";
+import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 
 export function RulesPanel({
   rules,
@@ -128,19 +129,12 @@ export function RulesPanel({
                         >
                           <Pencil size={14} />
                         </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete rule "${rule.name}"? Its history stays in the inbox.`)) {
-                              act(() => deleteRuleAction(rule.id));
-                            }
-                          }}
-                          disabled={pending}
-                          className="btn-ghost h-8 w-8 p-0! text-muted"
+                        <ConfirmDeleteButton
+                          onConfirm={() => act(() => deleteRuleAction(rule.id))}
+                          label={rule.name}
                           title="Delete rule"
-                          aria-label={`Delete ${rule.name}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          disabled={pending}
+                        />
                       </>
                     )}
                   </div>

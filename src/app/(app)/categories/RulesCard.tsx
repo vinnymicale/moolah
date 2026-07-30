@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2, Plus, Trash2, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
+import { Wand2, Plus, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
 import {
   createRuleAction,
   updateRuleAction,
@@ -15,8 +15,9 @@ import {
 } from "@/actions/rules";
 import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
-import type { RuleCondition, RuleAction } from "@/lib/rules";
+import { conditionLabel, actionLabel, type RuleCondition, type RuleAction } from "@/lib/rules";
 import { moveInArray, reconcileOrder } from "@/lib/collections";
+import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 
 type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
 
@@ -49,55 +50,6 @@ function blankAction(type: RuleAction["type"]): RuleAction {
     case "addTag":
       return { type, tagId: "" };
   }
-}
-
-function conditionLabel(c: RuleCondition, accounts: AccountDTO[]): string {
-  switch (c.type) {
-    case "descriptionContains":
-      return `description contains “${c.value}”`;
-    case "amountRange": {
-      if (c.min != null && c.max != null) return `amount $${c.min}–$${c.max}`;
-      if (c.min != null) return `amount ≥ $${c.min}`;
-      if (c.max != null) return `amount ≤ $${c.max}`;
-      return "amount (any)";
-    }
-    case "account":
-      return `account is ${accounts.find((a) => a.id === c.accountId)?.name ?? "?"}`;
-    case "type":
-      return c.txnType === "INCOME" ? "is income" : "is expense";
-  }
-}
-
-function actionLabel(a: RuleAction, categories: CategoryDTO[], tags: TagDTO[]): string {
-  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "(deleted)";
-  switch (a.type) {
-    case "setCategory":
-      return `→ ${catName(a.categoryId)}`;
-    case "rewriteDescription":
-      return `rename to “${a.to}”`;
-    case "markTransfer":
-      return "mark as transfer";
-    case "split":
-      return `split across ${a.parts.length} categories`;
-    case "addTag":
-      return `add tag ${tags.find((t) => t.id === a.tagId)?.name ?? "(deleted)"}`;
-  }
-}
-
-/** Prompt text for deleting a rule, falling back to a summary when it has no name. */
-function deletePrompt(rule: RuleDTO, categories: CategoryDTO[], accounts: AccountDTO[], tags: TagDTO[]): string {
-  if (rule.name) return `Delete rule "${rule.name}"? This can't be undone.`;
-  const summary = [
-    rule.conditions[0] ? conditionLabel(rule.conditions[0], accounts) : null,
-    rule.actions[0] ? actionLabel(rule.actions[0], categories, tags) : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  // The generated summary already contains quotes, so it goes in parentheses
-  // rather than nested quotes.
-  return summary
-    ? `Delete this rule (${summary})? This can't be undone.`
-    : "Delete this rule? This can't be undone.";
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -404,16 +356,13 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                   >
                     <Pencil size={13} />
                   </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm(deletePrompt(rule, categories, accounts, tags))) remove(rule.id);
-                    }}
-                    disabled={pending}
-                    className="btn-ghost h-7 w-7 p-0! text-muted hover:text-expense"
+                  <ConfirmDeleteButton
+                    onConfirm={() => remove(rule.id)}
+                    label={rule.name || "this rule"}
                     title="Delete rule"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                    disabled={pending}
+                    size="sm"
+                  />
                 </li>
               ),
             )}

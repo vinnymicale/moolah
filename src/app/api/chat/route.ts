@@ -17,6 +17,7 @@ import {
   getTopMerchants,
 } from "@/lib/queries";
 import { isoDay } from "@/lib/dates";
+import { formatUSD } from "@/lib/money";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -355,7 +356,7 @@ async function executeTool(
         });
         return JSON.stringify({
           success: true,
-          message: `Created ${input.type} transaction: ${input.description} for $${input.amount}`,
+          message: `Created ${input.type} transaction: ${input.description} for ${formatUSD(input.amount)}`,
         });
       }
 
@@ -388,7 +389,7 @@ async function executeTool(
         });
         return JSON.stringify({
           success: true,
-          message: `Created recurring ${input.type}: ${input.description} — $${input.amount} ${input.frequency}`,
+          message: `Created recurring ${input.type}: ${input.description} — ${formatUSD(input.amount)} ${input.frequency}`,
         });
       }
 
@@ -428,7 +429,7 @@ async function executeTool(
         });
         return JSON.stringify({
           success: true,
-          message: `Set budget for ${category.name} to $${input.limit}/month`,
+          message: `Set budget for ${category.name} to ${formatUSD(input.limit)}/month`,
         });
       }
 
