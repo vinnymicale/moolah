@@ -49,11 +49,18 @@ describe("createTagAction", () => {
     expect(tagCreate).not.toHaveBeenCalled();
   });
 
+  it("returns an error result for a too-long name in demo mode", async () => {
+    demoMode.value = true;
+    const res = await createTagAction({ name: "z".repeat(41) });
+    expect(res.ok).toBe(false);
+    expect(tagCreate).not.toHaveBeenCalled();
+  });
+
   it("normalizes the name and applies the default color", async () => {
     tagFindFirst.mockResolvedValue(null);
     tagCreate.mockResolvedValue({ id: "t9" } as never);
     const res = await createTagAction({ name: "  vacation   2026 " });
-    expect(res).toEqual({ ok: true, id: "t9" });
+    expect(res).toEqual({ ok: true, id: "t9", name: "vacation 2026" });
     expect(tagCreate).toHaveBeenCalledWith({
       data: { userId: "u1", name: "vacation 2026", color: "#64748b" },
       select: { id: true },
