@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { ChannelDTO } from "@/lib/queries/notifications";
 import { deleteChannelAction, saveChannelAction } from "@/actions/notifications";
+import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 
 export function ChannelsPanel({
   channels,
@@ -36,7 +37,6 @@ export function ChannelsPanel({
 
   const remove = (channel: ChannelDTO) =>
     startTransition(async () => {
-      if (!confirm(`Delete channel "${channel.name}"? Rules using it become in-app only.`)) return;
       await deleteChannelAction(channel.id);
       router.refresh();
     });
@@ -46,7 +46,10 @@ export function ChannelsPanel({
       <div className="mb-2 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold">Channels</h3>
-          <p className="text-xs text-muted">Named Discord webhooks rules can deliver to.</p>
+          <p className="text-xs text-muted">
+            Named Discord webhooks rules can deliver to. Deleting one makes rules using it in-app
+            only.
+          </p>
         </div>
         {!adding && !readOnly && (
           <button onClick={() => setAdding(true)} className="btn-ghost text-xs">
@@ -67,15 +70,12 @@ export function ChannelsPanel({
               <p className="truncate font-mono text-[11px] text-muted">{c.webhookUrl}</p>
             </div>
             {!readOnly && (
-              <button
-                onClick={() => remove(c)}
-                disabled={pending}
-                className="btn-ghost h-8 w-8 p-0! text-muted"
+              <ConfirmDeleteButton
+                onConfirm={() => remove(c)}
+                label={c.name}
                 title="Delete channel"
-                aria-label={`Delete ${c.name}`}
-              >
-                <Trash2 size={14} />
-              </button>
+                disabled={pending}
+              />
             )}
           </div>
         ))}
