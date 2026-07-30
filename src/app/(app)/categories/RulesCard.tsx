@@ -15,7 +15,7 @@ import {
 } from "@/actions/rules";
 import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
-import type { RuleCondition, RuleAction } from "@/lib/rules";
+import { conditionLabel, actionLabel, type RuleCondition, type RuleAction } from "@/lib/rules";
 import { moveInArray, reconcileOrder } from "@/lib/collections";
 
 type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
@@ -48,39 +48,6 @@ function blankAction(type: RuleAction["type"]): RuleAction {
       return { type, parts: [{ categoryId: "", ratio: 1 }, { categoryId: "", ratio: 1 }] };
     case "addTag":
       return { type, tagId: "" };
-  }
-}
-
-function conditionLabel(c: RuleCondition, accounts: AccountDTO[]): string {
-  switch (c.type) {
-    case "descriptionContains":
-      return `description contains “${c.value}”`;
-    case "amountRange": {
-      if (c.min != null && c.max != null) return `amount $${c.min}–$${c.max}`;
-      if (c.min != null) return `amount ≥ $${c.min}`;
-      if (c.max != null) return `amount ≤ $${c.max}`;
-      return "amount (any)";
-    }
-    case "account":
-      return `account is ${accounts.find((a) => a.id === c.accountId)?.name ?? "?"}`;
-    case "type":
-      return c.txnType === "INCOME" ? "is income" : "is expense";
-  }
-}
-
-function actionLabel(a: RuleAction, categories: CategoryDTO[], tags: TagDTO[]): string {
-  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "(deleted)";
-  switch (a.type) {
-    case "setCategory":
-      return `→ ${catName(a.categoryId)}`;
-    case "rewriteDescription":
-      return `rename to “${a.to}”`;
-    case "markTransfer":
-      return "mark as transfer";
-    case "split":
-      return `split across ${a.parts.length} categories`;
-    case "addTag":
-      return `add tag ${tags.find((t) => t.id === a.tagId)?.name ?? "(deleted)"}`;
   }
 }
 

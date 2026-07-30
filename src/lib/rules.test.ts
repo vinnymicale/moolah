@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { evaluateRules, ruleMatches, splitByRatio, type RuleLike, type TxnFacts } from "./rules";
+import {
+  evaluateRules,
+  ruleMatches,
+  splitByRatio,
+  conditionLabel,
+  actionLabel,
+  type RuleLike,
+  type TxnFacts,
+} from "./rules";
 
 const facts = (over: Partial<TxnFacts> = {}): TxnFacts => ({
   description: "COSTCO WHSE #123",
@@ -184,5 +192,64 @@ describe("splitByRatio", () => {
 
   it("returns nothing for a zero total ratio", () => {
     expect(splitByRatio(1000, [{ categoryId: "a", ratio: 0 }])).toEqual([]);
+  });
+});
+
+describe("conditionLabel", () => {
+  const accounts = [{ id: "acc1", name: "Checking" }];
+
+  it("pads a one-decimal minimum to two places", () => {
+    expect(conditionLabel({ type: "amountRange", min: 88.8 }, accounts)).toBe("amount ≥ $88.80");
+  });
+
+  it("pads a one-decimal maximum to two places", () => {
+    expect(conditionLabel({ type: "amountRange", max: 5 }, accounts)).toBe("amount ≤ $5.00");
+  });
+
+  it("formats both bounds of a range", () => {
+    expect(conditionLabel({ type: "amountRange", min: 10, max: 88.8 }, accounts)).toBe(
+      "amount $10.00–$88.80",
+    );
+  });
+
+  it("adds thousands separators", () => {
+    expect(conditionLabel({ type: "amountRange", min: 1234.5 }, accounts)).toBe("amount ≥ $1,234.50");
+  });
+
+  it("says any when the range has no bounds", () => {
+    expect(conditionLabel({ type: "amountRange" }, accounts)).toBe("amount (any)");
+  });
+
+  it("names the account", () => {
+    expect(conditionLabel({ type: "account", accountId: "acc1" }, accounts)).toBe(
+      "account is Checking",
+    );
+  });
+
+  it("falls back when the account is gone", () => {
+    expect(conditionLabel({ type: "account", accountId: "nope" }, accounts)).toBe("account is ?");
+  });
+});
+
+describe("actionLabel", () => {
+  const categories = [{ id: "cat1", name: "Groceries" }];
+  const tags = [{ id: "tag1", name: "reimbursable" }];
+
+  it("labels a category assignment", () => {
+    expect(actionLabel({ type: "setCategory", categoryId: "cat1" }, categories, tags)).toBe(
+      "→ Groceries",
+    );
+  });
+
+  it("falls back when the category is gone", () => {
+    expect(actionLabel({ type: "setCategory", categoryId: "nope" }, categories, tags)).toBe(
+      "→ (deleted)",
+    );
+  });
+
+  it("labels a tag addition", () => {
+    expect(actionLabel({ type: "addTag", tagId: "tag1" }, categories, tags)).toBe(
+      "add tag reimbursable",
+    );
   });
 });

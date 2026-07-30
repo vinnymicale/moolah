@@ -10,6 +10,8 @@
 // matching rule wins, mirroring the old "most specific rule wins" behaviour but
 // driven by an explicit priority now that rules carry multiple conditions.
 
+import { formatUSD } from "./money";
+
 export type RuleCondition =
   | { type: "descriptionContains"; value: string } // case-insensitive substring
   | { type: "amountRange"; min?: number; max?: number } // dollars, inclusive
@@ -147,4 +149,41 @@ export function splitByRatio(
   }
 
   return parts.map((p, i) => ({ categoryId: p.categoryId, amountCents: amounts[i] }));
+}
+
+type Named = { id: string; name: string };
+
+/** Human-readable summary of a rule condition, for the rules list. */
+export function conditionLabel(c: RuleCondition, accounts: Named[]): string {
+  switch (c.type) {
+    case "descriptionContains":
+      return `description contains "${c.value}"`;
+    case "amountRange": {
+      if (c.min != null && c.max != null) return `amount ${formatUSD(c.min)}–${formatUSD(c.max)}`;
+      if (c.min != null) return `amount ≥ ${formatUSD(c.min)}`;
+      if (c.max != null) return `amount ≤ ${formatUSD(c.max)}`;
+      return "amount (any)";
+    }
+    case "account":
+      return `account is ${accounts.find((a) => a.id === c.accountId)?.name ?? "?"}`;
+    case "type":
+      return c.txnType === "INCOME" ? "is income" : "is expense";
+  }
+}
+
+/** Human-readable summary of a rule action, for the rules list. */
+export function actionLabel(a: RuleAction, categories: Named[], tags: Named[]): string {
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? "(deleted)";
+  switch (a.type) {
+    case "setCategory":
+      return `→ ${catName(a.categoryId)}`;
+    case "rewriteDescription":
+      return `rename to "${a.to}"`;
+    case "markTransfer":
+      return "mark as transfer";
+    case "split":
+      return `split across ${a.parts.length} categories`;
+    case "addTag":
+      return `add tag ${tags.find((t) => t.id === a.tagId)?.name ?? "(deleted)"}`;
+  }
 }
