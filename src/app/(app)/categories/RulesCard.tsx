@@ -125,17 +125,25 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
 
+  // Deleted ids stay here until the server list stops sending them back. The
+  // router's cache for this entry doesn't always re-render on refresh(), so the
+  // row would otherwise sit there until a reload.
+  const [removed, setRemoved] = useState<string[]>([]);
+
   const ruleIds = rules.map((r) => r.id).join();
   useEffect(() => {
-    // Reconciling local drag order against the server's rule list can't be done
-    // during render: it depends on the previous local order, not just props.
+    // Reconciling the local order and the deleted-id list against the server's
+    // rules can't be done during render: both depend on the previous local
+    // state, not just props.
+    const ids = ruleIds ? ruleIds.split(",") : [];
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOrder((prev) => reconcileOrder(prev, ruleIds ? ruleIds.split(",") : []));
+    setOrder((prev) => reconcileOrder(prev, ids));
+    setRemoved((prev) => prev.filter((id) => ids.includes(id)));
   }, [ruleIds]);
 
   const byId = new Map(rules.map((r) => [r.id, r]));
   const ordered = order.flatMap((id) => {
-    const rule = byId.get(id);
+    const rule = removed.includes(id) ? undefined : byId.get(id);
     return rule ? [rule] : [];
   });
 
@@ -177,7 +185,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
     commitOrder(moveInArray(ids, from, to));
   };
 
-  const canReorder = rules.length > 1;
+  const canReorder = ordered.length > 1;
 
   const setEnabled = (id: string, enabled: boolean) =>
     start(async () => {
@@ -192,6 +200,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
       setError(null);
       const res = await deleteRuleAction(id);
       if (!res.ok) return setError(res.error);
+      setRemoved((prev) => (prev.includes(id) ? prev : [...prev, id]));
       router.refresh();
     });
 
