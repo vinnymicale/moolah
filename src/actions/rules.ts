@@ -158,6 +158,10 @@ export async function reorderRulesAction(ids: string[]): Promise<ActionResult> {
     const owned = await prisma.rule.findMany({ where: { userId }, select: { id: true } });
     const ownedIds = new Set(owned.map((r) => r.id));
     if (ids.length !== ownedIds.size || !ids.every((id) => ownedIds.has(id))) {
+      // A mismatch means the caller's rule list is stale - another client added or
+      // deleted a rule. Revalidate so the caller's refresh gets the real list back
+      // instead of its own cached copy, which would leave it stuck on stale rows.
+      revalidatePath("/categories");
       throw new UserError("Reorder must include every rule exactly once.");
     }
     await prisma.$transaction(
