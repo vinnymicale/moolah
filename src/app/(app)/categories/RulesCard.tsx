@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2, Plus, Trash2, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
+import { Wand2, Plus, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
 import {
   createRuleAction,
   updateRuleAction,
@@ -17,6 +17,7 @@ import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
 import { conditionLabel, actionLabel, type RuleCondition, type RuleAction } from "@/lib/rules";
 import { moveInArray, reconcileOrder } from "@/lib/collections";
+import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 
 type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
 
@@ -49,22 +50,6 @@ function blankAction(type: RuleAction["type"]): RuleAction {
     case "addTag":
       return { type, tagId: "" };
   }
-}
-
-/** Prompt text for deleting a rule, falling back to a summary when it has no name. */
-function deletePrompt(rule: RuleDTO, categories: CategoryDTO[], accounts: AccountDTO[], tags: TagDTO[]): string {
-  if (rule.name) return `Delete rule "${rule.name}"? This can't be undone.`;
-  const summary = [
-    rule.conditions[0] ? conditionLabel(rule.conditions[0], accounts) : null,
-    rule.actions[0] ? actionLabel(rule.actions[0], categories, tags) : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  // The generated summary already contains quotes, so it goes in parentheses
-  // rather than nested quotes.
-  return summary
-    ? `Delete this rule (${summary})? This can't be undone.`
-    : "Delete this rule? This can't be undone.";
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -371,16 +356,13 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                   >
                     <Pencil size={13} />
                   </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm(deletePrompt(rule, categories, accounts, tags))) remove(rule.id);
-                    }}
-                    disabled={pending}
-                    className="btn-ghost h-7 w-7 p-0! text-muted hover:text-expense"
+                  <ConfirmDeleteButton
+                    onConfirm={() => remove(rule.id)}
+                    label={rule.name || "this rule"}
                     title="Delete rule"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                    disabled={pending}
+                    size="sm"
+                  />
                 </li>
               ),
             )}

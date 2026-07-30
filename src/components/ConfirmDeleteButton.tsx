@@ -1,0 +1,45 @@
+"use client";
+
+import { Trash2 } from "lucide-react";
+import { useConfirmAction } from "@/lib/useConfirmAction";
+
+type Props = {
+  onConfirm: () => void;
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  size?: "sm" | "md";
+};
+
+// Icon-only delete button that needs two clicks. The first arms it and widens the
+// button to spell out "Confirm"; the second deletes. Replaces window.confirm() so
+// destructive actions look like the rest of the app.
+export default function ConfirmDeleteButton({
+  onConfirm,
+  label,
+  title = "Delete",
+  disabled,
+  size = "md",
+}: Props) {
+  const { armed, trigger } = useConfirmAction(onConfirm);
+  const box = size === "sm" ? "h-7" : "h-8";
+  const width = armed ? "px-2 text-xs" : size === "sm" ? "w-7 p-0!" : "w-8 p-0!";
+  // btn-danger is the house class for destructive buttons (see RecurringManager).
+  const tone = armed ? "btn-danger" : "btn-ghost text-muted hover:text-expense";
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        trigger();
+      }}
+      disabled={disabled}
+      className={`${tone} ${box} ${width} shrink-0 gap-1`}
+      title={armed ? "Click to confirm" : title}
+      aria-label={armed ? `Confirm delete ${label}` : label}
+    >
+      <Trash2 size={size === "sm" ? 13 : 14} />
+      {armed && "Confirm"}
+    </button>
+  );
+}
