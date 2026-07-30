@@ -46,7 +46,10 @@ export function ChannelsPanel({
       <div className="mb-2 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold">Channels</h3>
-          <p className="text-xs text-muted">Named Discord webhooks rules can deliver to.</p>
+          <p className="text-xs text-muted">
+            Named Discord webhooks rules can deliver to. Deleting one makes rules using it in-app
+            only.
+          </p>
         </div>
         {!adding && !readOnly && (
           <button onClick={() => setAdding(true)} className="btn-ghost text-xs">
