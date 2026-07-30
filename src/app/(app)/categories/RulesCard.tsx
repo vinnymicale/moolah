@@ -1,19 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2, Plus, Trash2, Loader2, Play, Pencil, Eye, X } from "lucide-react";
+import { Wand2, Plus, Trash2, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
 import {
   createRuleAction,
   updateRuleAction,
   deleteRuleAction,
   setRuleEnabledAction,
+  reorderRulesAction,
   previewRulesAction,
   applyRulesAction,
   type RuleInput,
 } from "@/actions/rules";
+import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
 import type { RuleCondition, RuleAction } from "@/lib/rules";
+import { moveInArray, reconcileOrder } from "@/lib/collections";
 
 type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
 
@@ -81,6 +84,22 @@ function actionLabel(a: RuleAction, categories: CategoryDTO[], tags: TagDTO[]): 
   }
 }
 
+/** Prompt text for deleting a rule, falling back to a summary when it has no name. */
+function deletePrompt(rule: RuleDTO, categories: CategoryDTO[], accounts: AccountDTO[], tags: TagDTO[]): string {
+  if (rule.name) return `Delete rule "${rule.name}"? This can't be undone.`;
+  const summary = [
+    rule.conditions[0] ? conditionLabel(rule.conditions[0], accounts) : null,
+    rule.actions[0] ? actionLabel(rule.actions[0], categories, tags) : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  // The generated summary already contains quotes, so it goes in parentheses
+  // rather than nested quotes.
+  return summary
+    ? `Delete this rule (${summary})? This can't be undone.`
+    : "Delete this rule? This can't be undone.";
+}
+
 const TYPE_LABELS: Record<string, string> = {
   descriptionContains: "Description contains",
   amountRange: "Amount range",
@@ -100,6 +119,74 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [pending, start] = useTransition();
 
+  // Rules run top to bottom, so their order is their priority. Keep a local
+  // copy so a drag or arrow click moves the row before the save comes back.
+  const [order, setOrder] = useState<string[]>(() => rules.map((r) => r.id));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  // Deleted ids stay here until the server list stops sending them back. The
+  // router's cache for this entry doesn't always re-render on refresh(), so the
+  // row would otherwise sit there until a reload.
+  const [removed, setRemoved] = useState<string[]>([]);
+
+  const ruleIds = rules.map((r) => r.id).join();
+  useEffect(() => {
+    // Reconciling the local order and the deleted-id list against the server's
+    // rules can't be done during render: both depend on the previous local
+    // state, not just props.
+    const ids = ruleIds ? ruleIds.split(",") : [];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrder((prev) => reconcileOrder(prev, ids));
+    setRemoved((prev) => prev.filter((id) => ids.includes(id)));
+  }, [ruleIds]);
+
+  const byId = new Map(rules.map((r) => [r.id, r]));
+  const ordered = order.flatMap((id) => {
+    const rule = removed.includes(id) ? undefined : byId.get(id);
+    return rule ? [rule] : [];
+  });
+
+  const commitOrder = (next: string[]) => {
+    const previous = order;
+    setOrder(next);
+    start(async () => {
+      setError(null);
+      const res = await reorderRulesAction(next);
+      if (!res.ok) {
+        setOrder(previous);
+        setError(res.error);
+        router.refresh();
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  // Reordering is always computed against `ordered`'s ids, not raw `order`, so
+  // the client can never submit an id it isn't actually rendering a row for.
+  const move = (id: string, delta: -1 | 1) => {
+    const ids = ordered.map((r) => r.id);
+    const from = ids.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    commitOrder(moveInArray(ids, from, to));
+  };
+
+  const handleDrop = (targetId: string) => {
+    const sourceId = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (!sourceId || sourceId === targetId) return;
+    const ids = ordered.map((r) => r.id);
+    const from = ids.indexOf(sourceId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    commitOrder(moveInArray(ids, from, to));
+  };
+
+  const canReorder = ordered.length > 1;
+
   const setEnabled = (id: string, enabled: boolean) =>
     start(async () => {
       setError(null);
@@ -113,6 +200,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
       setError(null);
       const res = await deleteRuleAction(id);
       if (!res.ok) return setError(res.error);
+      setRemoved((prev) => (prev.includes(id) ? prev : [...prev, id]));
       router.refresh();
     });
 
@@ -182,6 +270,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
         <p className="mb-3 text-xs text-muted">
           When every condition of a rule holds, its actions run automatically on bank sync, CSV import, and
           via &quot;Apply to existing&quot;. Rules run top to bottom and never overwrite a category you set by hand.
+          Drag a rule or use the arrows to change which one takes priority.
         </p>
 
         {error && <p className="mb-2 text-sm text-expense">{error}</p>}
@@ -205,7 +294,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
           <p className="py-2 text-center text-sm text-muted">No rules yet.</p>
         ) : (
           <ul className="divide-y divide-line">
-            {rules.map((rule) =>
+            {ordered.map((rule, index) =>
               editing === rule.id ? (
                 <li key={rule.id} className="py-3">
                   <RuleEditor
@@ -222,7 +311,43 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                   />
                 </li>
               ) : (
-                <li key={rule.id} className="flex items-center gap-3 py-2.5">
+                <li
+                  key={rule.id}
+                  onDragOver={(e) => {
+                    if (!canReorder || !dragId || pending) return;
+                    e.preventDefault();
+                    const over = dragId === rule.id ? null : rule.id;
+                    if (overId !== over) setOverId(over);
+                  }}
+                  onDrop={(e) => {
+                    if (!canReorder || pending) return;
+                    e.preventDefault();
+                    handleDrop(rule.id);
+                  }}
+                  className={`flex items-center gap-2 py-2.5 ${
+                    overId === rule.id ? "rounded-lg ring-2 ring-brand/50" : ""
+                  } ${dragId === rule.id ? "opacity-50" : ""}`}
+                >
+                  {canReorder && (
+                    <span
+                      draggable={!pending}
+                      onDragStart={(e) => {
+                        if (pending) return;
+                        setDragId(rule.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setOverId(null);
+                      }}
+                      title="Drag to reorder"
+                      className={`shrink-0 text-muted ${
+                        pending ? "cursor-not-allowed opacity-30" : "cursor-grab active:cursor-grabbing"
+                      }`}
+                    >
+                      <GripVertical size={14} />
+                    </span>
+                  )}
                   <input
                     type="checkbox"
                     checked={rule.enabled}
@@ -249,6 +374,28 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                       ))}
                     </div>
                   </div>
+                  {canReorder && (
+                    <>
+                      <button
+                        onClick={() => move(rule.id, -1)}
+                        disabled={pending || index === 0}
+                        className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand disabled:opacity-30"
+                        title="Move up"
+                        aria-label="Move rule up"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        onClick={() => move(rule.id, 1)}
+                        disabled={pending || index === ordered.length - 1}
+                        className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand disabled:opacity-30"
+                        title="Move down"
+                        aria-label="Move rule down"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => setEditing(rule.id)}
                     disabled={pending}
@@ -258,7 +405,9 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                     <Pencil size={13} />
                   </button>
                   <button
-                    onClick={() => remove(rule.id)}
+                    onClick={() => {
+                      if (window.confirm(deletePrompt(rule, categories, accounts, tags))) remove(rule.id);
+                    }}
                     disabled={pending}
                     className="btn-ghost h-7 w-7 p-0! text-muted hover:text-expense"
                     title="Delete rule"
@@ -362,6 +511,7 @@ function RuleEditor({
               tags={tags}
               onChange={(next) => updateAction(i, next)}
               onRemove={actions.length > 1 ? () => setActions((p) => p.filter((_, j) => j !== i)) : undefined}
+              onError={onError}
             />
           ))}
         </div>
@@ -484,13 +634,25 @@ function ActionRow({
   tags,
   onChange,
   onRemove,
+  onError,
 }: {
   action: RuleAction;
   categories: CategoryDTO[];
   tags: TagDTO[];
   onChange: (a: RuleAction) => void;
   onRemove?: () => void;
+  onError: (msg: string) => void;
 }) {
+  const router = useRouter();
+  const [creatingTag, startCreateTag] = useTransition();
+  // Tags created inline are held here so the new <option> exists in the same render
+  // that selects it. Waiting for the refreshed `tags` prop leaves the controlled
+  // select with a value it has no option for, and it silently snaps back to blank.
+  const [createdTags, setCreatedTags] = useState<{ id: string; name: string }[]>([]);
+  const tagOptions: { id: string; name: string }[] = [
+    ...tags,
+    ...createdTags.filter((c) => !tags.some((t) => t.id === c.id)),
+  ];
   return (
     <div className="flex flex-wrap items-start gap-2">
       <select
@@ -533,10 +695,27 @@ function ActionRow({
         <select
           className="input h-9 flex-1 text-sm"
           value={action.tagId}
-          onChange={(e) => onChange({ type: "addTag", tagId: e.target.value })}
+          disabled={creatingTag}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value !== "__create__") {
+              onChange({ type: "addTag", tagId: value });
+              return;
+            }
+            const name = window.prompt("New tag name");
+            if (!name?.trim()) return;
+            startCreateTag(async () => {
+              const created = await createTagAction({ name });
+              if (!created.ok) return onError(created.error);
+              setCreatedTags((prev) => [...prev, { id: created.id, name: created.name }]);
+              onChange({ type: "addTag", tagId: created.id });
+              router.refresh();
+            });
+          }}
         >
           <option value="">Select tag…</option>
-          {tags.map((t) => (
+          <option value="__create__">＋ New tag…</option>
+          {tagOptions.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
