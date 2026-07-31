@@ -57,7 +57,14 @@ export function PlaidConnectButton() {
     }
   }, []);
 
+  // Link can now finish without a public token for flows that don't create an
+  // Item. That never happens for a plain bank connect, but the callback type
+  // allows it, and posting a null token would fail with a confusing error.
   const onSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken) => {
+    if (publicToken === null) {
+      setLinkToken(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
