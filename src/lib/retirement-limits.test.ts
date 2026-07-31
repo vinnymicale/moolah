@@ -34,4 +34,33 @@ describe("getLimitsForYear", () => {
     const { limits } = getLimitsForYear(Math.max(...KNOWN_LIMIT_YEARS));
     expect(limits.totalAdditions).toBeGreaterThan(limits.electiveDeferral);
   });
+
+  it("falls back to the latest known year for one year past the newest known year", () => {
+    const latest = Math.max(...KNOWN_LIMIT_YEARS);
+    const { limits, isFallback } = getLimitsForYear(latest + 1);
+    expect(isFallback).toBe(true);
+    expect(limits.year).toBe(latest);
+  });
+
+  it("falls back to the earliest known year for one year before the oldest known year", () => {
+    const earliest = Math.min(...KNOWN_LIMIT_YEARS);
+    const { limits, isFallback } = getLimitsForYear(earliest - 1);
+    expect(isFallback).toBe(true);
+    expect(limits.year).toBe(earliest);
+  });
+
+  it("returns a frozen object that cannot be mutated to corrupt later lookups", () => {
+    const year = KNOWN_LIMIT_YEARS[0];
+    const { limits } = getLimitsForYear(year);
+    expect(Object.isFrozen(limits)).toBe(true);
+
+    const original = limits.electiveDeferral;
+    expect(() => {
+      // @ts-expect-error - verifying runtime immutability of a readonly field
+      limits.electiveDeferral = -1;
+    }).toThrow();
+
+    const second = getLimitsForYear(year);
+    expect(second.limits.electiveDeferral).toBe(original);
+  });
 });

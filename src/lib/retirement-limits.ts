@@ -13,23 +13,23 @@
 // - 2026: Notice 2025-67, https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500
 
 export interface YearLimits {
-  year: number;
+  readonly year: number;
   /** Combined employee pre-tax + Roth elective deferral limit (402(g)). */
-  electiveDeferral: number;
+  readonly electiveDeferral: number;
   /** Elective deferral limit including the age-50+ catch-up. */
-  electiveDeferralCatchUp: number;
+  readonly electiveDeferralCatchUp: number;
   /** Employee + employer combined annual additions limit (415(c)). */
-  totalAdditions: number;
+  readonly totalAdditions: number;
   /** Traditional + Roth IRA combined contribution limit. */
-  iraContribution: number;
+  readonly iraContribution: number;
   /** IRA limit including the age-50+ catch-up. */
-  iraCatchUp: number;
+  readonly iraCatchUp: number;
   /** Age at which catch-up contributions become available. */
-  catchUpAge: number;
+  readonly catchUpAge: number;
 }
 
-const LIMITS: YearLimits[] = [
-  {
+const LIMITS: readonly YearLimits[] = Object.freeze([
+  Object.freeze({
     year: 2025,
     electiveDeferral: 23_500,
     electiveDeferralCatchUp: 31_000,
@@ -37,8 +37,8 @@ const LIMITS: YearLimits[] = [
     iraContribution: 7_000,
     iraCatchUp: 8_000,
     catchUpAge: 50,
-  },
-  {
+  }),
+  Object.freeze({
     year: 2026,
     electiveDeferral: 24_500,
     electiveDeferralCatchUp: 32_500,
@@ -46,17 +46,17 @@ const LIMITS: YearLimits[] = [
     iraContribution: 7_500,
     iraCatchUp: 8_600,
     catchUpAge: 50,
-  },
-];
+  }),
+]);
 
-export const KNOWN_LIMIT_YEARS = LIMITS.map((l) => l.year);
+export const KNOWN_LIMIT_YEARS: readonly number[] = Object.freeze(LIMITS.map((l) => l.year));
 
 /**
  * Look up limits for a tax year. Years outside the table clamp to the nearest
  * known year with isFallback set, so callers can surface that the figures are
  * approximate rather than silently reporting wrong headroom.
  */
-export function getLimitsForYear(year: number): { limits: YearLimits; isFallback: boolean } {
+export function getLimitsForYear(year: number): { limits: Readonly<YearLimits>; isFallback: boolean } {
   const exact = LIMITS.find((l) => l.year === year);
   if (exact) return { limits: exact, isFallback: false };
 
