@@ -17,14 +17,32 @@ describe("computeRequiredSavings", () => {
   });
 
   it("reports the shortfall against current contributions", () => {
-    const r = computeRequiredSavings(base);
-    expect(r.shortfallMonthly).toBeCloseTo(r.requiredMonthly - base.currentMonthly, 2);
+    // Hand-derived for the base fixture with currentMonthly lowered to 500 (clearly
+    // under-saving): rate = 1.04^(1/12)-1 ~ 0.0032737397822, growthFactor = (1+rate)^360
+    // ~ 3.2433975100276, FV(PV) = 100,000 * growthFactor ~ 324,339.7510028,
+    // gap = 1,000,000 - FV(PV) ~ 675,660.2489972, annuityFactor = (growthFactor-1)/rate
+    // ~ 685.2705649442, requiredMonthlyRaw = gap / annuityFactor ~ 985.9758810045,
+    // requiredMonthly rounds to 985.98. shortfallMonthly = requiredMonthly - 500 = 485.98.
+    const r = computeRequiredSavings({ ...base, currentMonthly: 500 });
+    expect(r.requiredMonthly).toBeCloseTo(985.98, 2);
+    expect(r.shortfallMonthly).toBeCloseTo(485.98, 2);
   });
 
   it("reports on track with zero shortfall when contributing enough", () => {
     const r = computeRequiredSavings({ ...base, currentMonthly: 10_000 });
     expect(r.onTrack).toBe(true);
     expect(r.shortfallMonthly).toBe(0);
+  });
+
+  it("clamps shortfall to zero rather than going negative when marginally over-saving", () => {
+    // Same base fixture: requiredMonthly rounds to 985.98 (derived above). Setting
+    // currentMonthly to 986 puts current contributions $0.02 above the requirement, so the
+    // raw difference (985.98 - 986 = -0.02) would be negative if unclamped. The clamp must
+    // hold at exactly this boundary, not just for the far-over-saving case.
+    const r = computeRequiredSavings({ ...base, currentMonthly: 986 });
+    expect(r.requiredMonthly).toBeCloseTo(985.98, 2);
+    expect(r.shortfallMonthly).toBe(0);
+    expect(r.onTrack).toBe(true);
   });
 
   it("requires nothing when the starting balance already grows past the target", () => {
