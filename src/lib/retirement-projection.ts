@@ -9,7 +9,7 @@
 // (Fisher relation) rather than deflating at the end, which keeps every
 // intermediate point directly comparable to the target line.
 
-import { addUTCMonths, isoDay, parseISODay } from "./dates";
+import { addUTCDays, addUTCMonths, isoDay, parseISODay } from "./dates";
 import { expandOccurrences } from "./recurrence";
 import {
   monthlyRateFromAnnual,
@@ -87,6 +87,9 @@ export function projectRetirement({
 
   // Total contribution landing in each month, keyed by "YYYY-MM".
   const horizon = addUTCMonths(today, months);
+  // Expansion window starts the day after today so we never double-count a
+  // contribution already reflected in the starting balance.
+  const windowStart = addUTCDays(today, 1);
   const contributionByMonth = new Map<string, number>();
   if (includeContributions) {
     for (const s of schedules) {
@@ -99,7 +102,7 @@ export function projectRetirement({
           dayOfMonth: s.dayOfMonth,
           weekday: s.weekday,
         },
-        today,
+        windowStart,
         horizon,
       );
       for (const d of occurrences) {
