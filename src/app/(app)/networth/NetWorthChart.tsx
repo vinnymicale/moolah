@@ -30,6 +30,8 @@ interface Row {
   assets?: number;
   liabilities?: number;
   projected?: number;
+  contributed?: number;
+  gains?: number;
 }
 
 function shortDate(iso: string): string {
@@ -67,14 +69,18 @@ export function NetWorthChart({
   forecast,
   ytd,
   ytdPct,
+  growthSeries,
 }: {
   history: NetWorthPoint[];
   forecast: ForecastPoint[];
   ytd: number;
   ytdPct: number | null;
+  growthSeries?: { date: string; contributed: number; gains: number }[];
 }) {
   const [range, setRange] = useState<Range>("1Y");
   const [showForecast, setShowForecast] = useState(true);
+  const [showGrowth, setShowGrowth] = useState(false);
+  const hasGrowthSeries = !!growthSeries && growthSeries.length > 0;
   const theme = useChartTheme();
   const reducedMotion = usePrefersReducedMotion();
   // Hold the chart's height with a skeleton until the client has mounted, so the
@@ -84,12 +90,18 @@ export function NetWorthChart({
   const data = useMemo<Row[]>(() => {
     const days = RANGES.find((r) => r.key === range)!.days;
     const trimmed = days === null ? history : history.slice(Math.max(0, history.length - days));
-    const rows: Row[] = trimmed.map((p) => ({
-      date: p.date,
-      net: p.net,
-      assets: p.assets,
-      liabilities: -p.liabilities, // plot debt below the axis
-    }));
+    const growthByDate = new Map((growthSeries ?? []).map((g) => [g.date, g]));
+    const rows: Row[] = trimmed.map((p) => {
+      const growth = showGrowth ? growthByDate.get(p.date) : undefined;
+      return {
+        date: p.date,
+        net: p.net,
+        assets: p.assets,
+        liabilities: -p.liabilities, // plot debt below the axis
+        contributed: growth?.contributed,
+        gains: growth?.gains,
+      };
+    });
     if (showForecast && forecast.length > 0) {
       // Anchor the forecast line to the last historical point so it connects.
       const last = trimmed.at(-1);
@@ -97,7 +109,7 @@ export function NetWorthChart({
       for (const f of forecast) rows.push({ date: f.date, projected: f.net });
     }
     return rows;
-  }, [history, forecast, range, showForecast]);
+  }, [history, forecast, range, showForecast, showGrowth, growthSeries]);
 
   const up = ytd >= 0;
   const hasHistory = history.some((p) => p.net !== 0 || p.assets !== 0 || p.liabilities !== 0);
@@ -128,6 +140,17 @@ export function NetWorthChart({
             />
             Forecast
           </label>
+          {hasGrowthSeries && (
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              <input
+                type="checkbox"
+                checked={showGrowth}
+                onChange={(e) => setShowGrowth(e.target.checked)}
+                className="accent-[var(--brand,#4f46e5)]"
+              />
+              Show investment growth
+            </label>
+          )}
           <div className="flex overflow-hidden rounded-lg border border-line text-xs">
             {RANGES.map((r) => (
               <button
@@ -160,6 +183,17 @@ export function NetWorthChart({
             {/* Dashed so Liabilities is distinguishable from Assets without relying on color. */}
             <Area type="monotone" dataKey="liabilities" name="Liabilities" stroke={theme.expense}
               fill={theme.expense} fillOpacity={0.12} strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={!reducedMotion} />
+            {showGrowth && hasGrowthSeries && (
+              <>
+                {/* Contributed and gains stack on the brand color; gains uses a dashed stroke
+                    and lower fill opacity so it reads as distinct from contributed without a new color. */}
+                <Area type="monotone" dataKey="contributed" name="Contributed" stackId="growth" stroke={theme.brand}
+                  fill={theme.brand} fillOpacity={0.2} strokeWidth={1.5} dot={false} isAnimationActive={!reducedMotion} />
+                <Area type="monotone" dataKey="gains" name="Market gains" stackId="growth" stroke={theme.brand}
+                  fill={theme.brand} fillOpacity={0.08} strokeWidth={1.5} strokeDasharray="4 3" strokeOpacity={0.7}
+                  dot={false} isAnimationActive={!reducedMotion} />
+              </>
+            )}
             <Line type="monotone" dataKey="net" name="Net worth" stroke={theme.brand}
               strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} isAnimationActive={!reducedMotion} />
             <Line type="monotone" dataKey="projected" name="Forecast" stroke={FORECAST_COLOR}
