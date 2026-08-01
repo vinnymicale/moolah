@@ -1,6 +1,6 @@
 "use client";
 
-import { PartyPopper, Trophy, Target, TrendingUp, X } from "lucide-react";
+import { PartyPopper, Trophy, Target, TrendingUp, X, Umbrella } from "lucide-react";
 import type { Milestone } from "@/lib/milestones";
 import { useIsHydrated, usePersistentState } from "@/lib/usePersistentState";
 
@@ -11,6 +11,7 @@ const ICONS = {
   networth: Trophy,
   goal: Target,
   savings: TrendingUp,
+  retirement: Umbrella,
 } as const;
 
 export function MilestonesBanner({ milestones }: { milestones: Milestone[] }) {

@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { getNetWorth } from "@/lib/queries";
+import { getInvestmentGrowthSeries } from "@/lib/queries/retirement";
 import { getNetWorthHistory } from "@/lib/snapshots";
 import { forecastNetWorth } from "@/lib/networth-forecast";
 import { PageHeader, StatCard } from "@/components/ui-bits";
@@ -26,9 +27,10 @@ export default async function NetWorthPage() {
   const userId = DEMO_MODE ? (await getDemoUserId()) ?? "" : (await requireUser()).userId;
   const today = await userTodayISO();
 
-  const [history, current] = await Promise.all([
+  const [history, current, growthSeries] = await Promise.all([
     getNetWorthHistory(userId, HISTORY_DAYS, today),
     getNetWorth(userId),
+    getInvestmentGrowthSeries(userId, HISTORY_DAYS, today),
   ]);
   const forecast = await forecastNetWorth(userId, current.net, FORECAST_MONTHS, today);
 
@@ -82,7 +84,7 @@ export default async function NetWorthPage() {
         />
       </div>
 
-      <NetWorthChart history={history} forecast={forecast} ytd={ytd} ytdPct={ytdPct} />
+      <NetWorthChart history={history} forecast={forecast} ytd={ytd} ytdPct={ytdPct} growthSeries={growthSeries} />
     </div>
   );
 }
