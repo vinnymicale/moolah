@@ -120,7 +120,9 @@ Have a request? Open an issue on GitHub.
   put in, progress against the year's **IRS contribution limits** (employee, total additions, and
   IRA, with employer match counted), **growth over the last 12 months** split into money you
   contributed vs. market return, and **drawdown scenarios** for how long the balance lasts under
-  poor, expected, and strong returns plus a bad-first-five-years sequence. Contributions can be
+  poor, expected, and strong returns plus a bad-first-five-years sequence. Every figure on the page
+  is in today's dollars, including the expected Social Security benefit you enter - put in the
+  estimate from your SSA statement without inflating it. Contributions can be
   logged one at a time or put on a recurring schedule, and balances can be updated by hand, so
   none of this needs a linked account.
 - **Safe-to-transfer suggestion** - the dashboard estimates how much you can safely move out of

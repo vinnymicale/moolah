@@ -339,7 +339,10 @@ export function SetupWizard({ accounts }: { accounts: RetirementAccountDTO[] }) 
                 onChange={(e) => setReplacement(e.target.value)}
               />
             </Field>
-            <Field label="Expected Social Security (monthly)">
+            <Field
+              label="Expected Social Security (monthly)"
+              hint="In today's dollars - use the estimate from your SSA statement as-is, don't inflate it."
+            >
               <input
                 type="text"
                 inputMode="decimal"
