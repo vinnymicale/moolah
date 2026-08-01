@@ -40,6 +40,7 @@ const planRow = {
   safeWithdrawalRate: "4",
   expectedSocialSecurityMonthly: "0",
   currentAnnualSalary: "100000",
+  salaryGrowthRate: "0",
   completedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
@@ -208,6 +209,43 @@ describe("getRetirementPageData", () => {
     // The projection runs to age 65, contributing the combined $1250/month the
     // whole way rather than the user's $1000, so the match compounds too.
     expect(data.projection!.totalContributed).toBe(435_000);
+  });
+
+  it("grows the match as real salary rises", async () => {
+    plan.findUnique.mockResolvedValue({ ...planRow, salaryGrowthRate: "2" } as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+    ] as never);
+    schedule.findMany.mockResolvedValue([
+      {
+        id: "s1",
+        financialAccountId: "a1",
+        amount: "1000",
+        source: "EMPLOYEE_PRETAX",
+        frequency: "MONTHLY",
+        interval: 1,
+        startDate: new Date("2020-01-01T00:00:00.000Z"),
+        endDate: null,
+        dayOfMonth: 1,
+        weekday: null,
+      },
+    ] as never);
+    match.findFirst.mockResolvedValue({
+      id: "m1",
+      userId: "u1",
+      financialAccountId: "a1",
+      tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
+      annualCap: null,
+    } as never);
+
+    const data = await getRetirementPageData("u1", TODAY);
+
+    // Today's match is unchanged - growth is a projection input, not a restatement
+    // of what's landing this month.
+    expect(data.currentMonthlyEmployerMatch).toBe(250);
+    // At 2% real growth the match steps up each year, so the horizon contributes
+    // more than the $435,000 the same setup yields at a flat salary.
+    expect(data.projection!.totalContributed).toBeGreaterThan(435_000);
   });
 
   it("does not match after-tax or rollover money", async () => {

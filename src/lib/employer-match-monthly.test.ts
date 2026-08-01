@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthlyEmployerMatch } from "./employer-match-monthly";
+import { monthlyEmployerMatch, salaryAfterRealGrowth } from "./employer-match-monthly";
 
 const tiers = [
   { matchPercent: 100, upToPercentOfSalary: 3 },
@@ -68,5 +68,30 @@ describe("monthlyEmployerMatch", () => {
     expect(
       monthlyEmployerMatch({ monthlyDeferral: -500, annualSalary: 100_000, tiers, annualCap: null }),
     ).toBe(0);
+  });
+});
+
+describe("salaryAfterRealGrowth", () => {
+  it("holds salary flat at a zero growth rate", () => {
+    expect(salaryAfterRealGrowth(100_000, 0, 120)).toBe(100_000);
+  });
+
+  it("holds salary flat at month zero", () => {
+    expect(salaryAfterRealGrowth(100_000, 1.5, 0)).toBe(100_000);
+  });
+
+  it("compounds a real raise across whole years", () => {
+    // 2% real for 10 years is 100000 * 1.02^10.
+    expect(salaryAfterRealGrowth(100_000, 2, 120)).toBeCloseTo(121_899.44, 2);
+  });
+
+  it("compounds fractionally within a year rather than stepping once a year", () => {
+    const halfway = salaryAfterRealGrowth(100_000, 2, 6);
+    expect(halfway).toBeGreaterThan(100_000);
+    expect(halfway).toBeLessThan(102_000);
+  });
+
+  it("shrinks salary in real terms when raises trail inflation", () => {
+    expect(salaryAfterRealGrowth(100_000, -1, 120)).toBeLessThan(100_000);
   });
 });

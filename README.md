@@ -125,8 +125,10 @@ Have a request? Open an issue on GitHub.
   estimate from your SSA statement without inflating it. Your **employer match** formula is entered
   as tiers ("100% of the first 3%, then 50% of the next 2%") with an optional annual cap; the match
   it earns is added to your monthly contribution figure, compounded in the projection, and counted
-  toward required savings. Assumptions and the match formula are all editable after setup from the
-  Assumptions panel. Contributions can be
+  toward required savings. Because the match is a share of your pay, you can also set a **real
+  salary growth** rate - raises above inflation, where 0 means pay merely keeps up with inflation -
+  and the projected match steps up each year along with it. Assumptions, the salary growth rate, and
+  the match formula are all editable after setup from the Assumptions panel. Contributions can be
   logged one at a time or put on a recurring schedule, and balances can be updated by hand, so
   none of this needs a linked account.
 - **Safe-to-transfer suggestion** - the dashboard estimates how much you can safely move out of

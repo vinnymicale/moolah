@@ -15,10 +15,14 @@ import {
   type ContributionRecord,
   type ScheduledContribution,
 } from "@/lib/retirement-types";
-import { projectRetirement, type ProjectionResult } from "@/lib/retirement-projection";
+import {
+  projectRetirement,
+  monthsUntilRetirement,
+  type ProjectionResult,
+} from "@/lib/retirement-projection";
 import { computeRetirementTarget, type RetirementTarget } from "@/lib/retirement-target";
 import { computeRequiredSavings, type RequiredSavings } from "@/lib/required-savings";
-import { monthlyEmployerMatch } from "@/lib/employer-match-monthly";
+import { monthlyEmployerMatch, salaryAfterRealGrowth } from "@/lib/employer-match-monthly";
 import {
   computeContributionLimits,
   type ContributionLimitReport,
@@ -216,6 +220,7 @@ export async function getRetirementPageData(
     safeWithdrawalRate: toNumber(planRow.safeWithdrawalRate),
     expectedSocialSecurityMonthly: toNumber(planRow.expectedSocialSecurityMonthly),
     currentAnnualSalary: toNumber(planRow.currentAnnualSalary),
+    salaryGrowthRate: toNumber(planRow.salaryGrowthRate),
   };
 
   const realAnnualReturn =
@@ -231,26 +236,49 @@ export async function getRetirementPageData(
     : 0;
 
   // The match is real money landing in the account, so the projection has to
-  // compound it alongside the user's own contributions. Modelling it as one
-  // more monthly schedule keeps the engine unchanged and lets the match ride
-  // the same grow-then-add convention.
-  const projectedSchedules: ScheduledContribution[] =
-    currentMonthlyEmployerMatch > 0 && matchRow
-      ? [
-          ...schedules,
-          {
-            financialAccountId: matchRow.financialAccountId,
-            amount: currentMonthlyEmployerMatch,
-            source: "EMPLOYER_MATCH",
-            frequency: "MONTHLY",
-            interval: 1,
-            startDate: parseISODay(todayISO),
-            endDate: null,
-            dayOfMonth: 1,
-            weekday: null,
-          },
-        ]
-      : schedules;
+  // compound it alongside the user's own contributions. Modelling it as extra
+  // monthly schedules keeps the engine unchanged and lets the match ride the
+  // same grow-then-add convention.
+  //
+  // Tiers are a share of salary, so a rising real salary raises the match too.
+  // One schedule per year steps the matched amount up over the horizon; at a
+  // zero growth rate every rung is identical and this collapses to a single
+  // flat match.
+  const projectedSchedules: ScheduledContribution[] = [...schedules];
+  if (matchTiers && matchRow && monthlyDeferral > 0) {
+    const startOfHorizon = parseISODay(todayISO);
+    const monthsToRetirement = monthsUntilRetirement(assumptions, startOfHorizon);
+    const yearsToRetirement = Math.ceil(monthsToRetirement / 12);
+    for (let y = 0; y < yearsToRetirement; y++) {
+      // The deferral is assumed to hold as a share of pay, so it rises with
+      // salary; otherwise a raise would shrink the percentage deferred and eat
+      // into the match rather than growing it.
+      const growth = salaryAfterRealGrowth(1, assumptions.salaryGrowthRate, y * 12);
+      const amount = monthlyEmployerMatch({
+        monthlyDeferral: monthlyDeferral * growth,
+        annualSalary: assumptions.currentAnnualSalary * growth,
+        tiers: matchTiers,
+        annualCap: matchAnnualCap,
+      });
+      if (amount <= 0) continue;
+      projectedSchedules.push({
+        financialAccountId: matchRow.financialAccountId,
+        amount,
+        source: "EMPLOYER_MATCH",
+        frequency: "MONTHLY",
+        interval: 1,
+        startDate: addUTCMonths(startOfHorizon, y * 12),
+        // The last rung runs to the horizon rather than to its own twelfth
+        // month, so a horizon that ends mid-year still gets matched all the way.
+        endDate:
+          y === yearsToRetirement - 1
+            ? addUTCMonths(startOfHorizon, monthsToRetirement)
+            : addUTCMonths(startOfHorizon, (y + 1) * 12 - 1),
+        dayOfMonth: 1,
+        weekday: null,
+      });
+    }
+  }
 
   const projection = projectRetirement({
     assumptions,

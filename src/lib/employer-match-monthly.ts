@@ -33,3 +33,24 @@ export function monthlyEmployerMatch({
 
   return Math.round((projectedMatch / 12) * 100) / 100;
 }
+
+/**
+ * Salary after `months` of real growth, in today's dollars.
+ *
+ * The rate is real, not nominal: it's how fast pay outruns inflation, so 0 means
+ * raises that exactly track inflation and buy no extra purchasing power. That
+ * keeps the result denominated in today's dollars like everything else in the
+ * retirement module, and it's why the projection can apply it directly without
+ * deflating afterwards.
+ *
+ * Compounds fractionally rather than stepping once a year, so a mid-year
+ * horizon doesn't sit on a stale figure for eleven months.
+ */
+export function salaryAfterRealGrowth(
+  currentAnnualSalary: number,
+  realGrowthPercent: number,
+  months: number,
+): number {
+  if (realGrowthPercent === 0 || months <= 0) return currentAnnualSalary;
+  return currentAnnualSalary * Math.pow(1 + realGrowthPercent / 100, months / 12);
+}

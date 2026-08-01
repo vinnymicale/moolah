@@ -56,6 +56,7 @@ export function AssumptionsPanel({
   const [currentAnnualSalary, setCurrentAnnualSalary] = useState(
     String(assumptions.currentAnnualSalary),
   );
+  const [salaryGrowthRate, setSalaryGrowthRate] = useState(String(assumptions.salaryGrowthRate));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +71,7 @@ export function AssumptionsPanel({
       safeWithdrawalRate,
       expectedSocialSecurityMonthly,
       currentAnnualSalary,
+      salaryGrowthRate,
     });
     if (!r.ok) {
       setError(r.error);
@@ -137,8 +139,12 @@ export function AssumptionsPanel({
             value={`${formatUSDWhole(assumptions.expectedSocialSecurityMonthly)}/mo`}
           />
           <SummaryItem
-            label="Annual salary"
+            label="Annual salary (today's $)"
             value={formatUSDWhole(assumptions.currentAnnualSalary)}
+          />
+          <SummaryItem
+            label="Real salary growth"
+            value={`${assumptions.salaryGrowthRate}%`}
           />
           <SummaryItem
             label="Employer match"
@@ -213,7 +219,7 @@ export function AssumptionsPanel({
               onChange={(e) => setExpectedSocialSecurityMonthly(e.target.value)}
             />
           </Field>
-          <Field label="Annual salary">
+          <Field label="Annual salary (today's $)">
             <input
               type="text"
               inputMode="decimal"
@@ -221,6 +227,19 @@ export function AssumptionsPanel({
               value={currentAnnualSalary}
               onChange={(e) => setCurrentAnnualSalary(e.target.value)}
             />
+          </Field>
+          <Field label="Real salary growth (%)">
+            <input
+              type="number"
+              step="0.1"
+              className="input"
+              value={salaryGrowthRate}
+              onChange={(e) => setSalaryGrowthRate(e.target.value)}
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Raises above inflation. 0 means pay keeps pace with inflation and no more. Grows
+              the employer match over time.
+            </span>
           </Field>
 
           <div className="border-t border-line pt-3 sm:col-span-4">

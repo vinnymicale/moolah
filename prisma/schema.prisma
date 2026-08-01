@@ -621,6 +621,8 @@ model RetirementPlan {
   safeWithdrawalRate            Decimal @default(4.0) @db.Decimal(6, 3)
   expectedSocialSecurityMonthly Decimal @default(0) @db.Decimal(14, 2)
   currentAnnualSalary           Decimal @default(0) @db.Decimal(14, 2)
+  // Real (above-inflation) annual salary growth. 0 means raises track inflation.
+  salaryGrowthRate              Decimal @default(0) @db.Decimal(6, 3)
 
   completedAt DateTime?
   createdAt   DateTime  @default(now())

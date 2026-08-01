@@ -26,7 +26,17 @@ export interface RetirementAssumptions {
    * way, so they can be entered as-is.
    */
   expectedSocialSecurityMonthly: number;
+  /** Current annual salary in today's dollars, before any future raises. */
   currentAnnualSalary: number;
+  /**
+   * Real annual salary growth, as a percent (2 = 2% above inflation). Zero means
+   * raises that merely keep pace with inflation, leaving salary flat in today's
+   * dollars. Only the employer match uses this: the retirement target is
+   * deliberately pinned to today's salary, since a target derived from an
+   * inflated salary would double-count inflation against a today's-dollars
+   * projection.
+   */
+  salaryGrowthRate: number;
 }
 
 /** One tier of an employer match: "matchPercent% of the next upToPercentOfSalary% of salary". */
