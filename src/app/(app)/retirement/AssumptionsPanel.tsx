@@ -140,7 +140,7 @@ export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssum
               onChange={(e) => setSafeWithdrawalRate(e.target.value)}
             />
           </Field>
-          <Field label="Social Security (monthly)">
+          <Field label="Social Security (monthly, today's $)">
             <input
               type="text"
               inputMode="decimal"

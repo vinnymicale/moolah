@@ -20,6 +20,11 @@ export interface RetirementAssumptions {
   incomeReplacementRatio: number;
   /** Safe withdrawal rate, as a percent (4 = 4%). */
   safeWithdrawalRate: number;
+  /**
+   * Expected monthly Social Security benefit in today's dollars, not inflated
+   * to the retirement year. SSA statement estimates are already quoted this
+   * way, so they can be entered as-is.
+   */
   expectedSocialSecurityMonthly: number;
   currentAnnualSalary: number;
 }
