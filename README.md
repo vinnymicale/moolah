@@ -34,6 +34,11 @@ Planned improvements, roughly in priority order:
 
 ### Recently shipped
 
+- **Retirement planning** - a dedicated page for 401(k), IRA, and brokerage accounts: a projection
+  to your retirement age with a Coast FIRE comparison, a savings target, required-monthly-savings
+  gap, IRS contribution limits, growth split into contributions vs. market return, and drawdown
+  scenarios. Contributions and balances can be entered by hand, so it works without a Plaid
+  connection.
 - **Receipt & document attachments** - upload a photo or PDF of a receipt and attach it to a
   transaction, so refunds, warranties, and expense reports have proof on hand without digging
   through email or a shoebox. Images are downscaled client-side and everything rides along in
@@ -107,6 +112,17 @@ Have a request? Open an issue on GitHub.
 - **Debt payoff planner** - model **avalanche** (highest APR first) or **snowball** (smallest
   balance first) strategies, add an extra monthly payment, and see your debt-free date, total
   interest, interest saved vs. minimums, a balance-over-time chart, and per-debt payoff order.
+- **Retirement** - retirement and investment accounts get their own page, on top of showing up in
+  Accounts as usual. Set your birth year, target age, expected return, inflation, income
+  replacement, and safe withdrawal rate once, and the page projects your balance to retirement
+  alongside a **Coast FIRE** line showing where you land if you stopped contributing today. It also
+  reports the target nest egg, the **required monthly savings** to reach it vs. what you currently
+  put in, progress against the year's **IRS contribution limits** (employee, total additions, and
+  IRA, with employer match counted), **growth over the last 12 months** split into money you
+  contributed vs. market return, and **drawdown scenarios** for how long the balance lasts under
+  poor, expected, and strong returns plus a bad-first-five-years sequence. Contributions can be
+  logged one at a time or put on a recurring schedule, and balances can be updated by hand, so
+  none of this needs a linked account.
 - **Safe-to-transfer suggestion** - the dashboard estimates how much you can safely move out of
   checking this month after remaining bills and a history-based buffer for next month's typical
   early-month spending.
@@ -195,6 +211,9 @@ A tour of the pages. _(Sample data - generated from the isolated `demo@example.c
 
 **Net Worth**
 ![Net Worth](docs/screenshots/networth.png)
+
+**Retirement**
+![Retirement](docs/screenshots/retirement.png)
 
 **Trends**
 ![Trends](docs/screenshots/trends.png)

@@ -182,7 +182,12 @@ async function main() {
     ],
   });
 
-  // ── Net-worth snapshots (last 6 months) for trend charts ─────────────────
+  // ── Net-worth snapshots (last 18 months) for trend charts ────────────────
+  // The window matches the 18 months of retirement contributions seeded below.
+  // Growth attribution looks back 12 months and derives market return from
+  // (endBalance - startBalance) - contributions, so a shorter snapshot history
+  // would leave it with a zero starting balance and report the entire account
+  // balance as market return.
   const snapshotAccounts: Array<[string, number]> = [
     [retirement401k.id, 142500],
     [rothIra.id, 38250],
@@ -190,9 +195,12 @@ async function main() {
     [savings.id, 18400],
   ];
   for (const [accountId, current] of snapshotAccounts) {
-    for (let i = 6; i >= 0; i--) {
-      // Drift older values down a bit so the net-worth line trends upward.
-      const drift = accountId === car.id ? 1 + i * 0.012 : 1 - i * 0.018;
+    for (let i = 18; i >= 0; i--) {
+      // Drift older values down so the net-worth line trends upward. The
+      // retirement rate is tuned so a year of drift is a bit more than the
+      // $12,000 contributed over the same span, leaving a believable market
+      // return rather than an implausible one.
+      const drift = accountId === car.id ? 1 + i * 0.006 : 1 - i * 0.011;
       await prisma.accountSnapshot.create({
         data: { accountId, date: day(1, -i), balance: Math.round(current * drift * 100) / 100 },
       });
@@ -219,19 +227,20 @@ async function main() {
   });
 
   // Monthly deferral schedules feeding the two retirement accounts. Both start
-  // well before the 18-month contribution history below, and both end on the
-  // exact date of their last recorded contribution (endDate is inclusive in
-  // expandOccurrences, see recurrence.ts) so the schedules stop expecting
-  // money right where the recorded history stops. Without an endDate the
-  // schedules would keep projecting contributions forever, and growth
-  // attribution (which looks back 12 months) would find a month a schedule
-  // expected money but no matching Contribution was recorded as soon as a
-  // calendar month passed after the seed ran.
+  // well before the 18-month contribution history below and stay open-ended:
+  // the projection chart expands schedule occurrences forward from tomorrow, so
+  // a schedule that has already ended makes the contributing projection
+  // collapse onto the Coast FIRE line and the two render as one.
+  //
+  // Growth attribution (which looks back 12 months) reports a gap for any month
+  // a schedule expected money and none was recorded. The contribution history
+  // below runs through the current month, so attribution is clean on a fresh
+  // seed and picks up one gap month for each month that elapses afterward.
   const schedule401k = await prisma.contributionSchedule.create({
-    data: { userId: demoUser.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19), endDate: day(1, 0) },
+    data: { userId: demoUser.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19) },
   });
   const scheduleRoth = await prisma.contributionSchedule.create({
-    data: { userId: demoUser.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19), endDate: day(5, 0) },
+    data: { userId: demoUser.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19) },
   });
 
   // ~18 months of backdated contributions matching the schedules above, one
