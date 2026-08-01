@@ -20,6 +20,25 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Visually hidden label so the compact grid layout doesn't grow, but screen
+// readers still get a real accessible name for each control.
+function HiddenLabel({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={className}>
+      <span className="sr-only">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 export function ContributionLog({
   accounts,
   recentContributions,
@@ -79,42 +98,50 @@ export function ContributionLog({
       )}
 
       <form onSubmit={submit} className="mb-4 grid gap-2 sm:grid-cols-5">
-        <select
-          className="input sm:col-span-2"
-          value={accountId}
-          onChange={(e) => setAccountId(e.target.value)}
-        >
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-        <input
-          type="date"
-          className="input"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-        <input
-          type="text"
-          inputMode="decimal"
-          className="input"
-          placeholder="Amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <select
-          className="input"
-          value={source}
-          onChange={(e) => setSource(e.target.value as ContributionSource)}
-        >
-          {SOURCE_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <HiddenLabel label="Account" className="block sm:col-span-2">
+          <select
+            className="input w-full"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </HiddenLabel>
+        <HiddenLabel label="Date" className="block">
+          <input
+            type="date"
+            className="input w-full"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </HiddenLabel>
+        <HiddenLabel label="Amount" className="block">
+          <input
+            type="text"
+            inputMode="decimal"
+            className="input w-full"
+            placeholder="Amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </HiddenLabel>
+        <HiddenLabel label="Source" className="block">
+          <select
+            className="input w-full"
+            value={source}
+            onChange={(e) => setSource(e.target.value as ContributionSource)}
+          >
+            {SOURCE_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </HiddenLabel>
         <button type="submit" className="btn-primary sm:col-span-5" disabled={busy || !accountId}>
           {busy ? "Adding..." : "Add contribution"}
         </button>
