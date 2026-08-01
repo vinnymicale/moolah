@@ -41,6 +41,10 @@ async function main() {
   await prisma.accountSnapshot.deleteMany({
     where: { account: { userId: demoUser.id } },
   });
+  await prisma.contribution.deleteMany({ where: { userId: demoUser.id } });
+  await prisma.contributionSchedule.deleteMany({ where: { userId: demoUser.id } });
+  await prisma.employerMatch.deleteMany({ where: { userId: demoUser.id } });
+  await prisma.retirementPlan.deleteMany({ where: { userId: demoUser.id } });
   await prisma.financialAccount.deleteMany({ where: { userId: demoUser.id } });
   await prisma.savingsGoal.deleteMany({ where: { userId: demoUser.id } });
   await prisma.category.deleteMany({ where: { userId: demoUser.id } });
@@ -203,6 +207,45 @@ async function main() {
       { userId: demoUser.id, name: "New car fund", targetAmount: 25000, currentAmount: 8500, color: "#7c3aed", icon: "car" },
       { userId: demoUser.id, name: "House down payment", targetAmount: 60000, currentAmount: 18000, color: "#2563eb", icon: "home" },
     ],
+  });
+
+  // ── Retirement plan ──────────────────────────────────────────────────────
+  // completedAt is set so the demo lands on the populated page instead of the
+  // setup wizard. currentAnnualSalary matches the $2,600 biweekly paycheck
+  // above ($2,600 * 26 = $67,600/yr). Everything else rides the schema
+  // defaults (7% return, 3% inflation, 80% replacement, 4% SWR, target age 65).
+  await prisma.retirementPlan.create({
+    data: { userId: demoUser.id, birthYear: Y - 35, currentAnnualSalary: 67600, completedAt: day(1) },
+  });
+
+  // Monthly deferral schedules feeding the two retirement accounts. Both start
+  // well before the 18-month contribution history below so growth attribution
+  // (which looks back 12 months) never finds a month a schedule expected money
+  // but no matching Contribution was recorded.
+  const schedule401k = await prisma.contributionSchedule.create({
+    data: { userId: demoUser.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19) },
+  });
+  const scheduleRoth = await prisma.contributionSchedule.create({
+    data: { userId: demoUser.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19) },
+  });
+
+  // ~18 months of backdated contributions matching the schedules above, one
+  // per expected month, each linked via scheduleId so reconciliation finds no
+  // gaps and growth attribution reports confident: true.
+  await prisma.contribution.createMany({
+    data: Array.from({ length: 18 }, (_, i) => -18 + i + 1).flatMap((monthOffset) => [
+      { userId: demoUser.id, financialAccountId: retirement401k.id, date: day(1, monthOffset), amount: 550, source: "EMPLOYEE_PRETAX" as const, scheduleId: schedule401k.id },
+      { userId: demoUser.id, financialAccountId: rothIra.id, date: day(5, monthOffset), amount: 450, source: "EMPLOYEE_ROTH" as const, scheduleId: scheduleRoth.id },
+    ]),
+  });
+
+  // Employer match on the 401k: 100% of the first 3% of salary, then 50% of
+  // the next 2%.
+  await prisma.employerMatch.create({
+    data: {
+      userId: demoUser.id, financialAccountId: retirement401k.id,
+      tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }, { matchPercent: 50, upToPercentOfSalary: 2 }],
+    },
   });
 
   console.log("✓ Seed complete.");
