@@ -219,14 +219,19 @@ async function main() {
   });
 
   // Monthly deferral schedules feeding the two retirement accounts. Both start
-  // well before the 18-month contribution history below so growth attribution
-  // (which looks back 12 months) never finds a month a schedule expected money
-  // but no matching Contribution was recorded.
+  // well before the 18-month contribution history below, and both end on the
+  // exact date of their last recorded contribution (endDate is inclusive in
+  // expandOccurrences, see recurrence.ts) so the schedules stop expecting
+  // money right where the recorded history stops. Without an endDate the
+  // schedules would keep projecting contributions forever, and growth
+  // attribution (which looks back 12 months) would find a month a schedule
+  // expected money but no matching Contribution was recorded as soon as a
+  // calendar month passed after the seed ran.
   const schedule401k = await prisma.contributionSchedule.create({
-    data: { userId: demoUser.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19) },
+    data: { userId: demoUser.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19), endDate: day(1, 0) },
   });
   const scheduleRoth = await prisma.contributionSchedule.create({
-    data: { userId: demoUser.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19) },
+    data: { userId: demoUser.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19), endDate: day(5, 0) },
   });
 
   // ~18 months of backdated contributions matching the schedules above, one
