@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, CalendarDays, Receipt, Landmark, Repeat, Tags, LineChart,
-  Settings, PiggyBank, Target, TrendingDown, Wallet, Bell,
+  Settings, PiggyBank, Target, TrendingDown, Wallet, Bell, Umbrella,
 } from "lucide-react";
 
 export type NavGroupId = "overview" | "track" | "plan" | "insights" | "system";
@@ -15,6 +15,7 @@ export const NAV = [
   { href: "/budgets", label: "Budgets", icon: PiggyBank, group: "plan" as NavGroupId },
   { href: "/goals", label: "Goals", icon: Target, group: "plan" as NavGroupId },
   { href: "/debt", label: "Debt payoff", icon: TrendingDown, group: "plan" as NavGroupId },
+  { href: "/retirement", label: "Retirement", icon: Umbrella, group: "plan" as NavGroupId },
   { href: "/networth", label: "Net worth", icon: Wallet, group: "insights" as NavGroupId },
   { href: "/trends", label: "Trends", icon: LineChart, group: "insights" as NavGroupId },
   { href: "/categories", label: "Categories & Rules", icon: Tags, group: "insights" as NavGroupId },
