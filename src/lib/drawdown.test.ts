@@ -28,9 +28,13 @@ describe("modelDrawdown", () => {
   });
 
   it("depletes quickly when withdrawals dwarf returns", () => {
+    // realAnnualReturn: 0 makes monthlyRateFromAnnual return exactly 0 (special-cased,
+    // no Math.pow call), so this is plain linear subtraction of 50_000/12 per month
+    // from 100_000 with no floating-point rate noise. Balance goes negative on the
+    // 24th subtraction (month index 23), so yearsLasted = Math.floor(23 / 12) = 1.
     const r = modelDrawdown({ nestEgg: 100_000, annualWithdrawal: 50_000, realAnnualReturn: 0 });
     expect(r.scenarios[1].depleted).toBe(true);
-    expect(r.scenarios[1].yearsLasted).toBeLessThanOrEqual(3);
+    expect(r.scenarios[1].yearsLasted).toBe(1);
   });
 
   it("depletes immediately when the nest egg is zero", () => {
