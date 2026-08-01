@@ -57,6 +57,14 @@ describe("computeMatch", () => {
     expect(r.maxAnnualMatch).toBe(0);
     expect(r.projectedMatch).toBe(0);
   });
+
+  it("returns zeroes when there are no tiers", () => {
+    const r = computeMatch({ annualSalary: 100_000, annualDeferral: 5_000, tiers: [], annualCap: null });
+    expect(r.maxAnnualMatch).toBe(0);
+    expect(r.projectedMatch).toBe(0);
+    expect(r.forfeited).toBe(0);
+    expect(r.capturedPercent).toBe(0);
+  });
 });
 
 describe("computeContributionLimits", () => {

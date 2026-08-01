@@ -19,7 +19,7 @@ export interface LimitUsage {
 }
 
 export interface MatchResult {
-  /** Match earned if the user defers enough to fill every tier. */
+  /** Match ceiling for the year: what fully filling every tier would earn, capped by annualCap if set. */
   maxAnnualMatch: number;
   /** Match earned at the current deferral pace. */
   projectedMatch: number;

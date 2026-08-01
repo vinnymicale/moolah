@@ -110,9 +110,8 @@ describe("getRetirementPageData", () => {
       },
     ] as never);
     const data = await getRetirementPageData("u1", TODAY);
-    // $500 biweekly is 26 payments a year, about $1,083/month.
-    expect(data.currentMonthlyContribution).toBeGreaterThan(1_000);
-    expect(data.currentMonthlyContribution).toBeLessThan(1_200);
+    // $500 biweekly is 26 payments a year: 500 * 26 / 12 = 1083.333..., rounded to cents.
+    expect(data.currentMonthlyContribution).toBe(1_083.33);
   });
 
   it("computes a Coast FIRE projection alongside the contributing one", async () => {

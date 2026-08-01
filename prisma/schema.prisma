@@ -660,6 +660,7 @@ model Contribution {
 
   @@index([userId, date])
   @@index([financialAccountId])
+  @@index([scheduleId])
 }
 
 // A recurring expected contribution ("$1,000 every paycheck"), so the user

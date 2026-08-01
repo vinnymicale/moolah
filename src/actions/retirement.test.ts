@@ -134,6 +134,13 @@ describe("createContributionAction", () => {
     expect(contribution.create).not.toHaveBeenCalled();
   });
 
+  it("scopes the ownership check to the account id and the current user", async () => {
+    await createContributionAction(validContribution);
+    expect(account.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "a1", userId: "u1" } }),
+    );
+  });
+
   it("rejects a zero amount", async () => {
     const r = await createContributionAction({ ...validContribution, amount: 0 });
     expect(r.ok).toBe(false);
@@ -161,6 +168,12 @@ describe("deleteContributionAction", () => {
     const r = await deleteContributionAction("c1");
     expect(r).toEqual({ ok: true });
     expect(contribution.delete).toHaveBeenCalledWith({ where: { id: "c1" } });
+  });
+
+  it("scopes the ownership check to the contribution id and the current user", async () => {
+    contribution.findFirst.mockResolvedValue({ id: "c1", userId: "u1" } as never);
+    await deleteContributionAction("c1");
+    expect(contribution.findFirst).toHaveBeenCalledWith({ where: { id: "c1", userId: "u1" } });
   });
 });
 
@@ -209,6 +222,12 @@ describe("deleteScheduleAction", () => {
       where: { id: "s1" },
       data: { archived: true },
     });
+  });
+
+  it("scopes the ownership check to the schedule id and the current user", async () => {
+    schedule.findFirst.mockResolvedValue({ id: "s1", userId: "u1" } as never);
+    await deleteScheduleAction("s1");
+    expect(schedule.findFirst).toHaveBeenCalledWith({ where: { id: "s1", userId: "u1" } });
   });
 });
 
