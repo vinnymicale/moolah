@@ -57,7 +57,15 @@ export default async function RetirementPage() {
         <StatCard label="Target" value={formatUSDWhole(data.target!.target)} />
         <StatCard
           label="Monthly contribution"
-          value={formatUSDWhole(data.currentMonthlyContribution)}
+          value={formatUSDWhole(
+            data.currentMonthlyContribution + data.currentMonthlyEmployerMatch,
+          )}
+          hint={
+            data.currentMonthlyEmployerMatch > 0
+              ? `${formatUSDWhole(data.currentMonthlyContribution)} yours + ${formatUSDWhole(data.currentMonthlyEmployerMatch)} match`
+              : undefined
+          }
+          info="Employer match is included once a match formula is set, and counts toward the projection."
         />
       </div>
 
@@ -67,7 +75,10 @@ export default async function RetirementPage() {
         target={data.target!.target}
       />
 
-      <RequiredSavingsPanel requiredSavings={data.requiredSavings!} />
+      <RequiredSavingsPanel
+        requiredSavings={data.requiredSavings!}
+        employerMatchMonthly={data.currentMonthlyEmployerMatch}
+      />
       <ContributionLimits limits={data.limits!} />
       {data.growth && <GrowthAttribution growth={data.growth} />}
       <DrawdownPanel drawdown={data.drawdown!} />
@@ -76,7 +87,11 @@ export default async function RetirementPage() {
         recentContributions={data.recentContributions}
         currentMonthlyContribution={data.currentMonthlyContribution}
       />
-      <AssumptionsPanel assumptions={data.assumptions!} />
+      <AssumptionsPanel
+        assumptions={data.assumptions!}
+        accounts={data.accounts}
+        employerMatch={data.employerMatch}
+      />
     </div>
   );
 }

@@ -81,6 +81,8 @@ export function SetupWizard({ accounts }: { accounts: RetirementAccountDTO[] }) 
       safeWithdrawalRate: 4,
       expectedSocialSecurityMonthly: socialSecurity || 0,
       currentAnnualSalary: salary || 0,
+      // Flat in real terms to start; editable later from the Assumptions panel.
+      salaryGrowthRate: 0,
     });
     if (!planResult.ok) {
       setError(planResult.error);
@@ -167,7 +169,10 @@ export function SetupWizard({ accounts }: { accounts: RetirementAccountDTO[] }) 
                 onChange={(e) => setBirthYear(e.target.value)}
               />
             </Field>
-            <Field label="Current annual salary" hint="Used for the income replacement target and employer match.">
+            <Field
+              label="Current annual salary"
+              hint="In today's dollars. Used for the income replacement target and employer match."
+            >
               <input
                 type="text"
                 inputMode="decimal"

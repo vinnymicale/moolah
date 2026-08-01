@@ -11,6 +11,7 @@ const base = (over: Partial<RetirementAssumptions> = {}): RetirementAssumptions 
   safeWithdrawalRate: 4,
   expectedSocialSecurityMonthly: 0,
   currentAnnualSalary: 100_000,
+  salaryGrowthRate: 0,
   ...over,
 });
 
