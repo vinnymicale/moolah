@@ -42,7 +42,13 @@ export function VerdictHeader({
   );
 }
 
-export function RequiredSavingsPanel({ requiredSavings }: { requiredSavings: RequiredSavings }) {
+export function RequiredSavingsPanel({
+  requiredSavings,
+  employerMatchMonthly,
+}: {
+  requiredSavings: RequiredSavings;
+  employerMatchMonthly: number;
+}) {
   return (
     <div className="card mb-5 p-4">
       <h2 className="mb-3 text-sm font-semibold">Required savings</h2>
@@ -58,6 +64,12 @@ export function RequiredSavingsPanel({ requiredSavings }: { requiredSavings: Req
           <p className="money mt-1 text-lg font-semibold">
             {formatUSDWhole(requiredSavings.currentMonthly)}
           </p>
+          {employerMatchMonthly > 0 && (
+            <p className="mt-1 text-xs text-muted">
+              {formatUSDWhole(requiredSavings.currentMonthly - employerMatchMonthly)} yours +{" "}
+              {formatUSDWhole(employerMatchMonthly)} match
+            </p>
+          )}
         </div>
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Percent of salary</p>

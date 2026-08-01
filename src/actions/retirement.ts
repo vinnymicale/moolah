@@ -29,6 +29,7 @@ const planSchema = z.object({
   safeWithdrawalRate: z.coerce.number().min(0.5).max(20),
   expectedSocialSecurityMonthly: moneyInput.pipe(z.number().min(0)),
   currentAnnualSalary: moneyInput.pipe(z.number().min(0)),
+  salaryGrowthRate: z.coerce.number().min(-10).max(20),
 });
 
 const contributionSchema = z.object({

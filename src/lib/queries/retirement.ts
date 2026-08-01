@@ -15,9 +15,14 @@ import {
   type ContributionRecord,
   type ScheduledContribution,
 } from "@/lib/retirement-types";
-import { projectRetirement, type ProjectionResult } from "@/lib/retirement-projection";
+import {
+  projectRetirement,
+  monthsUntilRetirement,
+  type ProjectionResult,
+} from "@/lib/retirement-projection";
 import { computeRetirementTarget, type RetirementTarget } from "@/lib/retirement-target";
 import { computeRequiredSavings, type RequiredSavings } from "@/lib/required-savings";
+import { monthlyEmployerMatch, salaryAfterRealGrowth } from "@/lib/employer-match-monthly";
 import {
   computeContributionLimits,
   type ContributionLimitReport,
@@ -63,9 +68,20 @@ export interface RetirementPageData {
   growth: GrowthAttribution | null;
   drawdown: DrawdownReport | null;
   recentContributions: ContributionDTO[];
+  /** Monthly total of the user's own scheduled contributions, match excluded. */
   currentMonthlyContribution: number;
+  /** Monthly employer match earned at that contribution pace. */
+  currentMonthlyEmployerMatch: number;
+  /** The saved match formula, for display and editing. Null when none is set. */
+  employerMatch: EmployerMatchDTO | null;
   /** Real return derived from expectedReturn and inflationRate, as a percent. */
   realAnnualReturn: number;
+}
+
+export interface EmployerMatchDTO {
+  financialAccountId: string;
+  tiers: MatchTier[];
+  annualCap: number | null;
 }
 
 /** Average occurrences per month for each frequency, for normalising a schedule to monthly. */
@@ -137,6 +153,30 @@ export async function getRetirementPageData(
   const currentMonthlyContribution =
     Math.round(schedules.reduce((sum, s) => sum + scheduleToMonthly(s), 0) * 100) / 100;
 
+  // Only elective deferrals earn a match; after-tax and rollover money does not.
+  const monthlyDeferral =
+    Math.round(
+      schedules
+        .filter((s) => s.source === "EMPLOYEE_PRETAX" || s.source === "EMPLOYEE_ROTH")
+        .reduce((sum, s) => sum + scheduleToMonthly(s), 0) * 100,
+    ) / 100;
+
+  const matchRow = await prisma.employerMatch.findFirst({
+    where: { userId, financialAccountId: { in: accounts.map((a) => a.id) } },
+  });
+  const parsedTiers = matchRow ? matchTiersSchema.safeParse(matchRow.tiers) : null;
+  const matchTiers: MatchTier[] | null =
+    parsedTiers && parsedTiers.success ? parsedTiers.data : null;
+  const matchAnnualCap = matchRow?.annualCap ? toNumber(matchRow.annualCap) : null;
+  const employerMatch: EmployerMatchDTO | null =
+    matchRow && matchTiers
+      ? {
+          financialAccountId: matchRow.financialAccountId,
+          tiers: matchTiers,
+          annualCap: matchAnnualCap,
+        }
+      : null;
+
   const recentContributions: ContributionDTO[] = contributionRows.slice(0, 10).map((c) => ({
     id: c.id,
     accountName: c.financialAccount.name,
@@ -165,6 +205,8 @@ export async function getRetirementPageData(
       drawdown: null,
       recentContributions,
       currentMonthlyContribution,
+      currentMonthlyEmployerMatch: 0,
+      employerMatch,
       realAnnualReturn: 0,
     };
   }
@@ -178,21 +220,76 @@ export async function getRetirementPageData(
     safeWithdrawalRate: toNumber(planRow.safeWithdrawalRate),
     expectedSocialSecurityMonthly: toNumber(planRow.expectedSocialSecurityMonthly),
     currentAnnualSalary: toNumber(planRow.currentAnnualSalary),
+    salaryGrowthRate: toNumber(planRow.salaryGrowthRate),
   };
 
   const realAnnualReturn =
     ((1 + assumptions.expectedReturn / 100) / (1 + assumptions.inflationRate / 100) - 1) * 100;
 
+  const currentMonthlyEmployerMatch = matchTiers
+    ? monthlyEmployerMatch({
+        monthlyDeferral,
+        annualSalary: assumptions.currentAnnualSalary,
+        tiers: matchTiers,
+        annualCap: matchAnnualCap,
+      })
+    : 0;
+
+  // The match is real money landing in the account, so the projection has to
+  // compound it alongside the user's own contributions. Modelling it as extra
+  // monthly schedules keeps the engine unchanged and lets the match ride the
+  // same grow-then-add convention.
+  //
+  // Tiers are a share of salary, so a rising real salary raises the match too.
+  // One schedule per year steps the matched amount up over the horizon; at a
+  // zero growth rate every rung is identical and this collapses to a single
+  // flat match.
+  const projectedSchedules: ScheduledContribution[] = [...schedules];
+  if (matchTiers && matchRow && monthlyDeferral > 0) {
+    const startOfHorizon = parseISODay(todayISO);
+    const monthsToRetirement = monthsUntilRetirement(assumptions, startOfHorizon);
+    const yearsToRetirement = Math.ceil(monthsToRetirement / 12);
+    for (let y = 0; y < yearsToRetirement; y++) {
+      // The deferral is assumed to hold as a share of pay, so it rises with
+      // salary; otherwise a raise would shrink the percentage deferred and eat
+      // into the match rather than growing it.
+      const growth = salaryAfterRealGrowth(1, assumptions.salaryGrowthRate, y * 12);
+      const amount = monthlyEmployerMatch({
+        monthlyDeferral: monthlyDeferral * growth,
+        annualSalary: assumptions.currentAnnualSalary * growth,
+        tiers: matchTiers,
+        annualCap: matchAnnualCap,
+      });
+      if (amount <= 0) continue;
+      projectedSchedules.push({
+        financialAccountId: matchRow.financialAccountId,
+        amount,
+        source: "EMPLOYER_MATCH",
+        frequency: "MONTHLY",
+        interval: 1,
+        startDate: addUTCMonths(startOfHorizon, y * 12),
+        // The last rung runs to the horizon rather than to its own twelfth
+        // month, so a horizon that ends mid-year still gets matched all the way.
+        endDate:
+          y === yearsToRetirement - 1
+            ? addUTCMonths(startOfHorizon, monthsToRetirement)
+            : addUTCMonths(startOfHorizon, (y + 1) * 12 - 1),
+        dayOfMonth: 1,
+        weekday: null,
+      });
+    }
+  }
+
   const projection = projectRetirement({
     assumptions,
     startingBalance: totalBalance,
-    schedules,
+    schedules: projectedSchedules,
     todayISO,
   });
   const coastProjection = projectRetirement({
     assumptions,
     startingBalance: totalBalance,
-    schedules,
+    schedules: projectedSchedules,
     todayISO,
     includeContributions: false,
   });
@@ -204,22 +301,13 @@ export async function getRetirementPageData(
     startingBalance: totalBalance,
     monthsToRetirement: projection.monthsToRetirement,
     realAnnualReturn,
-    currentMonthly: currentMonthlyContribution,
+    currentMonthly: currentMonthlyContribution + currentMonthlyEmployerMatch,
     annualSalary: assumptions.currentAnnualSalary,
   });
 
   const today = parseISODay(todayISO);
   const year = today.getUTCFullYear();
   const age = year - assumptions.birthYear;
-
-  const matchRow = await prisma.employerMatch.findFirst({
-    where: { userId, financialAccountId: { in: accounts.map((a) => a.id) } },
-  });
-  let matchTiers: MatchTier[] | null = null;
-  if (matchRow) {
-    const parsed = matchTiersSchema.safeParse(matchRow.tiers);
-    matchTiers = parsed.success ? parsed.data : null;
-  }
 
   const limits = computeContributionLimits({
     contributions,
@@ -228,7 +316,7 @@ export async function getRetirementPageData(
     iraAccountIds: accounts.filter((a) => looksLikeIra(a.name)).map((a) => a.id),
     annualSalary: assumptions.currentAnnualSalary,
     matchTiers,
-    matchAnnualCap: matchRow?.annualCap ? toNumber(matchRow.annualCap) : null,
+    matchAnnualCap,
   });
 
   // Growth attribution over the last year of snapshot history, restricted to
@@ -290,6 +378,8 @@ export async function getRetirementPageData(
     drawdown,
     recentContributions,
     currentMonthlyContribution,
+    currentMonthlyEmployerMatch,
+    employerMatch,
     realAnnualReturn,
   };
 }

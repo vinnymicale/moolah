@@ -41,7 +41,7 @@ export interface ProjectionResult {
  * retirement date as January of the year they turn the target age. Zero when
  * that year is already here or past.
  */
-function monthsUntilRetirement(a: RetirementAssumptions, today: Date): number {
+export function monthsUntilRetirement(a: RetirementAssumptions, today: Date): number {
   const retirementYear = a.birthYear + a.targetRetirementAge;
   const months = (retirementYear - today.getUTCFullYear()) * 12 - today.getUTCMonth();
   return Math.max(0, months);

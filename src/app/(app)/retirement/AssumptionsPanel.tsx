@@ -2,15 +2,41 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveRetirementPlanAction } from "@/actions/retirement";
+import { saveRetirementPlanAction, saveEmployerMatchAction } from "@/actions/retirement";
 import { formatUSDWhole } from "@/lib/money";
 import type { RetirementAssumptions } from "@/lib/retirement-types";
+import type { EmployerMatchDTO, RetirementAccountDTO } from "@/lib/queries/retirement";
 
-export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssumptions }) {
+type TierDraft = { matchPercent: string; upToPercentOfSalary: string };
+
+export function AssumptionsPanel({
+  assumptions,
+  accounts,
+  employerMatch,
+}: {
+  assumptions: RetirementAssumptions;
+  accounts: RetirementAccountDTO[];
+  employerMatch: EmployerMatchDTO | null;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [matchAccountId, setMatchAccountId] = useState(
+    employerMatch?.financialAccountId ?? accounts[0]?.id ?? "",
+  );
+  const [tiers, setTiers] = useState<TierDraft[]>(
+    employerMatch?.tiers.map((t) => ({
+      matchPercent: String(t.matchPercent),
+      upToPercentOfSalary: String(t.upToPercentOfSalary),
+    })) ?? [{ matchPercent: "100", upToPercentOfSalary: "3" }],
+  );
+  const [annualCap, setAnnualCap] = useState(
+    employerMatch?.annualCap === null || employerMatch?.annualCap === undefined
+      ? ""
+      : String(employerMatch.annualCap),
+  );
 
   const [birthYear, setBirthYear] = useState(String(assumptions.birthYear));
   const [targetRetirementAge, setTargetRetirementAge] = useState(
@@ -30,6 +56,7 @@ export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssum
   const [currentAnnualSalary, setCurrentAnnualSalary] = useState(
     String(assumptions.currentAnnualSalary),
   );
+  const [salaryGrowthRate, setSalaryGrowthRate] = useState(String(assumptions.salaryGrowthRate));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -44,16 +71,45 @@ export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssum
       safeWithdrawalRate,
       expectedSocialSecurityMonthly,
       currentAnnualSalary,
+      salaryGrowthRate,
     });
     if (!r.ok) {
       setError(r.error);
       setBusy(false);
       return;
     }
+
+    // A tier with both fields blank is an empty row the user never filled in,
+    // not an instruction to save a zero-percent tier.
+    const filledTiers = tiers.filter((t) => t.matchPercent !== "" || t.upToPercentOfSalary !== "");
+    if (matchAccountId && filledTiers.length > 0) {
+      const m = await saveEmployerMatchAction({
+        financialAccountId: matchAccountId,
+        tiers: filledTiers.map((t) => ({
+          matchPercent: t.matchPercent,
+          upToPercentOfSalary: t.upToPercentOfSalary,
+        })),
+        annualCap: annualCap === "" ? null : annualCap,
+      });
+      if (!m.ok) {
+        setError(m.error);
+        setBusy(false);
+        return;
+      }
+    }
+
     setBusy(false);
     setEditing(false);
     router.refresh();
   }
+
+  const addTier = () =>
+    setTiers((prev) =>
+      prev.length >= 5 ? prev : [...prev, { matchPercent: "", upToPercentOfSalary: "" }],
+    );
+  const removeTier = (i: number) => setTiers((prev) => prev.filter((_, idx) => idx !== i));
+  const updateTier = (i: number, patch: Partial<TierDraft>) =>
+    setTiers((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
 
   return (
     <div className="card mb-5 p-4">
@@ -83,8 +139,22 @@ export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssum
             value={`${formatUSDWhole(assumptions.expectedSocialSecurityMonthly)}/mo`}
           />
           <SummaryItem
-            label="Annual salary"
+            label="Annual salary (today's $)"
             value={formatUSDWhole(assumptions.currentAnnualSalary)}
+          />
+          <SummaryItem
+            label="Real salary growth"
+            value={`${assumptions.salaryGrowthRate}%`}
+          />
+          <SummaryItem
+            label="Employer match"
+            value={
+              employerMatch
+                ? employerMatch.tiers
+                    .map((t) => `${t.matchPercent}% of ${t.upToPercentOfSalary}%`)
+                    .join(", ") + (employerMatch.annualCap ? `, capped at ${formatUSDWhole(employerMatch.annualCap)}` : "")
+                : "Not set"
+            }
           />
         </dl>
       ) : (
@@ -149,7 +219,7 @@ export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssum
               onChange={(e) => setExpectedSocialSecurityMonthly(e.target.value)}
             />
           </Field>
-          <Field label="Annual salary">
+          <Field label="Annual salary (today's $)">
             <input
               type="text"
               inputMode="decimal"
@@ -158,6 +228,93 @@ export function AssumptionsPanel({ assumptions }: { assumptions: RetirementAssum
               onChange={(e) => setCurrentAnnualSalary(e.target.value)}
             />
           </Field>
+          <Field label="Real salary growth (%)">
+            <input
+              type="number"
+              step="0.1"
+              className="input"
+              value={salaryGrowthRate}
+              onChange={(e) => setSalaryGrowthRate(e.target.value)}
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Raises above inflation. 0 means pay keeps pace with inflation and no more. Grows
+              the employer match over time.
+            </span>
+          </Field>
+
+          <div className="border-t border-line pt-3 sm:col-span-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Employer match
+            </h3>
+            <p className="mt-1 text-xs text-muted">
+              Tiers apply in order, each as a share of salary: &ldquo;100% of the first 3%, then
+              50% of the next 2%&rdquo; is two tiers. Only pre-tax and Roth contributions earn a
+              match.
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Account">
+                <select
+                  className="input"
+                  value={matchAccountId}
+                  onChange={(e) => setMatchAccountId(e.target.value)}
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Annual cap (optional)">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="input"
+                  placeholder="No cap"
+                  value={annualCap}
+                  onChange={(e) => setAnnualCap(e.target.value)}
+                />
+              </Field>
+            </div>
+
+            {tiers.map((t, i) => (
+              <div key={i} className="mt-3 flex items-end gap-2">
+                <Field label="Match (%)">
+                  <input
+                    type="number"
+                    className="input"
+                    value={t.matchPercent}
+                    onChange={(e) => updateTier(i, { matchPercent: e.target.value })}
+                  />
+                </Field>
+                <Field label="Of the next (% of salary)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="input"
+                    value={t.upToPercentOfSalary}
+                    onChange={(e) => updateTier(i, { upToPercentOfSalary: e.target.value })}
+                  />
+                </Field>
+                {tiers.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn-ghost mb-1 text-xs"
+                    onClick={() => removeTier(i)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {tiers.length < 5 && (
+              <button type="button" className="btn-ghost mt-2 text-xs" onClick={addTier}>
+                Add tier
+              </button>
+            )}
+          </div>
 
           {error && <p className="text-sm text-expense sm:col-span-4">{error}</p>}
 
