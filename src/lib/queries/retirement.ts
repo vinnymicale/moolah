@@ -232,23 +232,35 @@ export async function getRetirementPageData(
   });
 
   // Growth attribution over the last year of snapshot history, restricted to
-  // the retirement/investment accounts. lookbackStart is inclusive and today
-  // is treated as the exclusive-on-both-sides upper bound inside
-  // attributeGrowth (it expands occurrences to addUTCDays(endDate, -1) and
-  // filters contributions with date < endDate), so passing `today` here as
-  // endDate is correct - it does not need to be pushed forward a day.
+  // the retirement/investment accounts. endBalance is totalBalance, which sums
+  // only those accounts, so startBalance has to come from the same set - a
+  // whole-portfolio figure here would subtract balances that were never in the
+  // end total and report the difference as market return.
+  //
+  // lookbackStart is inclusive and today is treated as the exclusive-on-both-
+  // sides upper bound inside attributeGrowth (it expands occurrences to
+  // addUTCDays(endDate, -1) and filters contributions with date < endDate), so
+  // passing `today` here as endDate is correct - it does not need to be pushed
+  // forward a day.
   const lookbackStart = addUTCMonths(today, -GROWTH_LOOKBACK_MONTHS);
-  const history =
-    (await getNetWorthHistory(
-      userId,
-      Math.max(1, Math.round((today.getTime() - lookbackStart.getTime()) / 86_400_000) + 1),
-      todayISO,
-    )) ?? [];
-  const startBalance = history.length > 0 ? history[0].assets : totalBalance;
+  const retirementAccountIds = accounts.map((a) => a.id);
+  // Each account's last snapshot at or before the lookback start. Accounts with
+  // no snapshot that far back simply do not contribute to the start balance.
+  const priorSnapshots = retirementAccountIds.length
+    ? await prisma.accountSnapshot.findMany({
+        where: { accountId: { in: retirementAccountIds }, date: { lte: lookbackStart } },
+        orderBy: { date: "desc" },
+        select: { accountId: true, balance: true },
+      })
+    : [];
+  const startByAccount = new Map<string, number>();
+  for (const s of priorSnapshots) {
+    if (!startByAccount.has(s.accountId)) startByAccount.set(s.accountId, toNumber(s.balance));
+  }
   const growth =
-    history.length > 0
+    startByAccount.size > 0
       ? attributeGrowth({
-          startBalance,
+          startBalance: sumMoney([...startByAccount.values()]),
           endBalance: totalBalance,
           contributions,
           schedules,

@@ -11,6 +11,7 @@ vi.mock("@/lib/prisma", () => ({
     contribution: { findMany: vi.fn() },
     contributionSchedule: { findMany: vi.fn() },
     employerMatch: { findFirst: vi.fn() },
+    accountSnapshot: { findMany: vi.fn() },
   },
 }));
 
@@ -24,6 +25,7 @@ const account = vi.mocked(prisma.financialAccount);
 const contribution = vi.mocked(prisma.contribution);
 const schedule = vi.mocked(prisma.contributionSchedule);
 const match = vi.mocked(prisma.employerMatch);
+const snapshot = vi.mocked(prisma.accountSnapshot);
 
 const TODAY = "2026-01-01";
 
@@ -48,6 +50,7 @@ beforeEach(() => {
   contribution.findMany.mockResolvedValue([]);
   schedule.findMany.mockResolvedValue([]);
   match.findFirst.mockResolvedValue(null);
+  snapshot.findMany.mockResolvedValue([]);
 });
 
 describe("getRetirementPageData", () => {
@@ -136,5 +139,38 @@ describe("getRetirementPageData", () => {
     const data = await getRetirementPageData("u1", TODAY);
     expect(data.coastProjection!.finalBalance).toBeLessThan(data.projection!.finalBalance);
     expect(data.coastProjection!.totalContributed).toBe(0);
+  });
+
+  it("attributes growth against a start balance covering only retirement accounts", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "100000", color: "#000" },
+      { id: "a2", name: "Brokerage", type: "INVESTMENT", currentBalance: "20000", color: "#111" },
+    ] as never);
+    // Newest-first, as the query orders them: the later row for a1 is ignored.
+    snapshot.findMany.mockResolvedValue([
+      { accountId: "a1", balance: "90000" },
+      { accountId: "a2", balance: "18000" },
+      { accountId: "a1", balance: "70000" },
+    ] as never);
+
+    const data = await getRetirementPageData("u1", TODAY);
+
+    // A whole-portfolio start balance would have dragged non-retirement assets
+    // into the subtraction; 120000 - 108000 is the retirement-only delta.
+    expect(data.growth!.marketReturn).toBe(12_000);
+    const where = snapshot.findMany.mock.calls[0][0]!.where as {
+      accountId: { in: string[] };
+    };
+    expect(where.accountId.in).toEqual(["a1", "a2"]);
+  });
+
+  it("skips growth attribution when no snapshot predates the lookback window", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "100000", color: "#000" },
+    ] as never);
+    const data = await getRetirementPageData("u1", TODAY);
+    expect(data.growth).toBeNull();
   });
 });
