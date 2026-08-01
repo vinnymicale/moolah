@@ -165,6 +165,94 @@ describe("getRetirementPageData", () => {
     expect(where.accountId.in).toEqual(["a1", "a2"]);
   });
 
+  it("earns an employer match on elective deferrals and compounds it", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+    ] as never);
+    schedule.findMany.mockResolvedValue([
+      {
+        id: "s1",
+        financialAccountId: "a1",
+        amount: "1000",
+        source: "EMPLOYEE_PRETAX",
+        frequency: "MONTHLY",
+        interval: 1,
+        startDate: new Date("2020-01-01T00:00:00.000Z"),
+        endDate: null,
+        dayOfMonth: 1,
+        weekday: null,
+      },
+    ] as never);
+    match.findFirst.mockResolvedValue({
+      id: "m1",
+      userId: "u1",
+      financialAccountId: "a1",
+      tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
+      annualCap: null,
+    } as never);
+
+    const data = await getRetirementPageData("u1", TODAY);
+
+    // $12k/yr deferral clears the 3%-of-$100k tier, so the match is the full
+    // $3000/yr: $250/month on top of the user's own $1000.
+    expect(data.currentMonthlyContribution).toBe(1_000);
+    expect(data.currentMonthlyEmployerMatch).toBe(250);
+    expect(data.employerMatch).toEqual({
+      financialAccountId: "a1",
+      tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
+      annualCap: null,
+    });
+    // Required-savings compares against the combined pace, not the user's alone.
+    expect(data.requiredSavings!.currentMonthly).toBe(1_250);
+    // The projection runs to age 65, contributing the combined $1250/month the
+    // whole way rather than the user's $1000, so the match compounds too.
+    expect(data.projection!.totalContributed).toBe(435_000);
+  });
+
+  it("does not match after-tax or rollover money", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+    ] as never);
+    schedule.findMany.mockResolvedValue([
+      {
+        id: "s1",
+        financialAccountId: "a1",
+        amount: "1000",
+        source: "AFTER_TAX",
+        frequency: "MONTHLY",
+        interval: 1,
+        startDate: new Date("2020-01-01T00:00:00.000Z"),
+        endDate: null,
+        dayOfMonth: 1,
+        weekday: null,
+      },
+    ] as never);
+    match.findFirst.mockResolvedValue({
+      id: "m1",
+      userId: "u1",
+      financialAccountId: "a1",
+      tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
+      annualCap: null,
+    } as never);
+
+    const data = await getRetirementPageData("u1", TODAY);
+
+    expect(data.currentMonthlyContribution).toBe(1_000);
+    expect(data.currentMonthlyEmployerMatch).toBe(0);
+  });
+
+  it("reports no match when none is configured", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+    ] as never);
+    const data = await getRetirementPageData("u1", TODAY);
+    expect(data.currentMonthlyEmployerMatch).toBe(0);
+    expect(data.employerMatch).toBeNull();
+  });
+
   it("skips growth attribution when no snapshot predates the lookback window", async () => {
     plan.findUnique.mockResolvedValue(planRow as never);
     account.findMany.mockResolvedValue([
