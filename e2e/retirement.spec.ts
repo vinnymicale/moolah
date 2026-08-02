@@ -60,7 +60,7 @@ test.describe("retirement page", () => {
     await expect(page.getByText(/^Contribution limits/)).toBeVisible();
     await expect(page.getByText("Growth, last 12 months")).toBeVisible();
     await expect(page.getByText("Drawdown scenarios")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Contributions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Contributions counting toward/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Assumptions" })).toBeVisible();
   });
 
@@ -68,14 +68,17 @@ test.describe("retirement page", () => {
     await page.goto("/retirement");
     await expect(page.getByText("Totals come from your logged contributions.")).toBeVisible();
 
-    await page.getByRole("button", { name: "Enter YTD totals" }).click();
+    // The labels carry the selected tax year, so match around it.
+    const save = page.getByRole("button", { name: /^Save \d{4} totals$/ });
+
+    await page.getByRole("button", { name: /^Enter \d{4} totals$/ }).click();
     for (const label of ["Pre-tax", "Roth", "Employer match", "After-tax"]) {
       await expect(page.getByLabel(label, { exact: true })).toBeVisible();
     }
-    await expect(page.getByRole("button", { name: "Save YTD totals" })).toBeVisible();
+    await expect(save).toBeVisible();
 
     await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByRole("button", { name: "Save YTD totals" })).not.toBeVisible();
+    await expect(save).not.toBeVisible();
   });
 });
 
