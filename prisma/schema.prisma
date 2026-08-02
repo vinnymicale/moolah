@@ -63,6 +63,7 @@ model User {
   contributions         Contribution[]
   contributionSchedules ContributionSchedule[]
   employerMatches       EmployerMatch[]
+  ytdContributions      YtdContribution[]
 }
 
 // Auth.js OAuth account link
@@ -182,6 +183,7 @@ model FinancialAccount {
   contributions         Contribution[]
   contributionSchedules ContributionSchedule[]
   employerMatch         EmployerMatch?
+  ytdContributions      YtdContribution[]
 
   @@index([userId])
 }
@@ -697,6 +699,33 @@ model ContributionSchedule {
   contributions Contribution[]
 
   @@index([userId])
+  @@index([financialAccountId])
+}
+
+// A year-to-date contribution total entered by hand, for people who'd rather
+// copy one number off their 401k statement than log every paycheck.
+//
+// When any row exists for a tax year, these totals replace the sum of that
+// year's Contribution rows in the limit math - see computeContributionLimits.
+// Overriding rather than adding avoids double-counting a deposit that was both
+// logged individually and included in the statement total.
+model YtdContribution {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  financialAccountId String
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
+
+  year   Int
+  amount Decimal            @db.Decimal(14, 2)
+  source ContributionSource
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, year, financialAccountId, source])
+  @@index([userId, year])
   @@index([financialAccountId])
 }
 

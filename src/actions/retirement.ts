@@ -53,6 +53,21 @@ const scheduleSchema = z.object({
   weekday: z.coerce.number().int().min(0).max(6).optional().nullable(),
 });
 
+// A zero amount clears the row rather than storing it, so "I contributed
+// nothing to Roth this year" and "I haven't filled this in" stay the same state.
+const ytdContributionSchema = z.object({
+  financialAccountId: z.string().min(1),
+  year: z.coerce.number().int().min(1900).max(CURRENT_YEAR + 1),
+  entries: z
+    .array(
+      z.object({
+        source: sourceSchema,
+        amount: moneyInput.pipe(z.number().min(0)),
+      }),
+    )
+    .min(1),
+});
+
 const employerMatchSchema = z.object({
   financialAccountId: z.string().min(1),
   tiers: matchTiersSchema.min(1, "Add at least one match tier"),
@@ -63,6 +78,7 @@ export type RetirementPlanInput = z.input<typeof planSchema>;
 export type ContributionInput = z.input<typeof contributionSchema>;
 export type ScheduleInput = z.input<typeof scheduleSchema>;
 export type EmployerMatchInput = z.input<typeof employerMatchSchema>;
+export type YtdContributionInput = z.input<typeof ytdContributionSchema>;
 
 /** Throws unless the account exists and belongs to the user. */
 async function assertOwnsAccount(userId: string, financialAccountId: string): Promise<void> {
@@ -166,6 +182,55 @@ export async function deleteScheduleAction(id: string): Promise<ActionResult> {
     const existing = await prisma.contributionSchedule.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Schedule not found");
     await prisma.contributionSchedule.update({ where: { id }, data: { archived: true } });
+    revalidatePaths();
+  });
+}
+
+/**
+ * Saves hand-entered YTD totals for one account and year, replacing whatever
+ * was there for the sources in `entries`. Zero amounts delete their row so the
+ * "any row exists" override check in computeContributionLimits stays honest.
+ */
+export async function saveYtdContributionsAction(
+  input: YtdContributionInput,
+): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const data = ytdContributionSchema.parse(input);
+    await assertOwnsAccount(userId, data.financialAccountId);
+
+    const { financialAccountId, year } = data;
+    await prisma.$transaction(
+      data.entries.map(({ source, amount }) =>
+        amount > 0
+          ? prisma.ytdContribution.upsert({
+              where: {
+                userId_year_financialAccountId_source: {
+                  userId,
+                  year,
+                  financialAccountId,
+                  source,
+                },
+              },
+              create: { userId, year, financialAccountId, source, amount },
+              update: { amount },
+            })
+          : prisma.ytdContribution.deleteMany({
+              where: { userId, year, financialAccountId, source },
+            }),
+      ),
+    );
+    revalidatePaths();
+  });
+}
+
+/** Drops every YTD total for a year, handing the limit bars back to the contribution log. */
+export async function clearYtdContributionsAction(year: number): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    await prisma.ytdContribution.deleteMany({ where: { userId, year } });
     revalidatePaths();
   });
 }

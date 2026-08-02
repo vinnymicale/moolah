@@ -17,6 +17,8 @@ vi.mock("@/lib/prisma", () => ({
     contribution: { create: vi.fn(), findFirst: vi.fn(), delete: vi.fn() },
     contributionSchedule: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     employerMatch: { upsert: vi.fn() },
+    ytdContribution: { upsert: vi.fn(), deleteMany: vi.fn() },
+    $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
   },
 }));
 
@@ -28,6 +30,8 @@ import {
   createScheduleAction,
   deleteScheduleAction,
   saveEmployerMatchAction,
+  saveYtdContributionsAction,
+  clearYtdContributionsAction,
 } from "./retirement";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -38,6 +42,7 @@ const account = vi.mocked(prisma.financialAccount);
 const contribution = vi.mocked(prisma.contribution);
 const schedule = vi.mocked(prisma.contributionSchedule);
 const match = vi.mocked(prisma.employerMatch);
+const ytd = vi.mocked(prisma.ytdContribution);
 
 const validPlan = {
   birthYear: 1990,
@@ -251,5 +256,78 @@ describe("saveEmployerMatchAction", () => {
     });
     expect(r.ok).toBe(false);
     expect(match.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveYtdContributionsAction", () => {
+  const valid = {
+    financialAccountId: "a1",
+    year: 2026,
+    entries: [{ source: "EMPLOYEE_PRETAX" as const, amount: 18_000 }],
+  };
+
+  it("upserts a positive total", async () => {
+    const r = await saveYtdContributionsAction(valid);
+    expect(r).toEqual({ ok: true });
+    expect(ytd.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId_year_financialAccountId_source: {
+            userId: "u1",
+            year: 2026,
+            financialAccountId: "a1",
+            source: "EMPLOYEE_PRETAX",
+          },
+        },
+      }),
+    );
+  });
+
+  it("deletes rather than stores a zero total", async () => {
+    const r = await saveYtdContributionsAction({
+      ...valid,
+      entries: [{ source: "EMPLOYEE_ROTH", amount: 0 }],
+    });
+    expect(r).toEqual({ ok: true });
+    expect(ytd.upsert).not.toHaveBeenCalled();
+    expect(ytd.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "u1", year: 2026, financialAccountId: "a1", source: "EMPLOYEE_ROTH" },
+    });
+  });
+
+  it("rejects an account the user does not own", async () => {
+    account.findFirst.mockResolvedValue(null as never);
+    const r = await saveYtdContributionsAction(valid);
+    expect(r.ok).toBe(false);
+    expect(ytd.upsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a negative total", async () => {
+    const r = await saveYtdContributionsAction({
+      ...valid,
+      entries: [{ source: "EMPLOYEE_PRETAX", amount: -5 }],
+    });
+    expect(r.ok).toBe(false);
+    expect(ytd.upsert).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits in demo mode", async () => {
+    demoMode.value = true;
+    expect(await saveYtdContributionsAction(valid)).toEqual({ ok: true });
+    expect(ytd.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("clearYtdContributionsAction", () => {
+  it("deletes every total for the year, scoped to the current user", async () => {
+    const r = await clearYtdContributionsAction(2026);
+    expect(r).toEqual({ ok: true });
+    expect(ytd.deleteMany).toHaveBeenCalledWith({ where: { userId: "u1", year: 2026 } });
+  });
+
+  it("short-circuits in demo mode", async () => {
+    demoMode.value = true;
+    expect(await clearYtdContributionsAction(2026)).toEqual({ ok: true });
+    expect(ytd.deleteMany).not.toHaveBeenCalled();
   });
 });

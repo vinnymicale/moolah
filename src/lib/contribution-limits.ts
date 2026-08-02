@@ -8,7 +8,7 @@
 
 import { sumMoney } from "./money";
 import { getLimitsForYear } from "./retirement-limits";
-import type { ContributionRecord, MatchTier } from "./retirement-types";
+import type { ContributionRecord, MatchTier, YtdContributionRecord } from "./retirement-types";
 
 export interface LimitUsage {
   label: string;
@@ -36,6 +36,8 @@ export interface ContributionLimitReport {
   totalAdditions: LimitUsage;
   ira: LimitUsage;
   match: MatchResult | null;
+  /** True when hand-entered YTD totals drove these figures instead of logged contributions. */
+  usesYtdOverride: boolean;
 }
 
 function usage(label: string, used: number, limit: number): LimitUsage {
@@ -101,6 +103,7 @@ export function computeMatch({
 
 export function computeContributionLimits({
   contributions,
+  ytdContributions = [],
   year,
   age,
   iraAccountIds,
@@ -109,6 +112,12 @@ export function computeContributionLimits({
   matchAnnualCap,
 }: {
   contributions: ContributionRecord[];
+  /**
+   * Hand-entered YTD totals for `year`. When non-empty these replace the logged
+   * contributions entirely rather than adding to them, so a deposit that was
+   * both logged and included in a statement total is not counted twice.
+   */
+  ytdContributions?: YtdContributionRecord[];
   year: number;
   age: number;
   iraAccountIds: string[];
@@ -119,7 +128,10 @@ export function computeContributionLimits({
   const { limits, isFallback } = getLimitsForYear(year);
   const catchUpEligible = age >= limits.catchUpAge;
 
-  const thisYear = contributions.filter((c) => c.date.getUTCFullYear() === year);
+  const usesYtdOverride = ytdContributions.length > 0;
+  const thisYear: YtdContributionRecord[] = usesYtdOverride
+    ? ytdContributions
+    : contributions.filter((c) => c.date.getUTCFullYear() === year);
 
   // Elective deferrals: pre-tax and Roth share one limit. Employer match,
   // after-tax, and rollovers are excluded.
@@ -145,6 +157,7 @@ export function computeContributionLimits({
     year,
     isFallbackYear: isFallback,
     catchUpEligible,
+    usesYtdOverride,
     electiveDeferral: usage(
       "Employee contributions",
       deferralUsed,

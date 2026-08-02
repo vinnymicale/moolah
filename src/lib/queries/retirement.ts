@@ -68,6 +68,10 @@ export interface RetirementPageData {
   growth: GrowthAttribution | null;
   drawdown: DrawdownReport | null;
   recentContributions: ContributionDTO[];
+  /** Hand-entered YTD totals for the current tax year. Empty when none are set. */
+  ytdContributions: YtdContributionDTO[];
+  /** The tax year the limit bars and YTD totals cover. */
+  currentTaxYear: number;
   /** Monthly total of the user's own scheduled contributions, match excluded. */
   currentMonthlyContribution: number;
   /** Monthly employer match earned at that contribution pace. */
@@ -82,6 +86,12 @@ export interface EmployerMatchDTO {
   financialAccountId: string;
   tiers: MatchTier[];
   annualCap: number | null;
+}
+
+export interface YtdContributionDTO {
+  financialAccountId: string;
+  source: ContributionSource;
+  amount: number;
 }
 
 /** Average occurrences per month for each frequency, for normalising a schedule to monthly. */
@@ -107,7 +117,9 @@ export async function getRetirementPageData(
   userId: string,
   todayISO: string,
 ): Promise<RetirementPageData> {
-  const [planRow, accountRows, contributionRows, scheduleRows] = await Promise.all([
+  const currentTaxYear = parseISODay(todayISO).getUTCFullYear();
+
+  const [planRow, accountRows, contributionRows, scheduleRows, ytdRows] = await Promise.all([
     prisma.retirementPlan.findUnique({ where: { userId } }),
     prisma.financialAccount.findMany({
       where: { userId, archived: false, type: { in: [...RETIREMENT_TYPES] } },
@@ -120,7 +132,14 @@ export async function getRetirementPageData(
       include: { financialAccount: { select: { name: true } } },
     }),
     prisma.contributionSchedule.findMany({ where: { userId, archived: false } }),
+    prisma.ytdContribution.findMany({ where: { userId, year: currentTaxYear } }),
   ]);
+
+  const ytdContributions: YtdContributionDTO[] = ytdRows.map((y) => ({
+    financialAccountId: y.financialAccountId,
+    source: y.source,
+    amount: toNumber(y.amount),
+  }));
 
   const accounts: RetirementAccountDTO[] = accountRows.map((a) => ({
     id: a.id,
@@ -204,6 +223,8 @@ export async function getRetirementPageData(
       growth: null,
       drawdown: null,
       recentContributions,
+      ytdContributions,
+      currentTaxYear,
       currentMonthlyContribution,
       currentMonthlyEmployerMatch: 0,
       employerMatch,
@@ -306,12 +327,12 @@ export async function getRetirementPageData(
   });
 
   const today = parseISODay(todayISO);
-  const year = today.getUTCFullYear();
-  const age = year - assumptions.birthYear;
+  const age = currentTaxYear - assumptions.birthYear;
 
   const limits = computeContributionLimits({
     contributions,
-    year,
+    ytdContributions,
+    year: currentTaxYear,
     age,
     iraAccountIds: accounts.filter((a) => looksLikeIra(a.name)).map((a) => a.id),
     annualSalary: assumptions.currentAnnualSalary,
@@ -377,6 +398,8 @@ export async function getRetirementPageData(
     growth,
     drawdown,
     recentContributions,
+    ytdContributions,
+    currentTaxYear,
     currentMonthlyContribution,
     currentMonthlyEmployerMatch,
     employerMatch,

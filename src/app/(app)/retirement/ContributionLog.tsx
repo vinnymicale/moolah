@@ -43,10 +43,14 @@ export function ContributionLog({
   accounts,
   recentContributions,
   currentMonthlyContribution,
+  limitsUseYtdOverride,
+  taxYear,
 }: {
   accounts: RetirementAccountDTO[];
   recentContributions: ContributionDTO[];
   currentMonthlyContribution: number;
+  limitsUseYtdOverride: boolean;
+  taxYear: number;
 }) {
   const router = useRouter();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -90,6 +94,13 @@ export function ContributionLog({
   return (
     <div className="card mb-5 p-4">
       <h2 className="mb-3 text-sm font-semibold">Contributions</h2>
+
+      {limitsUseYtdOverride && (
+        <p className="mb-3 text-sm text-muted">
+          Your {taxYear} contribution limits come from the YTD totals you entered above, so
+          entries here don&apos;t count toward them.
+        </p>
+      )}
 
       {currentMonthlyContribution === 0 && (
         <p className="mb-3 text-sm text-muted">
