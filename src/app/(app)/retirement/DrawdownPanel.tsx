@@ -29,10 +29,10 @@ export function DrawdownPanel({ drawdown }: { drawdown: DrawdownReport }) {
         Withdrawing {formatUSDWhole(drawdown.annualWithdrawal)}/year, in today&apos;s dollars.
       </p>
       <p className="mb-3 text-xs text-muted">
-        This picks up where the projection leaves off: it starts from your projected balance at
-        retirement and spends it down. The withdrawal is the share of your target spending the
-        portfolio has to cover on its own, after expected Social Security, held flat in today&apos;s
-        dollars so inflation is already accounted for.
+        This picks up where the projection leaves off: it starts from the balance your accounts are
+        projected to reach at retirement and spends it down. The withdrawal is the share of your
+        target spending the portfolio has to cover on its own, after expected Social Security, held
+        flat in today&apos;s dollars so inflation is already accounted for.
       </p>
       <div className="space-y-2">
         {drawdown.scenarios.map((s) => (
