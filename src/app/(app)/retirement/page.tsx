@@ -15,10 +15,19 @@ import { AssumptionsPanel } from "./AssumptionsPanel";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
-export default async function RetirementPage() {
+export default async function RetirementPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string }>;
+}) {
   const userId = DEMO_MODE ? ((await getDemoUserId()) ?? "") : (await requireUser()).userId;
   const today = await userTodayISO();
-  const data = await getRetirementPageData(userId, today);
+  const yearParam = Number((await searchParams).year);
+  const data = await getRetirementPageData(
+    userId,
+    today,
+    Number.isInteger(yearParam) ? yearParam : undefined,
+  );
 
   if (!data.hasAccounts) {
     return (
@@ -83,6 +92,7 @@ export default async function RetirementPage() {
         limits={data.limits!}
         accounts={data.accounts}
         ytdContributions={data.ytdContributions}
+        availableTaxYears={data.availableTaxYears}
       />
       {data.growth && <GrowthAttribution growth={data.growth} />}
       <DrawdownPanel drawdown={data.drawdown!} />

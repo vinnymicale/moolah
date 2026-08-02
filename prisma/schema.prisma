@@ -650,6 +650,12 @@ model Contribution {
   amount Decimal            @db.Decimal(14, 2)
   source ContributionSource
 
+  // The tax year this counts toward when it differs from date's year. IRA
+  // contributions can be designated for the prior year up to the filing
+  // deadline, so a January-April deposit may belong to the year before. Null
+  // means the deposit year applies.
+  taxYear Int?
+
   transactionId String?      @unique
   transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 

@@ -98,7 +98,7 @@ export function YtdContributionForm({
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted">
           {usesYtdOverride
-            ? `Using your entered ${year} totals instead of the contribution log.`
+            ? `Using the ${year} tax-year totals you entered instead of the contribution log.`
             : "Totals come from your logged contributions."}
         </p>
         <button
@@ -107,7 +107,7 @@ export function YtdContributionForm({
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
         >
-          {open ? "Cancel" : usesYtdOverride ? "Edit YTD totals" : "Enter YTD totals"}
+          {open ? "Cancel" : `${usesYtdOverride ? "Edit" : "Enter"} ${year} totals`}
         </button>
       </div>
 
@@ -149,15 +149,16 @@ export function YtdContributionForm({
           </div>
 
           <p className="text-xs text-muted">
-            Entering totals here overrides the contribution log for {year}. Leave a box blank
-            to record nothing for that source.
+            These are tax-year totals: everything counting toward {year}, including an IRA
+            deposit you made in early {year + 1}. Entering them here overrides the contribution
+            log for {year}. Leave a box blank to record nothing for that source.
           </p>
 
           {error && <p className="text-sm text-expense">{error}</p>}
 
           <div className="flex gap-2">
             <button type="submit" className="btn-primary" disabled={busy || !accountId}>
-              {busy ? "Saving..." : "Save YTD totals"}
+              {busy ? "Saving..." : `Save ${year} totals`}
             </button>
             {usesYtdOverride && (
               <button type="button" className="btn-ghost" onClick={clear} disabled={busy}>
