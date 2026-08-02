@@ -20,6 +20,16 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// The IRA filing-deadline window. April 15 is the usual deadline; it slides for
+// weekends and holidays, so this is only the cutoff for offering the choice, not
+// an enforced deadline.
+function priorYearWindow(dateISO: string): { year: number; priorYear: number } | null {
+  const [y, m, d] = dateISO.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  if (m > 4 || (m === 4 && d > 15)) return null;
+  return { year: y, priorYear: y - 1 };
+}
+
 // Visually hidden label so the compact grid layout doesn't grow, but screen
 // readers still get a real accessible name for each control.
 function HiddenLabel({
@@ -57,8 +67,15 @@ export function ContributionLog({
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState("");
   const [source, setSource] = useState<ContributionSource>("EMPLOYEE_PRETAX");
+  const [applyToPriorYear, setApplyToPriorYear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Only IRA deposits dated before the filing deadline can be backdated, so the
+  // choice is offered only when it's actually available.
+  const isIra = accounts.find((a) => a.id === accountId)?.isIra ?? false;
+  const backdateWindow = priorYearWindow(date);
+  const canBackdate = isIra && backdateWindow !== null && source !== "ROLLOVER";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +87,7 @@ export function ContributionLog({
       date,
       amount,
       source,
+      taxYear: canBackdate && applyToPriorYear ? backdateWindow.priorYear : null,
     });
     if (!r.ok) {
       setError(r.error);
@@ -77,6 +95,7 @@ export function ContributionLog({
       return;
     }
     setAmount("");
+    setApplyToPriorYear(false);
     setBusy(false);
     router.refresh();
   }
@@ -93,7 +112,7 @@ export function ContributionLog({
 
   return (
     <div className="card mb-5 p-4">
-      <h2 className="mb-3 text-sm font-semibold">Contributions</h2>
+      <h2 className="mb-3 text-sm font-semibold">Contributions counting toward {taxYear}</h2>
 
       {limitsUseYtdOverride && (
         <p className="mb-3 text-sm text-muted">
@@ -153,6 +172,20 @@ export function ContributionLog({
             ))}
           </select>
         </HiddenLabel>
+        {canBackdate && (
+          <label className="flex items-start gap-2 text-xs text-muted sm:col-span-5">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={applyToPriorYear}
+              onChange={(e) => setApplyToPriorYear(e.target.checked)}
+            />
+            <span>
+              Count this toward my {backdateWindow.priorYear} IRA limit. You can contribute for{" "}
+              {backdateWindow.priorYear} until the tax filing deadline in April {backdateWindow.year}.
+            </span>
+          </label>
+        )}
         <button type="submit" className="btn-primary sm:col-span-5" disabled={busy || !accountId}>
           {busy ? "Adding..." : "Add contribution"}
         </button>
@@ -161,7 +194,7 @@ export function ContributionLog({
       {error && <p className="mb-3 text-sm text-expense">{error}</p>}
 
       {recentContributions.length === 0 ? (
-        <p className="text-sm text-muted">No contributions recorded yet.</p>
+        <p className="text-sm text-muted">Nothing recorded for {taxYear} yet.</p>
       ) : (
         <ul className="space-y-2">
           {recentContributions.map((c) => (
@@ -170,6 +203,7 @@ export function ContributionLog({
                 <p className="truncate font-medium">{c.accountName}</p>
                 <p className="text-xs text-muted">
                   {c.date} - {SOURCE_OPTIONS.find((s) => s.value === c.source)?.label ?? c.source}
+                  {c.taxYear ? ` - counts toward ${c.taxYear}` : ""}
                   {c.note ? ` - ${c.note}` : ""}
                 </p>
               </div>

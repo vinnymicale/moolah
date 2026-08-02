@@ -159,6 +159,39 @@ describe("createContributionAction", () => {
     });
     expect(r.ok).toBe(false);
   });
+
+  it("stores a prior-year designation", async () => {
+    await createContributionAction({ ...validContribution, taxYear: 2025 });
+    expect(contribution.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ taxYear: 2025 }) }),
+    );
+  });
+
+  it("stores no designation when the tax year matches the deposit year", async () => {
+    await createContributionAction({ ...validContribution, taxYear: 2026 });
+    expect(contribution.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ taxYear: null }) }),
+    );
+  });
+
+  it("stores no designation when none is given", async () => {
+    await createContributionAction(validContribution);
+    expect(contribution.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ taxYear: null }) }),
+    );
+  });
+
+  it("rejects a tax year more than one year before the deposit", async () => {
+    const r = await createContributionAction({ ...validContribution, taxYear: 2024 });
+    expect(r.ok).toBe(false);
+    expect(contribution.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tax year after the deposit year", async () => {
+    const r = await createContributionAction({ ...validContribution, taxYear: 2027 });
+    expect(r.ok).toBe(false);
+    expect(contribution.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("deleteContributionAction", () => {

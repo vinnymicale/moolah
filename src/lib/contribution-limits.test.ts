@@ -142,6 +142,51 @@ describe("computeContributionLimits", () => {
     expect(r.electiveDeferral.used).toBe(2_000);
   });
 
+  it("counts a contribution designated for an earlier tax year against that year", () => {
+    // An IRA deposit made in Feb 2027 but designated for 2026 belongs to 2026.
+    const r = computeContributionLimits({
+      ...opts,
+      iraAccountIds: ["ira1"],
+      contributions: [
+        contrib({
+          amount: 3_000,
+          financialAccountId: "ira1",
+          source: "EMPLOYEE_ROTH",
+          date: new Date("2027-02-01T00:00:00.000Z"),
+          taxYear: 2026,
+        }),
+      ],
+    });
+    expect(r.ira.used).toBe(3_000);
+  });
+
+  it("excludes a deposit dated this year but designated for the prior one", () => {
+    const r = computeContributionLimits({
+      ...opts,
+      iraAccountIds: ["ira1"],
+      contributions: [
+        contrib({
+          amount: 3_000,
+          financialAccountId: "ira1",
+          source: "EMPLOYEE_ROTH",
+          date: new Date("2026-02-01T00:00:00.000Z"),
+          taxYear: 2025,
+        }),
+      ],
+    });
+    expect(r.ira.used).toBe(0);
+  });
+
+  it("falls back to the deposit year when no tax year is designated", () => {
+    const r = computeContributionLimits({
+      ...opts,
+      contributions: [
+        contrib({ amount: 2_000, date: new Date("2026-06-01T00:00:00.000Z"), taxYear: null }),
+      ],
+    });
+    expect(r.electiveDeferral.used).toBe(2_000);
+  });
+
   it("raises the limit and flags eligibility at the catch-up age", () => {
     const under = computeContributionLimits({ ...opts, age: 49, contributions: [] });
     const over = computeContributionLimits({ ...opts, age: 50, contributions: [] });

@@ -40,6 +40,14 @@ export interface ContributionLimitReport {
   usesYtdOverride: boolean;
 }
 
+/**
+ * Which year a contribution counts toward: its explicit designation when set,
+ * otherwise the year it was deposited.
+ */
+export function taxYearOf(c: ContributionRecord): number {
+  return c.taxYear ?? c.date.getUTCFullYear();
+}
+
 function usage(label: string, used: number, limit: number): LimitUsage {
   const remaining = Math.max(0, limit - used);
   return {
@@ -131,7 +139,7 @@ export function computeContributionLimits({
   const usesYtdOverride = ytdContributions.length > 0;
   const thisYear: YtdContributionRecord[] = usesYtdOverride
     ? ytdContributions
-    : contributions.filter((c) => c.date.getUTCFullYear() === year);
+    : contributions.filter((c) => taxYearOf(c) === year);
 
   // Elective deferrals: pre-tax and Roth share one limit. Employer match,
   // after-tax, and rollovers are excluded.

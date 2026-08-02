@@ -138,7 +138,7 @@ describe("getRetirementPageData", () => {
       },
     ] as never);
     ytd.findMany.mockResolvedValue([
-      { financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: "18000" },
+      { year: 2026, financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: "18000" },
     ] as never);
 
     const data = await getRetirementPageData("u1", TODAY);
@@ -353,5 +353,96 @@ describe("getRetirementPageData", () => {
     ] as never);
     const data = await getRetirementPageData("u1", TODAY);
     expect(data.growth).toBeNull();
+  });
+});
+
+describe("getRetirementPageData tax year selection", () => {
+  const accountRow = {
+    id: "a1",
+    name: "401k",
+    type: "RETIREMENT",
+    currentBalance: "0",
+    color: "#000",
+  };
+
+  function contributionRow(id: string, dateISO: string, amount: string, taxYear: number | null) {
+    return {
+      id,
+      financialAccountId: "a1",
+      date: new Date(`${dateISO}T00:00:00.000Z`),
+      amount,
+      source: "EMPLOYEE_PRETAX",
+      taxYear,
+      note: null,
+      financialAccount: { name: "401k" },
+    };
+  }
+
+  beforeEach(() => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([accountRow] as never);
+  });
+
+  it("defaults to the current year when none is selected", async () => {
+    const data = await getRetirementPageData("u1", TODAY);
+    expect(data.currentTaxYear).toBe(2026);
+  });
+
+  it("reports limits for the selected past year", async () => {
+    contribution.findMany.mockResolvedValue([
+      contributionRow("c1", "2025-06-01", "5000", null),
+      contributionRow("c2", "2026-06-01", "1000", null),
+    ] as never);
+    const data = await getRetirementPageData("u1", TODAY, 2025);
+    expect(data.currentTaxYear).toBe(2025);
+    expect(data.limits!.electiveDeferral.used).toBe(5_000);
+  });
+
+  it("scopes the contribution log to the selected year", async () => {
+    contribution.findMany.mockResolvedValue([
+      contributionRow("c1", "2025-06-01", "5000", null),
+      contributionRow("c2", "2026-06-01", "1000", null),
+    ] as never);
+    const data = await getRetirementPageData("u1", TODAY, 2025);
+    expect(data.recentContributions.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("files a backdated deposit under its designated year, not its deposit year", async () => {
+    contribution.findMany.mockResolvedValue([
+      contributionRow("c1", "2026-03-01", "6000", 2025),
+    ] as never);
+    const forPrior = await getRetirementPageData("u1", TODAY, 2025);
+    expect(forPrior.recentContributions.map((c) => c.id)).toEqual(["c1"]);
+    expect(forPrior.limits!.ira.used).toBe(0);
+
+    const forCurrent = await getRetirementPageData("u1", TODAY, 2026);
+    expect(forCurrent.recentContributions).toEqual([]);
+  });
+
+  it("reads YTD totals for the selected year only", async () => {
+    ytd.findMany.mockResolvedValue([
+      { year: 2025, financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: "18000" },
+      { year: 2026, financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: "9000" },
+    ] as never);
+    const data = await getRetirementPageData("u1", TODAY, 2025);
+    expect(data.ytdContributions).toEqual([
+      { financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: 18_000 },
+    ]);
+    expect(data.limits!.electiveDeferral.used).toBe(18_000);
+  });
+
+  it("offers every year with data, newest first, including the current one", async () => {
+    contribution.findMany.mockResolvedValue([
+      contributionRow("c1", "2024-06-01", "1000", null),
+      contributionRow("c2", "2026-03-01", "1000", 2025),
+    ] as never);
+    const data = await getRetirementPageData("u1", TODAY);
+    expect(data.availableTaxYears).toEqual([2026, 2025, 2024]);
+  });
+
+  it("ignores a future year and falls back to the current one", async () => {
+    const data = await getRetirementPageData("u1", TODAY, 2030);
+    expect(data.currentTaxYear).toBe(2026);
+    expect(data.availableTaxYears).toEqual([2026]);
   });
 });

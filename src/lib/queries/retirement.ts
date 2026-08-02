@@ -25,6 +25,7 @@ import { computeRequiredSavings, type RequiredSavings } from "@/lib/required-sav
 import { monthlyEmployerMatch, salaryAfterRealGrowth } from "@/lib/employer-match-monthly";
 import {
   computeContributionLimits,
+  taxYearOf,
   type ContributionLimitReport,
 } from "@/lib/contribution-limits";
 import { modelDrawdown, type DrawdownReport } from "@/lib/drawdown";
@@ -43,6 +44,8 @@ export interface RetirementAccountDTO {
   type: string;
   balance: number;
   color: string;
+  /** IRA-type, so contributions can be designated for the prior tax year. */
+  isIra: boolean;
 }
 
 export interface ContributionDTO {
@@ -51,6 +54,8 @@ export interface ContributionDTO {
   date: string;
   amount: number;
   source: ContributionSource;
+  /** Set only when the contribution counts toward a year other than its deposit year. */
+  taxYear: number | null;
   note: string | null;
 }
 
@@ -72,6 +77,8 @@ export interface RetirementPageData {
   ytdContributions: YtdContributionDTO[];
   /** The tax year the limit bars and YTD totals cover. */
   currentTaxYear: number;
+  /** Tax years that have contributions or YTD totals, newest first, always including the current one. */
+  availableTaxYears: number[];
   /** Monthly total of the user's own scheduled contributions, match excluded. */
   currentMonthlyContribution: number;
   /** Monthly employer match earned at that contribution pace. */
@@ -116,8 +123,13 @@ function looksLikeIra(name: string): boolean {
 export async function getRetirementPageData(
   userId: string,
   todayISO: string,
+  selectedTaxYear?: number,
 ): Promise<RetirementPageData> {
-  const currentTaxYear = parseISODay(todayISO).getUTCFullYear();
+  const thisYear = parseISODay(todayISO).getUTCFullYear();
+  // A future year has no limits to report against, so anything past this one
+  // falls back rather than rendering an empty set of bars.
+  const currentTaxYear =
+    selectedTaxYear != null && selectedTaxYear <= thisYear ? selectedTaxYear : thisYear;
 
   const [planRow, accountRows, contributionRows, scheduleRows, ytdRows] = await Promise.all([
     prisma.retirementPlan.findUnique({ where: { userId } }),
@@ -132,10 +144,12 @@ export async function getRetirementPageData(
       include: { financialAccount: { select: { name: true } } },
     }),
     prisma.contributionSchedule.findMany({ where: { userId, archived: false } }),
-    prisma.ytdContribution.findMany({ where: { userId, year: currentTaxYear } }),
+    prisma.ytdContribution.findMany({ where: { userId } }),
   ]);
 
-  const ytdContributions: YtdContributionDTO[] = ytdRows.map((y) => ({
+  const ytdRowsForYear = ytdRows.filter((y) => y.year === currentTaxYear);
+
+  const ytdContributions: YtdContributionDTO[] = ytdRowsForYear.map((y) => ({
     financialAccountId: y.financialAccountId,
     source: y.source,
     amount: toNumber(y.amount),
@@ -147,6 +161,7 @@ export async function getRetirementPageData(
     type: a.type,
     balance: toNumber(a.currentBalance),
     color: a.color,
+    isIra: looksLikeIra(a.name),
   }));
   const totalBalance = sumMoney(accounts.map((a) => a.balance));
 
@@ -155,7 +170,21 @@ export async function getRetirementPageData(
     date: c.date,
     amount: toNumber(c.amount),
     source: c.source,
+    taxYear: c.taxYear,
   }));
+
+  // The years the picker can offer. The current year is always there even with
+  // nothing logged yet, so a fresh account still has a year to sit on.
+  const availableTaxYears = [
+    ...new Set([
+      thisYear,
+      ...contributions.map(taxYearOf),
+      ...ytdRows.map((y) => y.year),
+      currentTaxYear,
+    ]),
+  ]
+    .filter((y) => y <= thisYear)
+    .sort((a, b) => b - a);
 
   const schedules: ScheduledContribution[] = scheduleRows.map((s) => ({
     financialAccountId: s.financialAccountId,
@@ -196,14 +225,20 @@ export async function getRetirementPageData(
         }
       : null;
 
-  const recentContributions: ContributionDTO[] = contributionRows.slice(0, 10).map((c) => ({
-    id: c.id,
-    accountName: c.financialAccount.name,
-    date: isoDay(c.date),
-    amount: toNumber(c.amount),
-    source: c.source,
-    note: c.note,
-  }));
+  // Scoped to the selected year so the log lines up with the limit bars above
+  // it; a deposit backdated to a prior year shows under that year, not this one.
+  const recentContributions: ContributionDTO[] = contributionRows
+    .filter((c) => (c.taxYear ?? c.date.getUTCFullYear()) === currentTaxYear)
+    .slice(0, 10)
+    .map((c) => ({
+      id: c.id,
+      accountName: c.financialAccount.name,
+      date: isoDay(c.date),
+      amount: toNumber(c.amount),
+      source: c.source,
+      taxYear: c.taxYear,
+      note: c.note,
+    }));
 
   const hasAccounts = accounts.length > 0;
   const hasPlan = planRow !== null && planRow.completedAt !== null;
@@ -225,6 +260,7 @@ export async function getRetirementPageData(
       recentContributions,
       ytdContributions,
       currentTaxYear,
+      availableTaxYears,
       currentMonthlyContribution,
       currentMonthlyEmployerMatch: 0,
       employerMatch,
@@ -334,7 +370,7 @@ export async function getRetirementPageData(
     ytdContributions,
     year: currentTaxYear,
     age,
-    iraAccountIds: accounts.filter((a) => looksLikeIra(a.name)).map((a) => a.id),
+    iraAccountIds: accounts.filter((a) => a.isIra).map((a) => a.id),
     annualSalary: assumptions.currentAnnualSalary,
     matchTiers,
     matchAnnualCap,
@@ -400,6 +436,7 @@ export async function getRetirementPageData(
     recentContributions,
     ytdContributions,
     currentTaxYear,
+    availableTaxYears,
     currentMonthlyContribution,
     currentMonthlyEmployerMatch,
     employerMatch,
