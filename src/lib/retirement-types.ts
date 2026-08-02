@@ -74,6 +74,16 @@ export interface ContributionRecord {
 }
 
 /**
+ * A hand-entered year-to-date total, flattened for the calc layer. One per
+ * account/source pair within a tax year.
+ */
+export interface YtdContributionRecord {
+  financialAccountId: string;
+  amount: number;
+  source: ContributionSource;
+}
+
+/**
  * Convert an annual percentage return to a monthly rate.
  *
  * Uses the twelfth root rather than dividing by 12: at 7% the naive division

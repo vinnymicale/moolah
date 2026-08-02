@@ -12,6 +12,7 @@ vi.mock("@/lib/prisma", () => ({
     contributionSchedule: { findMany: vi.fn() },
     employerMatch: { findFirst: vi.fn() },
     accountSnapshot: { findMany: vi.fn() },
+    ytdContribution: { findMany: vi.fn() },
   },
 }));
 
@@ -26,6 +27,7 @@ const contribution = vi.mocked(prisma.contribution);
 const schedule = vi.mocked(prisma.contributionSchedule);
 const match = vi.mocked(prisma.employerMatch);
 const snapshot = vi.mocked(prisma.accountSnapshot);
+const ytd = vi.mocked(prisma.ytdContribution);
 
 const TODAY = "2026-01-01";
 
@@ -52,6 +54,7 @@ beforeEach(() => {
   schedule.findMany.mockResolvedValue([]);
   match.findFirst.mockResolvedValue(null);
   snapshot.findMany.mockResolvedValue([]);
+  ytd.findMany.mockResolvedValue([]);
 });
 
 describe("getRetirementPageData", () => {
@@ -116,6 +119,58 @@ describe("getRetirementPageData", () => {
     const data = await getRetirementPageData("u1", TODAY);
     // $500 biweekly is 26 payments a year: 500 * 26 / 12 = 1083.333..., rounded to cents.
     expect(data.currentMonthlyContribution).toBe(1_083.33);
+  });
+
+  it("drives the limit bars off hand-entered YTD totals when they exist", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+    ] as never);
+    contribution.findMany.mockResolvedValue([
+      {
+        id: "c1",
+        financialAccountId: "a1",
+        date: new Date("2026-02-01T00:00:00.000Z"),
+        amount: "1000",
+        source: "EMPLOYEE_PRETAX",
+        note: null,
+        financialAccount: { name: "401k" },
+      },
+    ] as never);
+    ytd.findMany.mockResolvedValue([
+      { financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: "18000" },
+    ] as never);
+
+    const data = await getRetirementPageData("u1", TODAY);
+    // The $1,000 logged contribution is replaced, not added to.
+    expect(data.limits!.electiveDeferral.used).toBe(18_000);
+    expect(data.limits!.usesYtdOverride).toBe(true);
+    expect(data.ytdContributions).toEqual([
+      { financialAccountId: "a1", source: "EMPLOYEE_PRETAX", amount: 18_000 },
+    ]);
+    expect(data.currentTaxYear).toBe(2026);
+  });
+
+  it("falls back to logged contributions when no YTD totals are entered", async () => {
+    plan.findUnique.mockResolvedValue(planRow as never);
+    account.findMany.mockResolvedValue([
+      { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+    ] as never);
+    contribution.findMany.mockResolvedValue([
+      {
+        id: "c1",
+        financialAccountId: "a1",
+        date: new Date("2026-02-01T00:00:00.000Z"),
+        amount: "1000",
+        source: "EMPLOYEE_PRETAX",
+        note: null,
+        financialAccount: { name: "401k" },
+      },
+    ] as never);
+
+    const data = await getRetirementPageData("u1", TODAY);
+    expect(data.limits!.electiveDeferral.used).toBe(1_000);
+    expect(data.limits!.usesYtdOverride).toBe(false);
   });
 
   it("computes a Coast FIRE projection alongside the contributing one", async () => {

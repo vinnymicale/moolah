@@ -1,5 +1,7 @@
 import { formatUSDWhole } from "@/lib/money";
 import type { ContributionLimitReport, LimitUsage } from "@/lib/contribution-limits";
+import type { RetirementAccountDTO, YtdContributionDTO } from "@/lib/queries/retirement";
+import { YtdContributionForm } from "./YtdContributionForm";
 
 function LimitBar({ usage }: { usage: LimitUsage }) {
   return (
@@ -20,7 +22,15 @@ function LimitBar({ usage }: { usage: LimitUsage }) {
   );
 }
 
-export function ContributionLimits({ limits }: { limits: ContributionLimitReport }) {
+export function ContributionLimits({
+  limits,
+  accounts,
+  ytdContributions,
+}: {
+  limits: ContributionLimitReport;
+  accounts: RetirementAccountDTO[];
+  ytdContributions: YtdContributionDTO[];
+}) {
   return (
     <div className="card mb-5 p-4">
       <h2 className="mb-3 text-sm font-semibold">Contribution limits ({limits.year})</h2>
@@ -42,6 +52,13 @@ export function ContributionLimits({ limits }: { limits: ContributionLimitReport
           Figures use the most recent published limits.
         </p>
       )}
+
+      <YtdContributionForm
+        accounts={accounts}
+        ytdContributions={ytdContributions}
+        year={limits.year}
+        usesYtdOverride={limits.usesYtdOverride}
+      />
     </div>
   );
 }
