@@ -27,7 +27,7 @@ export interface DrawdownReport {
   annualWithdrawal: number;
 }
 
-const DEFAULT_MAX_YEARS = 40;
+export const DEFAULT_MAX_YEARS = 40;
 const SCENARIO_SPREAD = 2;
 const STRESS_YEARS = 5;
 const STRESS_PENALTY = 10;

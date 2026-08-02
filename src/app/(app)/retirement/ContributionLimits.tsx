@@ -58,10 +58,28 @@ export function ContributionLimits({
       </div>
 
       {limits.match && limits.match.forfeited > 0 && (
-        <p className="mt-4 rounded-lg border border-expense/30 bg-expense/10 px-3 py-2 text-sm text-expense">
-          You&apos;re on pace to leave {formatUSDWhole(limits.match.forfeited)} of employer match
-          unclaimed this year.
-        </p>
+        <div className="mt-4 rounded-lg border border-expense/30 bg-expense/10 px-3 py-2">
+          <p className="text-sm text-expense">
+            You&apos;re on pace to leave {formatUSDWhole(limits.match.forfeited)} of employer match
+            unclaimed this year.
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Your employer will match up to {formatUSDWhole(limits.match.maxAnnualMatch)} this year
+            if you defer enough to fill every tier of their formula. The{" "}
+            {formatUSDWhole(limits.electiveDeferral.used)} you&apos;ve deferred so far earns{" "}
+            {formatUSDWhole(limits.match.projectedMatch)} of that, or{" "}
+            {Math.round(limits.match.capturedPercent)}%. The gap is the part of the formula your
+            contributions never reach.
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            This compares what you&apos;ve actually put in this year against the full-year formula,
+            so it will look worse early in the year and close on its own as payroll deductions keep
+            landing. To claim the rest, raise your payroll deferral percentage with your employer -
+            match is earned on what you defer, so contributing more of your own pay is the only way
+            to capture it. Matching dollars don&apos;t count toward your employee limit above,
+            though they do count toward total additions.
+          </p>
+        </div>
       )}
 
       {limits.isFallbackYear && (
