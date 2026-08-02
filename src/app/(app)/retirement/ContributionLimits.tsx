@@ -2,6 +2,7 @@ import { formatUSDWhole } from "@/lib/money";
 import type { ContributionLimitReport, LimitUsage } from "@/lib/contribution-limits";
 import type { RetirementAccountDTO, YtdContributionDTO } from "@/lib/queries/retirement";
 import { YtdContributionForm } from "./YtdContributionForm";
+import { TaxYearPicker } from "./TaxYearPicker";
 
 function LimitBar({ usage }: { usage: LimitUsage }) {
   return (
@@ -26,18 +27,34 @@ export function ContributionLimits({
   limits,
   accounts,
   ytdContributions,
+  availableTaxYears,
 }: {
   limits: ContributionLimitReport;
   accounts: RetirementAccountDTO[];
   ytdContributions: YtdContributionDTO[];
+  availableTaxYears: number[];
 }) {
   return (
     <div className="card mb-5 p-4">
-      <h2 className="mb-3 text-sm font-semibold">Contribution limits ({limits.year})</h2>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">Contribution limits ({limits.year})</h2>
+        <TaxYearPicker year={limits.year} years={availableTaxYears} />
+      </div>
+      <p className="mb-3 text-xs text-muted">
+        Counts what you put in between January 1 and December 31, {limits.year}. IRAs get a longer
+        window - see below.
+      </p>
       <div className="space-y-4">
         <LimitBar usage={limits.electiveDeferral} />
         <LimitBar usage={limits.totalAdditions} />
-        <LimitBar usage={limits.ira} />
+        <div>
+          <LimitBar usage={limits.ira} />
+          <p className="mt-1 text-xs text-muted">
+            You can contribute to an IRA for {limits.year} until the tax filing deadline in April{" "}
+            {limits.year + 1}. When you log one, mark it as counting toward {limits.year} and it
+            lands in this bar.
+          </p>
+        </div>
       </div>
 
       {limits.match && limits.match.forfeited > 0 && (

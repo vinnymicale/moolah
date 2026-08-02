@@ -37,6 +37,10 @@ const contributionSchema = z.object({
   date: z.string().min(1),
   amount: moneyInput.pipe(z.number().positive("Amount must be greater than zero")),
   source: sourceSchema,
+  // Only meaningful when it differs from the deposit year; null means "use the
+  // deposit year". Bounded to the deposit year or the one before it, since
+  // that's the only backdating the IRS allows.
+  taxYear: z.coerce.number().int().min(1900).max(CURRENT_YEAR + 1).optional().nullable(),
   transactionId: z.string().optional().nullable(),
   note: z.string().max(200).optional().nullable(),
 });
@@ -124,13 +128,27 @@ export async function createContributionAction(input: ContributionInput): Promis
     const { userId } = await requireUser();
     const data = contributionSchema.parse(input);
     await assertOwnsAccount(userId, data.financialAccountId);
+    const date = parseISODay(data.date);
+
+    // Store the designation only when it actually differs from the deposit
+    // year, so the fallback stays the single source of truth for the common case.
+    const depositYear = date.getUTCFullYear();
+    let taxYear: number | null = null;
+    if (data.taxYear != null && data.taxYear !== depositYear) {
+      if (data.taxYear !== depositYear - 1) {
+        throw new UserError("A contribution can only count toward its deposit year or the one before it");
+      }
+      taxYear = data.taxYear;
+    }
+
     await prisma.contribution.create({
       data: {
         userId,
         financialAccountId: data.financialAccountId,
-        date: parseISODay(data.date),
+        date,
         amount: data.amount,
         source: data.source,
+        taxYear,
         transactionId: data.transactionId || null,
         note: data.note || null,
       },

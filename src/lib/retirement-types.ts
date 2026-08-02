@@ -71,6 +71,13 @@ export interface ContributionRecord {
   date: Date;
   amount: number;
   source: ContributionSource;
+  /**
+   * The tax year this contribution counts toward, when it differs from the
+   * deposit date's year. IRA contributions can be designated for the prior year
+   * up to the filing deadline, so a March deposit may belong to the year before.
+   * Null means "use the deposit year".
+   */
+  taxYear?: number | null;
 }
 
 /**
