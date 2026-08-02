@@ -41,7 +41,9 @@ test.describe("retirement page", () => {
     await page.goto("/retirement");
     await expect(page.getByText("Retirement balance")).toBeVisible();
     await expect(page.getByText(/^Projected at \d+$/)).toBeVisible();
-    await expect(page.getByText("Target", { exact: true })).toBeVisible();
+    // Scoped to the stat card: "Target" also appears as the projection chart's
+    // reference-line label, which would trip strict mode.
+    await expect(page.locator("span", { hasText: /^Target$/ })).toBeVisible();
     await expect(page.getByText("Monthly contribution")).toBeVisible();
   });
 
@@ -60,6 +62,20 @@ test.describe("retirement page", () => {
     await expect(page.getByText("Drawdown scenarios")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Contributions" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Assumptions" })).toBeVisible();
+  });
+
+  test("expands the YTD totals form with a box per source", async ({ page }) => {
+    await page.goto("/retirement");
+    await expect(page.getByText("Totals come from your logged contributions.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Enter YTD totals" }).click();
+    for (const label of ["Pre-tax", "Roth", "Employer match", "After-tax"]) {
+      await expect(page.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole("button", { name: "Save YTD totals" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "Save YTD totals" })).not.toBeVisible();
   });
 });
 

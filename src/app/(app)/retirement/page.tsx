@@ -79,13 +79,19 @@ export default async function RetirementPage() {
         requiredSavings={data.requiredSavings!}
         employerMatchMonthly={data.currentMonthlyEmployerMatch}
       />
-      <ContributionLimits limits={data.limits!} />
+      <ContributionLimits
+        limits={data.limits!}
+        accounts={data.accounts}
+        ytdContributions={data.ytdContributions}
+      />
       {data.growth && <GrowthAttribution growth={data.growth} />}
       <DrawdownPanel drawdown={data.drawdown!} />
       <ContributionLog
         accounts={data.accounts}
         recentContributions={data.recentContributions}
         currentMonthlyContribution={data.currentMonthlyContribution}
+        limitsUseYtdOverride={data.limits!.usesYtdOverride}
+        taxYear={data.currentTaxYear}
       />
       <AssumptionsPanel
         assumptions={data.assumptions!}
