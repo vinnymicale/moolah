@@ -75,6 +75,7 @@ describe("computeContributionLimits", () => {
     annualSalary: 100_000,
     matchTiers: null,
     matchAnnualCap: null,
+    annualDeferralPace: 0,
   };
 
   it("combines pre-tax and Roth deferrals against one limit", () => {
@@ -213,6 +214,17 @@ describe("computeContributionLimits", () => {
     expect(with_.match!.maxAnnualMatch).toBe(4_000);
   });
 
+  it("drives the employer match projection off the payroll pace, not YTD totals", () => {
+    const r = computeContributionLimits({
+      ...opts,
+      matchTiers: tiers,
+      annualDeferralPace: 20_000,
+      contributions: [contrib({ amount: 500, source: "EMPLOYEE_PRETAX" })],
+    });
+    expect(r.match!.projectedMatch).toBe(4_000);
+    expect(r.match!.forfeited).toBe(0);
+  });
+
   it("reports no override when there are no YTD totals", () => {
     const r = computeContributionLimits({ ...opts, contributions: [contrib()] });
     expect(r.usesYtdOverride).toBe(false);
@@ -227,6 +239,7 @@ describe("computeContributionLimits with hand-entered YTD totals", () => {
     annualSalary: 100_000,
     matchTiers: null,
     matchAnnualCap: null,
+    annualDeferralPace: 0,
   };
 
   const ytd = (over: Partial<YtdContributionRecord> = {}): YtdContributionRecord => ({
@@ -294,14 +307,15 @@ describe("computeContributionLimits with hand-entered YTD totals", () => {
     expect(r.ira.used).toBe(4_000);
   });
 
-  it("drives the employer match calculation off the override", () => {
+  it("ignores YTD totals for the employer match, using the payroll pace instead", () => {
     const r = computeContributionLimits({
       ...opts,
       matchTiers: tiers,
+      annualDeferralPace: 4_000,
       contributions: [contrib({ amount: 500, source: "EMPLOYEE_PRETAX" })],
       ytdContributions: [ytd({ amount: 20_000, source: "EMPLOYEE_PRETAX" })],
     });
-    expect(r.match!.projectedMatch).toBe(4_000);
-    expect(r.match!.forfeited).toBe(0);
+    expect(r.match!.projectedMatch).toBe(3_500);
+    expect(r.match!.forfeited).toBe(500);
   });
 });
