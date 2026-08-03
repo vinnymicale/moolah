@@ -10,6 +10,7 @@ import { ProjectionChart } from "./ProjectionChart";
 import { ContributionLimits } from "./ContributionLimits";
 import { GrowthAttribution } from "./GrowthAttribution";
 import { DrawdownPanel } from "./DrawdownPanel";
+import { ContributionSchedules } from "./ContributionSchedules";
 import { ContributionLog } from "./ContributionLog";
 import { AssumptionsPanel } from "./AssumptionsPanel";
 
@@ -96,6 +97,7 @@ export default async function RetirementPage({
       />
       {data.growth && <GrowthAttribution growth={data.growth} />}
       <DrawdownPanel drawdown={data.drawdown!} />
+      <ContributionSchedules schedules={data.contributionSchedules} />
       <ContributionLog
         accounts={data.accounts}
         recentContributions={data.recentContributions}
@@ -107,6 +109,7 @@ export default async function RetirementPage({
         assumptions={data.assumptions!}
         accounts={data.accounts}
         employerMatch={data.employerMatch}
+        schedules={data.contributionSchedules}
       />
     </div>
   );

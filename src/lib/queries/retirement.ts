@@ -10,6 +10,9 @@ import { addUTCMonths, isoDay, parseISODay } from "@/lib/dates";
 import { getNetWorthHistory } from "@/lib/snapshots";
 import {
   matchTiersSchema,
+  OCCURRENCES_PER_YEAR,
+  percentScheduleAmount,
+  type ContributionBasis,
   type MatchTier,
   type RetirementAssumptions,
   type ContributionRecord,
@@ -81,6 +84,8 @@ export interface RetirementPageData {
   availableTaxYears: number[];
   /** Monthly total of the user's own scheduled contributions, match excluded. */
   currentMonthlyContribution: number;
+  /** Active schedules with their cadence and implied rate, for display. */
+  contributionSchedules: ContributionScheduleDTO[];
   /** Monthly employer match earned at that contribution pace. */
   currentMonthlyEmployerMatch: number;
   /** The saved match formula, for display and editing. Null when none is set. */
@@ -93,6 +98,24 @@ export interface EmployerMatchDTO {
   financialAccountId: string;
   tiers: MatchTier[];
   annualCap: number | null;
+}
+
+/**
+ * One active contribution schedule, for display. `amount` is the per-occurrence
+ * dollars actually used in the projection - derived from salary for percent
+ * schedules - and `percentOfSalary` is filled in for both bases so a flat-dollar
+ * schedule shows the rate it really works out to.
+ */
+export interface ContributionScheduleDTO {
+  id: string;
+  financialAccountId: string;
+  accountName: string;
+  basis: ContributionBasis;
+  amount: number;
+  percentOfSalary: number | null;
+  source: ContributionSource;
+  frequency: ScheduledContribution["frequency"];
+  interval: number;
 }
 
 export interface YtdContributionDTO {
@@ -186,9 +209,23 @@ export async function getRetirementPageData(
     .filter((y) => y <= thisYear)
     .sort((a, b) => b - a);
 
-  const schedules: ScheduledContribution[] = scheduleRows.map((s) => ({
+  // Percent-of-salary schedules resolve against salary here so nothing
+  // downstream has to care about the basis. Without a salary on file they
+  // contribute nothing rather than throwing; the page flags that separately.
+  const salaryForSchedules = planRow ? toNumber(planRow.currentAnnualSalary) : 0;
+
+  const schedules: (ScheduledContribution & { basis: ContributionBasis })[] = scheduleRows.map((s) => ({
     financialAccountId: s.financialAccountId,
-    amount: toNumber(s.amount),
+    basis: s.basis,
+    amount:
+      s.basis === "PERCENT_OF_SALARY"
+        ? percentScheduleAmount({
+            percentOfSalary: toNumber(s.percentOfSalary),
+            annualSalary: salaryForSchedules,
+            frequency: s.frequency,
+            interval: s.interval,
+          })
+        : toNumber(s.amount),
     source: s.source,
     frequency: s.frequency,
     interval: s.interval,
@@ -197,6 +234,31 @@ export async function getRetirementPageData(
     dayOfMonth: s.dayOfMonth,
     weekday: s.weekday,
   }));
+
+  const accountNames = new Map(accountRows.map((a) => [a.id, a.name]));
+
+  const contributionSchedules: ContributionScheduleDTO[] = scheduleRows.map((row, i) => {
+    const s = schedules[i];
+    // Dollar schedules get their rate derived too, so a $258 biweekly deferral
+    // reads as the 5.8% it actually is rather than the 6% the user intended.
+    const annual = (s.amount * OCCURRENCES_PER_YEAR[s.frequency]) / (s.interval || 1);
+    return {
+      id: row.id,
+      financialAccountId: s.financialAccountId,
+      accountName: accountNames.get(s.financialAccountId) ?? "Account",
+      basis: s.basis,
+      amount: s.amount,
+      percentOfSalary:
+        s.basis === "PERCENT_OF_SALARY"
+          ? toNumber(row.percentOfSalary)
+          : salaryForSchedules > 0
+            ? (annual / salaryForSchedules) * 100
+            : null,
+      source: s.source,
+      frequency: s.frequency,
+      interval: s.interval,
+    };
+  });
 
   const currentMonthlyContribution =
     Math.round(schedules.reduce((sum, s) => sum + scheduleToMonthly(s), 0) * 100) / 100;
@@ -262,6 +324,7 @@ export async function getRetirementPageData(
       currentTaxYear,
       availableTaxYears,
       currentMonthlyContribution,
+      contributionSchedules,
       currentMonthlyEmployerMatch: 0,
       employerMatch,
       realAnnualReturn: 0,
@@ -301,15 +364,44 @@ export async function getRetirementPageData(
   // One schedule per year steps the matched amount up over the horizon; at a
   // zero growth rate every rung is identical and this collapses to a single
   // flat match.
-  const projectedSchedules: ScheduledContribution[] = [...schedules];
+  const startOfHorizon = parseISODay(todayISO);
+  const monthsToRetirement = monthsUntilRetirement(assumptions, startOfHorizon);
+  const yearsToRetirement = Math.ceil(monthsToRetirement / 12);
+
+  // A percent-of-salary schedule holds its share of pay as salary rises, so it
+  // gets the same yearly rungs as the match below rather than the flat
+  // resolved-today amount. Dollar schedules stay flat: that is what the user
+  // literally asked payroll for.
+  const projectedSchedules: ScheduledContribution[] = schedules.flatMap((s) => {
+    if (s.basis !== "PERCENT_OF_SALARY" || assumptions.salaryGrowthRate === 0) {
+      return [s];
+    }
+    const rungs: ScheduledContribution[] = [];
+    for (let y = 0; y < yearsToRetirement; y++) {
+      const growth = salaryAfterRealGrowth(1, assumptions.salaryGrowthRate, y * 12);
+      const rungStart = addUTCMonths(startOfHorizon, y * 12);
+      const rungEnd =
+        y === yearsToRetirement - 1
+          ? addUTCMonths(startOfHorizon, monthsToRetirement)
+          : addUTCMonths(startOfHorizon, (y + 1) * 12 - 1);
+      // A schedule that ends before this rung starts contributes nothing to it.
+      if (s.endDate && s.endDate.getTime() < rungStart.getTime()) break;
+      rungs.push({
+        ...s,
+        amount: s.amount * growth,
+        startDate: s.startDate.getTime() > rungStart.getTime() ? s.startDate : rungStart,
+        endDate: s.endDate && s.endDate.getTime() < rungEnd.getTime() ? s.endDate : rungEnd,
+      });
+    }
+    return rungs;
+  });
+
   if (matchTiers && matchRow && monthlyDeferral > 0) {
-    const startOfHorizon = parseISODay(todayISO);
-    const monthsToRetirement = monthsUntilRetirement(assumptions, startOfHorizon);
-    const yearsToRetirement = Math.ceil(monthsToRetirement / 12);
     for (let y = 0; y < yearsToRetirement; y++) {
       // The deferral is assumed to hold as a share of pay, so it rises with
       // salary; otherwise a raise would shrink the percentage deferred and eat
-      // into the match rather than growing it.
+      // into the match rather than growing it. (Percent schedules already do
+      // this literally above; this keeps dollar schedules matched the same way.)
       const growth = salaryAfterRealGrowth(1, assumptions.salaryGrowthRate, y * 12);
       const amount = monthlyEmployerMatch({
         monthlyDeferral: monthlyDeferral * growth,
@@ -439,6 +531,7 @@ export async function getRetirementPageData(
     currentTaxYear,
     availableTaxYears,
     currentMonthlyContribution,
+    contributionSchedules,
     currentMonthlyEmployerMatch,
     employerMatch,
     realAnnualReturn,

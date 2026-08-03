@@ -606,6 +606,13 @@ enum ContributionSource {
   ROLLOVER
 }
 
+// How a contribution schedule states its size. A flat dollar amount drifts as a
+// share of pay once salary changes; a percentage tracks it.
+enum ContributionBasis {
+  AMOUNT
+  PERCENT_OF_SALARY
+}
+
 // Per-user retirement assumptions, captured by the setup wizard and editable
 // afterwards. completedAt distinguishes "wizard never run" (null) from "run and
 // saved", which is what gates the wizard on /retirement.
@@ -688,7 +695,12 @@ model ContributionSchedule {
   financialAccountId String
   financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
 
-  amount Decimal            @db.Decimal(14, 2)
+  // Exactly one of these is set, per basis. A percent schedule derives its
+  // per-occurrence dollars from salary at read time, so it never goes stale.
+  basis           ContributionBasis @default(AMOUNT)
+  amount          Decimal?          @db.Decimal(14, 2)
+  percentOfSalary Decimal?          @db.Decimal(5, 2)
+
   source ContributionSource
 
   frequency  Frequency

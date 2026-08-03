@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { saveRetirementPlanAction, saveEmployerMatchAction } from "@/actions/retirement";
 import { formatUSDWhole } from "@/lib/money";
 import type { RetirementAssumptions } from "@/lib/retirement-types";
-import type { EmployerMatchDTO, RetirementAccountDTO } from "@/lib/queries/retirement";
+import type {
+  ContributionScheduleDTO,
+  EmployerMatchDTO,
+  RetirementAccountDTO,
+} from "@/lib/queries/retirement";
 
 type TierDraft = { matchPercent: string; upToPercentOfSalary: string };
 
@@ -13,11 +17,19 @@ export function AssumptionsPanel({
   assumptions,
   accounts,
   employerMatch,
+  schedules,
 }: {
   assumptions: RetirementAssumptions;
   accounts: RetirementAccountDTO[];
   employerMatch: EmployerMatchDTO | null;
+  schedules: ContributionScheduleDTO[];
 }) {
+  // Only elective deferrals count toward the match, matching what the limits
+  // panel judges you against.
+  const deferralPercent = schedules
+    .filter((s) => s.source === "EMPLOYEE_PRETAX" || s.source === "EMPLOYEE_ROTH")
+    .reduce((sum, s) => sum + (s.percentOfSalary ?? 0), 0);
+
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -145,6 +157,10 @@ export function AssumptionsPanel({
           <SummaryItem
             label="Real salary growth"
             value={`${assumptions.salaryGrowthRate}%`}
+          />
+          <SummaryItem
+            label="Your deferral"
+            value={deferralPercent > 0 ? `${deferralPercent.toFixed(1)}% of salary` : "Not set"}
           />
           <SummaryItem
             label="Employer match"
