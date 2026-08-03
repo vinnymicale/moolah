@@ -26,6 +26,11 @@ export interface MatchResult {
   /** maxAnnualMatch - projectedMatch: free money left on the table. */
   forfeited: number;
   capturedPercent: number;
+  /** Deferral, as a percent of salary, that fully fills every tier of the formula. */
+  deferralPercentToMaxMatch: number;
+  /** Current deferral as a percent of salary, for comparison against deferralPercentToMaxMatch. */
+  currentDeferralPercent: number;
+  tiers: MatchTier[];
 }
 
 export interface ContributionLimitReport {
@@ -78,12 +83,21 @@ export function computeMatch({
   annualCap: number | null;
 }): MatchResult {
   if (annualSalary <= 0 || tiers.length === 0) {
-    return { maxAnnualMatch: 0, projectedMatch: 0, forfeited: 0, capturedPercent: 0 };
+    return {
+      maxAnnualMatch: 0,
+      projectedMatch: 0,
+      forfeited: 0,
+      capturedPercent: 0,
+      deferralPercentToMaxMatch: 0,
+      currentDeferralPercent: 0,
+      tiers,
+    };
   }
 
   let maxMatch = 0;
   let earnedMatch = 0;
   let salaryConsumed = 0;
+  let salaryPercentConsumed = 0;
 
   for (const tier of tiers) {
     const tierDollars = (annualSalary * tier.upToPercentOfSalary) / 100;
@@ -93,6 +107,7 @@ export function computeMatch({
     const deferralIntoTier = Math.max(0, Math.min(tierDollars, annualDeferral - salaryConsumed));
     earnedMatch += (deferralIntoTier * tier.matchPercent) / 100;
     salaryConsumed += tierDollars;
+    salaryPercentConsumed += tier.upToPercentOfSalary;
   }
 
   if (annualCap !== null) {
@@ -106,6 +121,9 @@ export function computeMatch({
     projectedMatch: round(earnedMatch),
     forfeited: round(Math.max(0, maxMatch - earnedMatch)),
     capturedPercent: maxMatch > 0 ? (earnedMatch / maxMatch) * 100 : 0,
+    deferralPercentToMaxMatch: salaryPercentConsumed,
+    currentDeferralPercent: (annualDeferral / annualSalary) * 100,
+    tiers,
   };
 }
 

@@ -1,8 +1,22 @@
 import { formatUSDWhole } from "@/lib/money";
-import type { ContributionLimitReport, LimitUsage } from "@/lib/contribution-limits";
+import type { ContributionLimitReport, LimitUsage, MatchResult } from "@/lib/contribution-limits";
 import type { RetirementAccountDTO, YtdContributionDTO } from "@/lib/queries/retirement";
 import { YtdContributionForm } from "./YtdContributionForm";
 import { TaxYearPicker } from "./TaxYearPicker";
+
+function describeFormula(match: MatchResult): string {
+  if (match.tiers.length === 1) {
+    const [tier] = match.tiers;
+    return `${tier.matchPercent}% match on the first ${tier.upToPercentOfSalary}% of salary you defer`;
+  }
+  let floor = 0;
+  const parts = match.tiers.map((tier) => {
+    const part = `${tier.matchPercent}% on the next ${tier.upToPercentOfSalary}% (${floor}-${floor + tier.upToPercentOfSalary}% of salary)`;
+    floor += tier.upToPercentOfSalary;
+    return part;
+  });
+  return parts.join(", then ");
+}
 
 function LimitBar({ usage }: { usage: LimitUsage }) {
   return (
@@ -64,20 +78,17 @@ export function ContributionLimits({
             unclaimed this year.
           </p>
           <p className="mt-2 text-xs text-muted">
-            Your employer will match up to {formatUSDWhole(limits.match.maxAnnualMatch)} this year
-            if you defer enough to fill every tier of their formula. The{" "}
-            {formatUSDWhole(limits.electiveDeferral.used)} you&apos;ve deferred so far earns{" "}
-            {formatUSDWhole(limits.match.projectedMatch)} of that, or{" "}
-            {Math.round(limits.match.capturedPercent)}%. The gap is the part of the formula your
-            contributions never reach.
+            Your employer&apos;s formula: {describeFormula(limits.match)}. You&apos;re deferring{" "}
+            {limits.match.currentDeferralPercent.toFixed(1)}% of salary, but it takes{" "}
+            {limits.match.deferralPercentToMaxMatch}% to capture the full{" "}
+            {formatUSDWhole(limits.match.maxAnnualMatch)} - so you&apos;re on pace for only{" "}
+            {formatUSDWhole(limits.match.projectedMatch)} ({Math.round(limits.match.capturedPercent)}
+            %).
           </p>
           <p className="mt-2 text-xs text-muted">
-            This compares what you&apos;ve actually put in this year against the full-year formula,
-            so it will look worse early in the year and close on its own as payroll deductions keep
-            landing. To claim the rest, raise your payroll deferral percentage with your employer -
-            match is earned on what you defer, so contributing more of your own pay is the only way
-            to capture it. Matching dollars don&apos;t count toward your employee limit above,
-            though they do count toward total additions.
+            Raise your payroll deferral to at least {limits.match.deferralPercentToMaxMatch}% of
+            salary to stop leaving this on the table. Matching dollars don&apos;t count toward your
+            employee limit above, though they do count toward total additions.
           </p>
         </div>
       )}
