@@ -30,7 +30,11 @@ export interface RetirementMilestoneInput {
   annualSalary: number;
   age: number;
   coastFireReached: boolean;
-  /** Employer match left unclaimed this year; zero means fully captured. */
+  /**
+   * Employer match left unclaimed this year. Treated as fully captured below a
+   * dollar, since payroll rounding leaves cents on the table even at a deferral
+   * set exactly to the match threshold.
+   */
   matchForfeited: number;
 }
 
@@ -126,7 +130,7 @@ export function computeMilestones({
     }
 
     // Full employer match captured. Only meaningful once something is saved.
-    if (retirement.matchForfeited === 0 && retirement.balance > 0) {
+    if (retirement.matchForfeited < 1 && retirement.balance > 0) {
       const year = new Date().getUTCFullYear();
       out.push({
         id: `retire-full-match-${year}`,

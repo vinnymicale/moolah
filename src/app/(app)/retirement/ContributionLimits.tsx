@@ -4,6 +4,15 @@ import type { RetirementAccountDTO, YtdContributionDTO } from "@/lib/queries/ret
 import { YtdContributionForm } from "./YtdContributionForm";
 import { TaxYearPicker } from "./TaxYearPicker";
 
+/**
+ * A deferral rate, shown to one decimal only when it has one. Both the current
+ * rate and the target run through this so a genuine gap never renders as "6.0%
+ * of salary, but it takes 6%".
+ */
+function formatPercent(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
 function describeFormula(match: MatchResult): string {
   if (match.tiers.length === 1) {
     const [tier] = match.tiers;
@@ -71,7 +80,7 @@ export function ContributionLimits({
         </div>
       </div>
 
-      {limits.match && limits.match.forfeited > 0 && (
+      {limits.match?.forfeitureIsMaterial && (
         <div className="mt-4 rounded-lg border border-expense/30 bg-expense/10 px-3 py-2">
           <p className="text-sm text-expense">
             You&apos;re on pace to leave {formatUSDWhole(limits.match.forfeited)} of employer match
@@ -79,15 +88,15 @@ export function ContributionLimits({
           </p>
           <p className="mt-2 text-xs text-muted">
             Your employer&apos;s formula: {describeFormula(limits.match)}. You&apos;re deferring{" "}
-            {limits.match.currentDeferralPercent.toFixed(1)}% of salary, but it takes{" "}
-            {limits.match.deferralPercentToMaxMatch}% to capture the full{" "}
+            {formatPercent(limits.match.currentDeferralPercent)}% of salary, but it takes{" "}
+            {formatPercent(limits.match.deferralPercentToMaxMatch)}% to capture the full{" "}
             {formatUSDWhole(limits.match.maxAnnualMatch)} - so you&apos;re on pace for only{" "}
-            {formatUSDWhole(limits.match.projectedMatch)} ({Math.round(limits.match.capturedPercent)}
+            {formatUSDWhole(limits.match.projectedMatch)} ({Math.floor(limits.match.capturedPercent)}
             %).
           </p>
           <p className="mt-2 text-xs text-muted">
-            Raise your payroll deferral to at least {limits.match.deferralPercentToMaxMatch}% of
-            salary to stop leaving this on the table. Matching dollars don&apos;t count toward your
+            Raise your payroll deferral to at least {formatPercent(limits.match.deferralPercentToMaxMatch)}%
+            of salary to stop leaving this on the table. Matching dollars don&apos;t count toward your
             employee limit above, though they do count toward total additions.
           </p>
         </div>
