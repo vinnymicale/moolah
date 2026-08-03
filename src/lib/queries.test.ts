@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({
     transaction: { findMany: vi.fn(), aggregate: vi.fn() },
     recurringRule: { findMany: vi.fn() },
     category: { findMany: vi.fn() },
+    user: { findUnique: vi.fn() },
   },
 }));
 
@@ -26,9 +27,12 @@ const txnFind = vi.mocked(prisma.transaction.findMany);
 const txnAgg = vi.mocked(prisma.transaction.aggregate);
 const ruleFind = vi.mocked(prisma.recurringRule.findMany);
 const catFind = vi.mocked(prisma.category.findMany);
+const userFind = vi.mocked(prisma.user.findUnique);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: no override, so getSafeToTransfer falls back to MIN_CHECKING_FLOOR.
+  userFind.mockResolvedValue({ minCheckingFloor: null } as never);
 });
 
 describe("getSafeToTransfer", () => {
@@ -53,13 +57,9 @@ describe("getSafeToTransfer", () => {
       .mockResolvedValueOnce([] as never); // materialised links (none)
     ruleFind.mockResolvedValue([] as never); // no recurring rules
 
-    // Early-month buffer: 4 monthly aggregates. Two months of $400 → avg 400,
+    // Early-month baseline: four flat months of $400 → p75 is also 400,
     // buffer = 400 × 1.15 = 460.
-    txnAgg
-      .mockResolvedValueOnce({ _sum: { amount: 400 } } as never)
-      .mockResolvedValueOnce({ _sum: { amount: 400 } } as never)
-      .mockResolvedValueOnce({ _sum: { amount: 0 } } as never)
-      .mockResolvedValueOnce({ _sum: { amount: 0 } } as never);
+    txnAgg.mockResolvedValue({ _sum: { amount: 400 } } as never);
 
     const res = await getSafeToTransfer("u1", "2026-06-15");
 
@@ -71,6 +71,114 @@ describe("getSafeToTransfer", () => {
     expect(res.remainingOneOff).toBe(200);
     expect(res.earlyMonthAvg).toBeCloseTo(400);
     expect(res.nextMonthBuffer).toBeCloseTo(460);
+    expect(res.floorLimited).toBe(false);
+  });
+
+  it("builds the buffer from the busier months, not the average", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 6000, isAsset: true },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+
+    // Three quiet months and one heavy one - the case that produced the
+    // overdrawn recommendation. Mean would be 1525; p75 over
+    // [800, 900, 1000, 3400] interpolates to 1600.
+    txnAgg
+      .mockResolvedValueOnce({ _sum: { amount: 800 } } as never)
+      .mockResolvedValueOnce({ _sum: { amount: 900 } } as never)
+      .mockResolvedValueOnce({ _sum: { amount: 1000 } } as never)
+      .mockResolvedValueOnce({ _sum: { amount: 3400 } } as never);
+
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+
+    expect(res.earlyMonthAvg).toBeCloseTo(1600);
+    expect(res.earlyMonthAvg).toBeGreaterThan(1525); // above the mean it replaced
+    expect(res.nextMonthBuffer).toBeCloseTo(1840);
+    expect(res.safeAmount).toBe(4150); // 6000 − 1840 = 4160 → floor $50
+  });
+
+  it("keeps quiet months in the baseline instead of dropping them", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 6000, isAsset: true },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+
+    // Two months with no cleared bank spend. Previously these were filtered out
+    // and the baseline became the mean of the two remaining months (1000); now
+    // they count as zeroes, so p75 over [0, 0, 800, 1200] is 900.
+    txnAgg
+      .mockResolvedValueOnce({ _sum: { amount: 0 } } as never)
+      .mockResolvedValueOnce({ _sum: { amount: null } } as never)
+      .mockResolvedValueOnce({ _sum: { amount: 800 } } as never)
+      .mockResolvedValueOnce({ _sum: { amount: 1200 } } as never);
+
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+
+    expect(res.earlyMonthAvg).toBeCloseTo(900);
+    // Only the two months that actually had spend are reported to the user.
+    expect(res.bufferMonthsUsed).toBe(2);
+  });
+
+  it("never recommends draining checking below the $500 floor", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 1200, isAsset: true },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+    // No history at all → no buffer, so nothing else holds the number back.
+    txnAgg.mockResolvedValue({ _sum: { amount: 0 } } as never);
+
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+
+    // Unclamped this would have recommended the full $1200, leaving $0.
+    expect(res.safeAmount).toBe(700);
+    expect(res.floorLimited).toBe(true);
+    expect(res.minCheckingFloor).toBe(500);
+    expect(res.anchorBalance - res.safeAmount).toBeGreaterThanOrEqual(500);
+  });
+
+  it("uses a user-configured floor instead of the $500 default", async () => {
+    userFind.mockResolvedValue({ minCheckingFloor: 2000 } as never);
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 3000, isAsset: true },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+    txnAgg.mockResolvedValue({ _sum: { amount: 0 } } as never);
+
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+
+    // Unclamped this would recommend the full $3000; the user's own $2000
+    // floor caps it instead of the $500 default.
+    expect(res.minCheckingFloor).toBe(2000);
+    expect(res.safeAmount).toBe(1000);
+    expect(res.floorLimited).toBe(true);
+  });
+
+  it("hides itself when the floor leaves less than $50 to move", async () => {
+    acctFind.mockResolvedValue([
+      { id: "c1", type: "CHECKING", currentBalance: 520, isAsset: true },
+    ] as never);
+    txnFind
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never);
+    ruleFind.mockResolvedValue([] as never);
+    txnAgg.mockResolvedValue({ _sum: { amount: 0 } } as never);
+
+    // 520 − 500 floor = 20 → below the $50 threshold.
+    const res = await getSafeToTransfer("u1", "2026-06-15");
+    expect(res.show).toBe(false);
+    expect(res.safeAmount).toBe(0);
   });
 
   it("hides itself when the safe amount falls below $50", async () => {
@@ -176,7 +284,9 @@ describe("getSafeToTransfer", () => {
     const res = await getSafeToTransfer("u1", "2026-06-15");
     expect(res.upcomingCCDue).toBe(0);
     expect(res.upcomingCCDueCount).toBe(0);
-    expect(res.rawSafe).toBeCloseTo(3000);
+    // Nothing is reserved, so the $500 checking floor is what caps this.
+    expect(res.rawSafe).toBeCloseTo(2500);
+    expect(res.floorLimited).toBe(true);
   });
 
   it("hides itself when an upcoming statement payment drives the safe amount below $50", async () => {

@@ -55,6 +55,27 @@ export async function clearPlaidConfigAction() {
   return { ok: true as const };
 }
 
+/**
+ * Set (or clear, with `floor: null`) the minimum checking balance the "safe
+ * to transfer" recommendation will never dip below.
+ */
+export async function updateMinCheckingFloorAction(floor: number | null) {
+  if (isDemoMode()) return { ok: true as const };
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  if (floor !== null) {
+    if (!Number.isFinite(floor) || floor < 0 || floor > 1_000_000) {
+      return { ok: false as const, error: "Enter an amount between $0 and $1,000,000." };
+    }
+  }
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { minCheckingFloor: floor !== null ? Math.round(floor) : null },
+  });
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
 export async function clearAiConfigAction() {
   if (isDemoMode()) return { ok: true as const };
   const session = await auth();
