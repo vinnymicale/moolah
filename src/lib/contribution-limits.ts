@@ -25,6 +25,14 @@ export interface MatchResult {
   projectedMatch: number;
   /** maxAnnualMatch - projectedMatch: free money left on the table. */
   forfeited: number;
+  /**
+   * Whether the shortfall is worth acting on. Payroll rounds each deferral to
+   * the cent, so a deferral set to exactly the match threshold still lands a few
+   * cents under it over a year. That is not money left on the table, and telling
+   * someone to raise a 6% deferral to 6% reads as a bug. Consumers should gate
+   * on this rather than `forfeited > 0`.
+   */
+  forfeitureIsMaterial: boolean;
   capturedPercent: number;
   /** Deferral, as a percent of salary, that fully fills every tier of the formula. */
   deferralPercentToMaxMatch: number;
@@ -87,6 +95,7 @@ export function computeMatch({
       maxAnnualMatch: 0,
       projectedMatch: 0,
       forfeited: 0,
+      forfeitureIsMaterial: false,
       capturedPercent: 0,
       deferralPercentToMaxMatch: 0,
       currentDeferralPercent: 0,
@@ -116,10 +125,19 @@ export function computeMatch({
   }
 
   const round = (n: number) => Math.round(n * 100) / 100;
+  const forfeited = round(Math.max(0, maxMatch - earnedMatch));
+
+  // A shortfall has to survive being written down before it's worth a warning:
+  // at least a dollar, and at least a tenth of a percent of the ceiling. Below
+  // that the banner would round the gap to $0 and the two deferral percentages
+  // to the same number, which reads as a bug rather than as advice.
+  const forfeitureIsMaterial = forfeited >= 1 && (maxMatch <= 0 || forfeited / maxMatch >= 0.001);
+
   return {
     maxAnnualMatch: round(maxMatch),
     projectedMatch: round(earnedMatch),
-    forfeited: round(Math.max(0, maxMatch - earnedMatch)),
+    forfeited,
+    forfeitureIsMaterial,
     capturedPercent: maxMatch > 0 ? (earnedMatch / maxMatch) * 100 : 0,
     deferralPercentToMaxMatch: salaryPercentConsumed,
     currentDeferralPercent: (annualDeferral / annualSalary) * 100,

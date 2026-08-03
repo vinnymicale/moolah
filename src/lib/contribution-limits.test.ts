@@ -25,6 +25,56 @@ describe("computeMatch", () => {
     expect(r.capturedPercent).toBe(100);
   });
 
+  describe("materiality of the shortfall", () => {
+    // 100% of 6% on this salary; payroll rounds each of 26 paychecks to the
+    // cent, so a deferral genuinely set to 6% lands 12 cents short over a year.
+    const sixPercent = [{ matchPercent: 100, upToPercentOfSalary: 6 }];
+
+    it("does not flag a shortfall that rounding alone explains", () => {
+      const r = computeMatch({
+        annualSalary: 115_368,
+        annualDeferral: Math.round((115_368 * 0.06) / 26 * 100) / 100 * 26,
+        tiers: sixPercent,
+        annualCap: null,
+      });
+      expect(r.forfeited).toBeGreaterThan(0);
+      expect(r.forfeited).toBeLessThan(1);
+      expect(r.forfeitureIsMaterial).toBe(false);
+    });
+
+    it("flags a shortfall worth acting on", () => {
+      const r = computeMatch({
+        annualSalary: 115_368,
+        annualDeferral: 115_368 * 0.05,
+        tiers: sixPercent,
+        annualCap: null,
+      });
+      expect(r.forfeitureIsMaterial).toBe(true);
+    });
+
+    it("ignores a dollar-scale gap against a very large ceiling", () => {
+      // $1.20 short of a $60,000 ceiling is noise, not advice.
+      const r = computeMatch({
+        annualSalary: 1_000_000,
+        annualDeferral: 60_000 - 1.2,
+        tiers: sixPercent,
+        annualCap: null,
+      });
+      expect(r.forfeited).toBeGreaterThan(1);
+      expect(r.forfeitureIsMaterial).toBe(false);
+    });
+
+    it("stays quiet when the match is fully captured", () => {
+      const r = computeMatch({
+        annualSalary: 100_000,
+        annualDeferral: 20_000,
+        tiers,
+        annualCap: null,
+      });
+      expect(r.forfeitureIsMaterial).toBe(false);
+    });
+  });
+
   it("pays a partial match when deferral stops inside the first tier", () => {
     // Deferring 2% of salary earns 100% of that 2% = $2,000.
     const r = computeMatch({ annualSalary: 100_000, annualDeferral: 2_000, tiers, annualCap: null });
