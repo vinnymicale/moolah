@@ -136,6 +136,7 @@ export function computeContributionLimits({
   annualSalary,
   matchTiers,
   matchAnnualCap,
+  annualDeferralPace,
 }: {
   contributions: ContributionRecord[];
   /**
@@ -150,6 +151,8 @@ export function computeContributionLimits({
   annualSalary: number;
   matchTiers: MatchTier[] | null;
   matchAnnualCap: number | null;
+  /** Annualized deferral at the current payroll pace, for the match projection - not YTD dollars. */
+  annualDeferralPace: number;
 }): ContributionLimitReport {
   const { limits, isFallback } = getLimitsForYear(year);
   const catchUpEligible = age >= limits.catchUpAge;
@@ -198,7 +201,7 @@ export function computeContributionLimits({
     match: matchTiers
       ? computeMatch({
           annualSalary,
-          annualDeferral: deferralUsed,
+          annualDeferral: annualDeferralPace,
           tiers: matchTiers,
           annualCap: matchAnnualCap,
         })

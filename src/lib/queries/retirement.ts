@@ -374,6 +374,7 @@ export async function getRetirementPageData(
     annualSalary: assumptions.currentAnnualSalary,
     matchTiers,
     matchAnnualCap,
+    annualDeferralPace: monthlyDeferral * 12,
   });
 
   // Growth attribution over the last year of snapshot history, restricted to
