@@ -97,7 +97,7 @@ export default async function RetirementPage({
       />
       {data.growth && <GrowthAttribution growth={data.growth} />}
       <DrawdownPanel drawdown={data.drawdown!} />
-      <ContributionSchedules schedules={data.contributionSchedules} />
+      <ContributionSchedules schedules={data.contributionSchedules} accounts={data.accounts} />
       <ContributionLog
         accounts={data.accounts}
         recentContributions={data.recentContributions}

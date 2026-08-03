@@ -29,6 +29,7 @@ import {
   deleteContributionAction,
   createScheduleAction,
   deleteScheduleAction,
+  updateScheduleAction,
   saveEmployerMatchAction,
   saveYtdContributionsAction,
   clearYtdContributionsAction,
@@ -242,6 +243,67 @@ describe("createScheduleAction", () => {
       dayOfMonth: 1,
     });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("updateScheduleAction", () => {
+  const validUpdate = {
+    financialAccountId: "a1",
+    basis: "PERCENT_OF_SALARY" as const,
+    percentOfSalary: 6,
+    source: "EMPLOYEE_PRETAX" as const,
+    frequency: "BIWEEKLY" as const,
+    interval: 1,
+    startDate: "2026-01-01",
+  };
+
+  beforeEach(() => {
+    schedule.findFirst.mockResolvedValue({ id: "s1", userId: "u1" } as never);
+  });
+
+  it("refuses to edit another user's schedule", async () => {
+    schedule.findFirst.mockResolvedValue(null);
+    const r = await updateScheduleAction("s1", validUpdate);
+    expect(r).toEqual({ ok: false, error: "Schedule not found" });
+    expect(schedule.update).not.toHaveBeenCalled();
+  });
+
+  it("clears the dollar amount when switching to a percent basis", async () => {
+    const r = await updateScheduleAction("s1", validUpdate);
+    expect(r).toEqual({ ok: true });
+    expect(schedule.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "s1" },
+        data: expect.objectContaining({ amount: null, percentOfSalary: 6 }),
+      }),
+    );
+  });
+
+  it("clears the percent when switching back to dollars", async () => {
+    const r = await updateScheduleAction("s1", {
+      ...validUpdate,
+      basis: "AMOUNT",
+      percentOfSalary: null,
+      amount: 500,
+    });
+    expect(r).toEqual({ ok: true });
+    expect(schedule.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ amount: 500, percentOfSalary: null }),
+      }),
+    );
+  });
+
+  it("rejects a percent basis with no percent given", async () => {
+    const r = await updateScheduleAction("s1", { ...validUpdate, percentOfSalary: null });
+    expect(r.ok).toBe(false);
+    expect(schedule.update).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits in demo mode without writing", async () => {
+    demoMode.value = true;
+    expect(await updateScheduleAction("s1", validUpdate)).toEqual({ ok: true });
+    expect(schedule.update).not.toHaveBeenCalled();
   });
 });
 

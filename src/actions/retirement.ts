@@ -210,6 +210,42 @@ export async function createScheduleAction(input: ScheduleInput): Promise<Action
   });
 }
 
+/**
+ * Edits an existing schedule in place. Switching basis clears the field the new
+ * basis doesn't use, so a row never carries both a stale dollar amount and a
+ * percent.
+ */
+export async function updateScheduleAction(
+  id: string,
+  input: ScheduleInput,
+): Promise<ActionResult> {
+  if (isDemoMode()) return { ok: true };
+  return run(async () => {
+    const { userId } = await requireUser();
+    const data = scheduleSchema.parse(input);
+    const existing = await prisma.contributionSchedule.findFirst({ where: { id, userId } });
+    if (!existing) throw new UserError("Schedule not found");
+    await assertOwnsAccount(userId, data.financialAccountId);
+    await prisma.contributionSchedule.update({
+      where: { id },
+      data: {
+        financialAccountId: data.financialAccountId,
+        basis: data.basis,
+        amount: data.basis === "PERCENT_OF_SALARY" ? null : data.amount,
+        percentOfSalary: data.basis === "PERCENT_OF_SALARY" ? data.percentOfSalary : null,
+        source: data.source,
+        frequency: data.frequency,
+        interval: data.interval,
+        startDate: parseISODay(data.startDate),
+        endDate: data.endDate ? parseISODay(data.endDate) : null,
+        dayOfMonth: data.dayOfMonth ?? null,
+        weekday: data.weekday ?? null,
+      },
+    });
+    revalidatePaths();
+  });
+}
+
 /** Archives rather than deletes, so past contributions keep their schedule link. */
 export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };

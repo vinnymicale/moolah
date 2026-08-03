@@ -116,6 +116,11 @@ export interface ContributionScheduleDTO {
   source: ContributionSource;
   frequency: ScheduledContribution["frequency"];
   interval: number;
+  /** ISO day. Carried so the edit form can round-trip timing it doesn't show. */
+  startDate: string;
+  endDate: string | null;
+  dayOfMonth: number | null;
+  weekday: number | null;
 }
 
 export interface YtdContributionDTO {
@@ -275,6 +280,10 @@ export async function getRetirementPageData(
       source: s.source,
       frequency: s.frequency,
       interval: s.interval,
+      startDate: isoDay(s.startDate),
+      endDate: s.endDate ? isoDay(s.endDate) : null,
+      dayOfMonth: s.dayOfMonth,
+      weekday: s.weekday,
     }];
   });
 
