@@ -121,6 +121,83 @@ describe("getRetirementPageData", () => {
     expect(data.currentMonthlyContribution).toBe(1_083.33);
   });
 
+  describe("schedules that are not running today", () => {
+    const scheduleRow = {
+      id: "s1",
+      financialAccountId: "a1",
+      basis: "AMOUNT",
+      amount: "500",
+      percentOfSalary: null,
+      source: "EMPLOYEE_PRETAX",
+      frequency: "BIWEEKLY",
+      interval: 1,
+      startDate: new Date("2020-01-01T00:00:00.000Z"),
+      endDate: null,
+      dayOfMonth: null,
+      weekday: 5,
+    };
+
+    beforeEach(() => {
+      plan.findUnique.mockResolvedValue(planRow as never);
+      account.findMany.mockResolvedValue([
+        { id: "a1", name: "401k", type: "RETIREMENT", currentBalance: "0", color: "#000" },
+      ] as never);
+    });
+
+    it("ignores one that has not started yet", async () => {
+      schedule.findMany.mockResolvedValue([
+        { ...scheduleRow, startDate: new Date("2027-06-01T00:00:00.000Z") },
+      ] as never);
+      const data = await getRetirementPageData("u1", TODAY);
+      expect(data.currentMonthlyContribution).toBe(0);
+      expect(data.contributionSchedules).toHaveLength(0);
+    });
+
+    it("ignores one that has already ended", async () => {
+      schedule.findMany.mockResolvedValue([
+        { ...scheduleRow, endDate: new Date("2025-06-01T00:00:00.000Z") },
+      ] as never);
+      const data = await getRetirementPageData("u1", TODAY);
+      expect(data.currentMonthlyContribution).toBe(0);
+      expect(data.contributionSchedules).toHaveLength(0);
+    });
+
+    it("counts one ending today, since today's payment still lands", async () => {
+      schedule.findMany.mockResolvedValue([
+        { ...scheduleRow, endDate: new Date("2026-01-01T00:00:00.000Z") },
+      ] as never);
+      const data = await getRetirementPageData("u1", TODAY);
+      expect(data.currentMonthlyContribution).toBe(1_083.33);
+    });
+
+    it("still projects a schedule that starts later, even though it is not current", async () => {
+      schedule.findMany.mockResolvedValue([
+        { ...scheduleRow, startDate: new Date("2027-06-01T00:00:00.000Z") },
+      ] as never);
+      const later = await getRetirementPageData("u1", TODAY);
+      schedule.findMany.mockResolvedValue([]);
+      const none = await getRetirementPageData("u1", TODAY);
+      // Not in today's figures, but the future deposits still compound.
+      expect(later.currentMonthlyContribution).toBe(0);
+      expect(later.projection!.finalBalance).toBeGreaterThan(none.projection!.finalBalance);
+    });
+
+    it("leaves the deferral rate off the match when the schedule has ended", async () => {
+      schedule.findMany.mockResolvedValue([
+        { ...scheduleRow, endDate: new Date("2025-06-01T00:00:00.000Z") },
+      ] as never);
+      match.findFirst.mockResolvedValue({
+        id: "m1",
+        userId: "u1",
+        financialAccountId: "a1",
+        tiers: [{ matchPercent: 100, upToPercentOfSalary: 6 }],
+        annualCap: null,
+      } as never);
+      const data = await getRetirementPageData("u1", TODAY);
+      expect(data.currentMonthlyEmployerMatch).toBe(0);
+    });
+  });
+
   it("drives the limit bars off hand-entered YTD totals when they exist", async () => {
     plan.findUnique.mockResolvedValue(planRow as never);
     account.findMany.mockResolvedValue([

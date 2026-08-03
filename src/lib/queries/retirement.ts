@@ -138,6 +138,18 @@ function scheduleToMonthly(s: ScheduledContribution): number {
   return (s.amount * per) / (s.interval || 1);
 }
 
+/**
+ * Whether a schedule is running on a given day. The projection handles start and
+ * end dates itself, but the "current" figures - monthly contribution, the
+ * deferral rate the match is judged against, and the schedule list on the page -
+ * are about today, so a schedule that hasn't started or has already ended must
+ * not count toward them.
+ */
+function isActiveOn(s: { startDate: Date; endDate: Date | null }, day: Date): boolean {
+  if (s.startDate.getTime() > day.getTime()) return false;
+  return s.endDate === null || s.endDate.getTime() >= day.getTime();
+}
+
 /** IRA-type accounts, matched by name since we don't store a Plaid subtype locally. */
 function looksLikeIra(name: string): boolean {
   return /\bira\b|roth/i.test(name);
@@ -148,7 +160,8 @@ export async function getRetirementPageData(
   todayISO: string,
   selectedTaxYear?: number,
 ): Promise<RetirementPageData> {
-  const thisYear = parseISODay(todayISO).getUTCFullYear();
+  const today = parseISODay(todayISO);
+  const thisYear = today.getUTCFullYear();
   // A future year has no limits to report against, so anything past this one
   // falls back rather than rendering an empty set of bars.
   const currentTaxYear =
@@ -237,12 +250,17 @@ export async function getRetirementPageData(
 
   const accountNames = new Map(accountRows.map((a) => [a.id, a.name]));
 
-  const contributionSchedules: ContributionScheduleDTO[] = scheduleRows.map((row, i) => {
+  // The projection still sees every schedule - one starting next year belongs in
+  // the future - but everything describing today is drawn from the active ones.
+  const activeSchedules = schedules.filter((s) => isActiveOn(s, today));
+
+  const contributionSchedules: ContributionScheduleDTO[] = scheduleRows.flatMap((row, i) => {
     const s = schedules[i];
+    if (!isActiveOn(s, today)) return [];
     // Dollar schedules get their rate derived too, so a $258 biweekly deferral
     // reads as the 5.8% it actually is rather than the 6% the user intended.
     const annual = (s.amount * OCCURRENCES_PER_YEAR[s.frequency]) / (s.interval || 1);
-    return {
+    return [{
       id: row.id,
       financialAccountId: s.financialAccountId,
       accountName: accountNames.get(s.financialAccountId) ?? "Account",
@@ -257,16 +275,16 @@ export async function getRetirementPageData(
       source: s.source,
       frequency: s.frequency,
       interval: s.interval,
-    };
+    }];
   });
 
   const currentMonthlyContribution =
-    Math.round(schedules.reduce((sum, s) => sum + scheduleToMonthly(s), 0) * 100) / 100;
+    Math.round(activeSchedules.reduce((sum, s) => sum + scheduleToMonthly(s), 0) * 100) / 100;
 
   // Only elective deferrals earn a match; after-tax and rollover money does not.
   const monthlyDeferral =
     Math.round(
-      schedules
+      activeSchedules
         .filter((s) => s.source === "EMPLOYEE_PRETAX" || s.source === "EMPLOYEE_ROTH")
         .reduce((sum, s) => sum + scheduleToMonthly(s), 0) * 100,
     ) / 100;
@@ -454,7 +472,6 @@ export async function getRetirementPageData(
     annualSalary: assumptions.currentAnnualSalary,
   });
 
-  const today = parseISODay(todayISO);
   const age = currentTaxYear - assumptions.birthYear;
 
   const limits = computeContributionLimits({
