@@ -162,23 +162,32 @@ export function SafeTransferCard({
                 <Row
                   label={
                     data.bufferMonthsUsed > 0
-                      ? `Avg. early-month spend (${data.bufferMonthsUsed}-mo)`
-                      : "Avg. early-month spend"
+                      ? `Busier early-month spend (${data.bufferMonthsUsed}-mo)`
+                      : "Busier early-month spend"
                   }
                   value={formatUSD(data.earlyMonthAvg)}
                 />
                 <Row label={`Safety cushion (+${data.bufferCushionPct}%)`} value={`+${formatUSD(data.nextMonthBuffer - data.earlyMonthAvg)}`} />
               </div>
               <p className="mt-1 text-[11px] leading-snug">
-                Your typical bank spending in the first 14 days of a month, averaged over the
-                last {data.bufferMonthsUsed > 0 ? `${data.bufferMonthsUsed} month${data.bufferMonthsUsed === 1 ? "" : "s"}` : "few months"},
-                plus a {data.bufferCushionPct}% margin for the unexpected. This covers next
-                month&apos;s rent, statement payments and routine spending before your next paycheck lands.
+                Your bank spending in the first 14 days of a month, taken from the busier end of
+                the last {data.bufferMonthsUsed > 0 ? `${data.bufferMonthsUsed} month${data.bufferMonthsUsed === 1 ? "" : "s"}` : "few months"} rather
+                than the average, plus a {data.bufferCushionPct}% margin for the unexpected. We aim
+                high here so a heavier month than usual doesn&apos;t catch you short. This covers
+                the first half of next month - rent, statement payments and routine spending.
               </p>
             </div>
 
             {/* Result */}
             <div className="border-t border-line pt-2">
+              {data.floorLimited && (
+                <p className="mb-1.5 text-[11px] leading-snug">
+                  Capped so at least{" "}
+                  <span className="font-medium text-text">{formatUSD(data.minCheckingFloor)}</span>{" "}
+                  stays in checking. Your bills and buffer alone would have allowed more, but we
+                  never recommend running the account down to nothing.
+                </p>
+              )}
               {data.rawSafe !== data.safeAmount && (
                 <Row label="= Available" value={formatUSD(data.rawSafe)} />
               )}

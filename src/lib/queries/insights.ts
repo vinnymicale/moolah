@@ -23,16 +23,24 @@ export interface SafeTransferDTO {
   remainingOneOff: number;
   /** Number of one-off uncleared bank transactions counted this month. */
   remainingOneOffCount: number;
-  /** Historical avg spending in days 1-14 of a month (bank accounts only) × 1.15 safety buffer. */
+  /** Historical early-month spending baseline (bank accounts only) × 1.15 safety buffer. */
   nextMonthBuffer: number;
-  /** Raw average of early-month bank-account spending across the last 4 months. */
+  /**
+   * Baseline early-month bank-account spending: the 75th percentile of the last
+   * 4 months, not the mean. A floor calculation has to survive a bad month, and
+   * an average is dragged down by the quiet ones.
+   */
   earlyMonthAvg: number;
   /** Number of past months (of the last 4) that had data feeding earlyMonthAvg. */
   bufferMonthsUsed: number;
   /** Safety cushion percentage applied on top of earlyMonthAvg (e.g. 15). */
   bufferCushionPct: number;
-  /** Raw safe figure before rounding down to the nearest $50. */
+  /** Raw safe figure before the minimum-balance clamp and the $50 rounding. */
   rawSafe: number;
+  /** Minimum checking balance the recommendation will never dip below. */
+  minCheckingFloor: number;
+  /** True when the floor - not the reservations - is what capped the recommendation. */
+  floorLimited: boolean;
   /** Calendar days remaining in the current month. */
   daysLeft: number;
   /** Total outstanding balance across all credit card accounts (informational). */
@@ -46,11 +54,48 @@ export interface SafeTransferDTO {
 const BUFFER_CUSHION_PCT = 15;
 
 /**
+ * Default floor: checking is never drawn below this, no matter how small the
+ * reservations come out. Without it a month with little history and few
+ * upcoming bills happily recommends draining the account to single digits.
+ * Overridden per-user by User.minCheckingFloor when set.
+ */
+const MIN_CHECKING_FLOOR = 500;
+
+/** Percentile of past early-month spend used as the buffer baseline. */
+const BUFFER_PERCENTILE = 0.75;
+
+/**
+ * Linear-interpolated percentile over an unsorted sample. Returns 0 for an
+ * empty sample.
+ */
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0];
+  const pos = (sorted.length - 1) * p;
+  const lower = Math.floor(pos);
+  const upper = Math.ceil(pos);
+  if (lower === upper) return sorted[lower];
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (pos - lower);
+}
+
+/**
  * Computes how much the user can safely move out of checking.
  *
  * Formula: checkingBalance - remaining uncleared expenses this month
  *          - upcoming credit-card statement payments shown on the calendar
- *          - (earlyMonthAvg × 1.15 next-month buffer), rounded down to $50.
+ *          - (earlyMonthAvg × 1.15 next-month buffer),
+ *          clamped so checking keeps at least MIN_CHECKING_FLOOR,
+ *          then rounded down to $50.
+ *
+ * The buffer baseline is the 75th percentile of the last 4 months of early-month
+ * spend rather than the mean. This is a floor calculation: a mean over
+ * 800/900/1000/3400 suggests reserving ~1750 when a repeat of the high month
+ * needs 3400, and the user ends up overdrawn.
+ *
+ * Months with no cleared bank spend are kept in the sample as zeroes. Dropping
+ * them pulls the baseline up and makes it jump around as the 4-month window
+ * slides.
  *
  * The upcoming statement payments are subtracted in full on top of the buffer.
  * That deliberately over-reserves (the buffer already reflects past statement
@@ -60,11 +105,16 @@ const BUFFER_CUSHION_PCT = 15;
  * Returns show:false when no checking accounts exist or the safe amount < $50.
  */
 export async function getSafeToTransfer(userId: string, todayISO: string): Promise<SafeTransferDTO> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { minCheckingFloor: true } });
+  const minCheckingFloor = user?.minCheckingFloor ?? MIN_CHECKING_FLOOR;
+
   const nothing: SafeTransferDTO = {
     show: false, safeAmount: 0, anchorBalance: 0, checkingCount: 0,
     remainingExpenses: 0, remainingRecurring: 0, remainingRecurringCount: 0,
     remainingOneOff: 0, remainingOneOffCount: 0, nextMonthBuffer: 0, earlyMonthAvg: 0,
-    bufferMonthsUsed: 0, bufferCushionPct: BUFFER_CUSHION_PCT, rawSafe: 0, daysLeft: 0, totalCCBalance: 0,
+    bufferMonthsUsed: 0, bufferCushionPct: BUFFER_CUSHION_PCT, rawSafe: 0,
+    minCheckingFloor, floorLimited: false,
+    daysLeft: 0, totalCCBalance: 0,
     upcomingCCDue: 0, upcomingCCDueCount: 0,
   };
 
@@ -186,19 +236,24 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
       },
       _sum: { amount: true },
     });
-    const total = toNumber(agg._sum.amount ?? 0);
-    if (total > 0) historicalTotals.push(total);
+    // Quiet months stay in the sample as zeroes - dropping them would bias the
+    // baseline upward and make it lurch as the window slides.
+    historicalTotals.push(Math.max(0, toNumber(agg._sum.amount ?? 0)));
   }
 
-  const bufferMonthsUsed = historicalTotals.length;
+  const bufferMonthsUsed = historicalTotals.filter((t) => t > 0).length;
   const earlyMonthAvg = bufferMonthsUsed > 0
-    ? historicalTotals.reduce((s, t) => s + t, 0) / bufferMonthsUsed
+    ? percentile(historicalTotals, BUFFER_PERCENTILE)
     : 0;
 
   const nextMonthBuffer = earlyMonthAvg * (1 + BUFFER_CUSHION_PCT / 100);
 
   const rawSafe = anchorBalance - remainingExpenses - upcomingCCDue - nextMonthBuffer;
-  const safeAmount = Math.floor(rawSafe / 50) * 50;
+  // Never recommend leaving checking below the floor, even when the reservations
+  // above happen to be small.
+  const floorCapped = Math.min(rawSafe, Math.max(0, anchorBalance - minCheckingFloor));
+  const floorLimited = floorCapped < rawSafe;
+  const safeAmount = Math.floor(floorCapped / 50) * 50;
 
   if (safeAmount < 50) return nothing;
 
@@ -206,7 +261,9 @@ export async function getSafeToTransfer(userId: string, todayISO: string): Promi
     show: true, safeAmount, anchorBalance, checkingCount: checkingIds.length,
     remainingExpenses, remainingRecurring, remainingRecurringCount,
     remainingOneOff, remainingOneOffCount, nextMonthBuffer, earlyMonthAvg,
-    bufferMonthsUsed, bufferCushionPct: BUFFER_CUSHION_PCT, rawSafe, daysLeft, totalCCBalance,
+    bufferMonthsUsed, bufferCushionPct: BUFFER_CUSHION_PCT, rawSafe: floorCapped,
+    minCheckingFloor, floorLimited,
+    daysLeft, totalCCBalance,
     upcomingCCDue, upcomingCCDueCount,
   };
 }
