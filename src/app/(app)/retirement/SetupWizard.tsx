@@ -16,6 +16,8 @@ const CURRENT_YEAR = new Date().getUTCFullYear();
 type ScheduleDraft = {
   accountId: string;
   enabled: boolean;
+  basis: "AMOUNT" | "PERCENT_OF_SALARY";
+  /** Dollars per occurrence when basis is AMOUNT, percent of salary otherwise. */
   amount: string;
   frequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY";
   source: "EMPLOYEE_PRETAX" | "EMPLOYEE_ROTH" | "AFTER_TAX";
@@ -40,6 +42,7 @@ export function SetupWizard({ accounts }: { accounts: RetirementAccountDTO[] }) 
     accounts.map((a) => ({
       accountId: a.id,
       enabled: false,
+      basis: "AMOUNT",
       amount: "",
       frequency: "MONTHLY",
       source: "EMPLOYEE_PRETAX",
@@ -95,7 +98,9 @@ export function SetupWizard({ accounts }: { accounts: RetirementAccountDTO[] }) 
       if (!d.enabled || !selected.has(d.accountId) || !d.amount) continue;
       const r = await createScheduleAction({
         financialAccountId: d.accountId,
-        amount: d.amount,
+        basis: d.basis,
+        amount: d.basis === "AMOUNT" ? d.amount : null,
+        percentOfSalary: d.basis === "PERCENT_OF_SALARY" ? d.amount : null,
         source: d.source,
         frequency: d.frequency,
         interval: 1,
@@ -233,15 +238,25 @@ export function SetupWizard({ accounts }: { accounts: RetirementAccountDTO[] }) 
                       {a.name}
                     </label>
                     {draft.enabled && (
-                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      <div className="mt-2 grid gap-2 sm:grid-cols-4">
                         <input
                           type="text"
                           inputMode="decimal"
                           className="input"
-                          placeholder="Amount"
+                          placeholder={draft.basis === "AMOUNT" ? "Amount" : "Percent"}
                           value={draft.amount}
                           onChange={(e) => updateDraft(a.id, { amount: e.target.value })}
                         />
+                        <select
+                          className="input"
+                          value={draft.basis}
+                          onChange={(e) =>
+                            updateDraft(a.id, { basis: e.target.value as ScheduleDraft["basis"] })
+                          }
+                        >
+                          <option value="AMOUNT">Dollars</option>
+                          <option value="PERCENT_OF_SALARY">% of salary</option>
+                        </select>
                         <select
                           className="input"
                           value={draft.frequency}

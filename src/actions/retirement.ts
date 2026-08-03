@@ -45,17 +45,33 @@ const contributionSchema = z.object({
   note: z.string().max(200).optional().nullable(),
 });
 
-const scheduleSchema = z.object({
-  financialAccountId: z.string().min(1),
-  amount: moneyInput.pipe(z.number().positive("Amount must be greater than zero")),
-  source: sourceSchema,
-  frequency: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "YEARLY"]),
-  interval: z.coerce.number().int().min(1).max(52),
-  startDate: z.string().min(1),
-  endDate: z.string().optional().nullable(),
-  dayOfMonth: z.coerce.number().int().min(1).max(31).optional().nullable(),
-  weekday: z.coerce.number().int().min(0).max(6).optional().nullable(),
-});
+// A schedule states its size either in dollars or as a percent of salary, never
+// both. The percent basis exists because payroll deferrals are usually set as a
+// percentage, and a rounded dollar equivalent reads back as slightly under the
+// intended rate.
+const scheduleSchema = z
+  .object({
+    financialAccountId: z.string().min(1),
+    basis: z.enum(["AMOUNT", "PERCENT_OF_SALARY"]).default("AMOUNT"),
+    amount: moneyInput.pipe(z.number().positive("Amount must be greater than zero")).optional().nullable(),
+    percentOfSalary: z.coerce
+      .number()
+      .gt(0, "Percent must be greater than zero")
+      .max(100, "Percent cannot exceed 100")
+      .optional()
+      .nullable(),
+    source: sourceSchema,
+    frequency: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "YEARLY"]),
+    interval: z.coerce.number().int().min(1).max(52),
+    startDate: z.string().min(1),
+    endDate: z.string().optional().nullable(),
+    dayOfMonth: z.coerce.number().int().min(1).max(31).optional().nullable(),
+    weekday: z.coerce.number().int().min(0).max(6).optional().nullable(),
+  })
+  .refine((d) => (d.basis === "PERCENT_OF_SALARY" ? d.percentOfSalary != null : d.amount != null), {
+    message: "Enter an amount for a dollar schedule, or a percent for a percent-of-salary one",
+    path: ["amount"],
+  });
 
 // A zero amount clears the row rather than storing it, so "I contributed
 // nothing to Roth this year" and "I haven't filled this in" stay the same state.
@@ -178,7 +194,9 @@ export async function createScheduleAction(input: ScheduleInput): Promise<Action
       data: {
         userId,
         financialAccountId: data.financialAccountId,
-        amount: data.amount,
+        basis: data.basis,
+        amount: data.basis === "PERCENT_OF_SALARY" ? null : data.amount,
+        percentOfSalary: data.basis === "PERCENT_OF_SALARY" ? data.percentOfSalary : null,
         source: data.source,
         frequency: data.frequency,
         interval: data.interval,

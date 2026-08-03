@@ -52,7 +52,13 @@ export const matchTierSchema = z.object({
 
 export const matchTiersSchema = z.array(matchTierSchema).max(5);
 
-/** A contribution schedule flattened for the calc layer. */
+/**
+ * A contribution schedule flattened for the calc layer.
+ *
+ * `amount` is always per-occurrence dollars: percent-of-salary schedules are
+ * resolved against salary before they get here, so the calc layer never has to
+ * know which basis a schedule was entered in.
+ */
 export interface ScheduledContribution {
   financialAccountId: string;
   amount: number;
@@ -63,6 +69,43 @@ export interface ScheduledContribution {
   endDate: Date | null;
   dayOfMonth: number | null;
   weekday: number | null;
+}
+
+/** How a schedule states its size, mirroring the ContributionBasis enum. */
+export type ContributionBasis = "AMOUNT" | "PERCENT_OF_SALARY";
+
+/** Occurrences per year for each frequency, for converting a percent of salary into per-occurrence dollars. */
+export const OCCURRENCES_PER_YEAR: Record<ScheduledContribution["frequency"], number> = {
+  DAILY: 365.25,
+  WEEKLY: 52,
+  BIWEEKLY: 26,
+  MONTHLY: 12,
+  YEARLY: 1,
+};
+
+/**
+ * Per-occurrence dollars for a percent-of-salary schedule.
+ *
+ * Deliberately unrounded: rounding 6% of $115,000 biweekly to $265.38 loses
+ * $0.0004 a paycheck, which reads back as 5.9998% and shows up as a bogus
+ * "you're leaving match on the table" warning. The exact figure annualises
+ * back to the salary percentage precisely.
+ */
+export function percentScheduleAmount({
+  percentOfSalary,
+  annualSalary,
+  frequency,
+  interval,
+}: {
+  percentOfSalary: number;
+  annualSalary: number;
+  frequency: ScheduledContribution["frequency"];
+  interval: number;
+}): number {
+  if (annualSalary <= 0 || percentOfSalary <= 0) return 0;
+  const perYear = OCCURRENCES_PER_YEAR[frequency] / (interval || 1);
+  if (perYear <= 0) return 0;
+  return (annualSalary * (percentOfSalary / 100)) / perYear;
 }
 
 /** A recorded contribution flattened for the calc layer. */
