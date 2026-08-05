@@ -45,7 +45,6 @@ function userRow(passwordHash: string | null) {
     apiTokenSelector: null,
     apiTokenVerifierHash: null,
     apiTokenCreatedAt: null,
-    minCheckingFloor: null,
   };
 }
 

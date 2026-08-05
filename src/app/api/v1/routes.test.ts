@@ -12,7 +12,6 @@ vi.mock("./_auth", async (orig) => {
 });
 vi.mock("@/lib/queries", () => ({
   getNetWorth: vi.fn(),
-  getSafeToTransfer: vi.fn(),
   getBudgetMonth: vi.fn(),
   getAccounts: vi.fn(),
 }));
@@ -22,7 +21,7 @@ vi.mock("@/lib/snapshots", () => ({ getNetWorthHistory: vi.fn() }));
 vi.mock("@/lib/networth-forecast", () => ({ forecastNetWorth: vi.fn() }));
 
 import { requireApiUser } from "./_auth";
-import { getNetWorth, getSafeToTransfer, getBudgetMonth, getAccounts } from "@/lib/queries";
+import { getNetWorth, getBudgetMonth, getAccounts } from "@/lib/queries";
 import { getUpcoming } from "@/lib/calendar";
 import { getNetWorthHistory } from "@/lib/snapshots";
 import { forecastNetWorth } from "@/lib/networth-forecast";
@@ -31,7 +30,6 @@ const auth = vi.mocked(requireApiUser);
 const netWorth = vi.mocked(getNetWorth);
 const history = vi.mocked(getNetWorthHistory);
 const forecast = vi.mocked(forecastNetWorth);
-const safe = vi.mocked(getSafeToTransfer);
 const budget = vi.mocked(getBudgetMonth);
 const accounts = vi.mocked(getAccounts);
 const upcoming = vi.mocked(getUpcoming);
@@ -171,11 +169,10 @@ describe("GET /api/v1/upcoming", () => {
 });
 
 describe("GET /api/v1/summary", () => {
-  it("assembles net worth, safe-to-transfer, budget, and upcoming", async () => {
+  it("assembles net worth, budget, and upcoming", async () => {
     netWorth.mockResolvedValue({ assets: 1000, liabilities: 200, net: 800 } as unknown as Awaited<
       ReturnType<typeof getNetWorth>
     >);
-    safe.mockResolvedValue({ show: true, safeAmount: 350 } as unknown as Awaited<ReturnType<typeof getSafeToTransfer>>);
     budget.mockResolvedValue([
       { categoryId: "c1", name: "Food", limit: 400, actual: 150 },
     ] as unknown as Awaited<ReturnType<typeof getBudgetMonth>>);
@@ -188,24 +185,10 @@ describe("GET /api/v1/summary", () => {
 
     expect(body.asOf).toBe("2026-06-13");
     expect(body.netWorth).toEqual({ assets: 1000, liabilities: 200, net: 800 });
-    expect(body.safeToTransfer).toBe(350);
     expect(body.budget).toEqual({ month: "2026-06-01", limit: 400, spent: 150, remaining: 250 });
     expect(body.upcoming).toEqual([
       { date: "2026-06-20", description: "Paycheck", amount: 2000, type: "INCOME", recurring: true },
     ]);
-  });
-
-  it("reports safeToTransfer as 0 when the figure is hidden", async () => {
-    netWorth.mockResolvedValue({ assets: 0, liabilities: 0, net: 0 } as unknown as Awaited<
-      ReturnType<typeof getNetWorth>
-    >);
-    safe.mockResolvedValue({ show: false, safeAmount: 999 } as unknown as Awaited<ReturnType<typeof getSafeToTransfer>>);
-    budget.mockResolvedValue([] as unknown as Awaited<ReturnType<typeof getBudgetMonth>>);
-    upcoming.mockResolvedValue([] as unknown as Awaited<ReturnType<typeof getUpcoming>>);
-
-    const { GET } = await import("./summary/route");
-    const body = await (await GET(req())).json();
-    expect(body.safeToTransfer).toBe(0);
   });
 });
 

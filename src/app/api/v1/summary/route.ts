@@ -1,12 +1,11 @@
 // GET /api/v1/summary
 // Headline figures for an external dashboard (Home Assistant et al.): net worth,
-// safe-to-transfer, current-month budget status, and upcoming bills. Read-only,
-// bearer-token auth. Optional ?tz=America/New_York to anchor "today"; defaults
-// to UTC.
+// current-month budget status, and upcoming bills. Read-only, bearer-token auth.
+// Optional ?tz=America/New_York to anchor "today"; defaults to UTC.
 
 import { NextRequest } from "next/server";
 import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
-import { getNetWorth, getSafeToTransfer, getBudgetMonth } from "@/lib/queries";
+import { getNetWorth, getBudgetMonth } from "@/lib/queries";
 import { getUpcoming } from "@/lib/calendar";
 import { todayInZone } from "@/lib/user-tz";
 import { sumMoney } from "@/lib/money";
@@ -22,9 +21,8 @@ export async function GET(req: NextRequest) {
   const todayISO = todayInZone(tz);
   const monthISO = `${todayISO.slice(0, 7)}-01`;
 
-  const [netWorth, safe, budget, upcoming] = await Promise.all([
+  const [netWorth, budget, upcoming] = await Promise.all([
     getNetWorth(userId),
-    getSafeToTransfer(userId, todayISO),
     getBudgetMonth(userId, monthISO),
     getUpcoming(userId, todayISO, 14),
   ]);
@@ -35,7 +33,6 @@ export async function GET(req: NextRequest) {
   return apiJson({
     asOf: todayISO,
     netWorth: { assets: netWorth.assets, liabilities: netWorth.liabilities, net: netWorth.net },
-    safeToTransfer: safe.show ? safe.safeAmount : 0,
     budget: {
       month: monthISO,
       limit: budgetTotal,

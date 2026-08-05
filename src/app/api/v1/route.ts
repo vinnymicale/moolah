@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const endpoints = [
   {
     path: "/api/v1/summary",
-    description: "Headline figures: net worth, safe-to-transfer, current-month budget, upcoming bills.",
+    description: "Headline figures: net worth, current-month budget, upcoming bills.",
     params: { tz: "IANA timezone to anchor 'today' (default UTC)" },
   },
   {

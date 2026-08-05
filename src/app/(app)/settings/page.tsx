@@ -9,7 +9,6 @@ import { AiConfigForm } from "./sections/AiConfigForm";
 import { PlaidConfigForm } from "./sections/PlaidConfigForm";
 import { ApiTokenForm } from "./sections/ApiTokenForm";
 import { ScheduledBackupForm } from "./sections/ScheduledBackupForm";
-import { MinCheckingFloorForm } from "./sections/MinCheckingFloorForm";
 import { scheduleFromCron } from "@/lib/backup/schedule";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -46,7 +45,6 @@ export default async function SettingsPage() {
         plaidEnv: true,
         apiTokenSelector: true,
         apiTokenCreatedAt: true,
-        minCheckingFloor: true,
       },
     }),
     getAccounts(userId),
@@ -85,15 +83,6 @@ export default async function SettingsPage() {
           currentEnv={user.plaidEnv}
           envFallback={envFallback}
         />
-      </section>
-
-      <section className="card p-5">
-        <h2 className="mb-1 font-semibold">Safe to transfer</h2>
-        <p className="mb-3 text-sm text-muted">
-          Set the minimum balance your checking accounts should always keep. The &quot;safe to
-          transfer&quot; recommendation on your dashboard will never suggest moving more than this.
-        </p>
-        <MinCheckingFloorForm currentFloor={user.minCheckingFloor} />
       </section>
 
       <section className="card p-5">

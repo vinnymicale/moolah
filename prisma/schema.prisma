@@ -43,10 +43,6 @@ model User {
   apiTokenVerifierHash String?
   apiTokenCreatedAt    DateTime?
 
-  // Minimum balance the "safe to transfer" recommendation will never draw
-  // checking below. Null means the app default (see MIN_CHECKING_FLOOR).
-  minCheckingFloor Int?
-
   accounts              Account[] // OAuth accounts (Auth.js)
   sessions              Session[]
   financialAccounts     FinancialAccount[]

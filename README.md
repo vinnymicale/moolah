@@ -19,8 +19,8 @@ dataset, and anything you change stays in your browser only.
 
 ![Moolah dashboard](docs/screenshots/dashboard.png)
 
-> The dashboard, showing net-worth milestones, the safe-to-transfer suggestion, spending alerts,
-> top payees, budgets, and recent activity. _(Sample data for illustration.)_
+> The dashboard, showing net-worth milestones, spending alerts, top payees, budgets, and recent
+> activity. _(Sample data for illustration.)_
 
 ---
 
@@ -36,9 +36,8 @@ Planned improvements, roughly in priority order:
 
 - **Retirement planning** - a dedicated page for 401(k), IRA, and brokerage accounts: a projection
   to your retirement age with a Coast FIRE comparison, a savings target, required-monthly-savings
-  gap, IRS contribution limits, growth split into contributions vs. market return, and drawdown
-  scenarios. Contributions and balances can be entered by hand, so it works without a Plaid
-  connection.
+  gap, IRS contribution limits, and growth split into contributions vs. market return.
+  Contributions and balances can be entered by hand, so it works without a Plaid connection.
 - **Receipt & document attachments** - upload a photo or PDF of a receipt and attach it to a
   transaction, so refunds, warranties, and expense reports have proof on hand without digging
   through email or a shoebox. Images are downscaled client-side and everything rides along in
@@ -118,9 +117,8 @@ Have a request? Open an issue on GitHub.
   alongside a **Coast FIRE** line showing where you land if you stopped contributing today. It also
   reports the target nest egg, the **required monthly savings** to reach it vs. what you currently
   put in, progress against the year's **IRS contribution limits** (employee, total additions, and
-  IRA, with employer match counted), **growth over the last 12 months** split into money you
-  contributed vs. market return, and **drawdown scenarios** for how long the balance lasts under
-  poor, expected, and strong returns plus a bad-first-five-years sequence. Every figure on the page
+  IRA, with employer match counted), and **growth over the last 12 months** split into money you
+  contributed vs. market return. Every figure on the page
   is in today's dollars, including the expected Social Security benefit you enter - put in the
   estimate from your SSA statement without inflating it. Your **employer match** formula is entered
   as tiers ("100% of the first 3%, then 50% of the next 2%") with an optional annual cap; the match
@@ -131,10 +129,6 @@ Have a request? Open an issue on GitHub.
   the match formula are all editable after setup from the Assumptions panel. Contributions can be
   logged one at a time or put on a recurring schedule, and balances can be updated by hand, so
   none of this needs a linked account.
-- **Safe-to-transfer suggestion** - the dashboard estimates how much you can safely move out of
-  checking this month after remaining bills and a history-based buffer for next month's typical
-  early-month spending.
-
 ### Accounts & insight
 - **Accounts & net worth** - assets vs. liabilities with a live net-worth total. Any account can
   be **excluded from net worth** while still being tracked (e.g. student loans).
@@ -372,7 +366,7 @@ curl -H "Authorization: Bearer moolah_…" http://localhost:3000/api/v1/summary
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/v1/summary` | Net worth, safe-to-transfer, current-month budget status, upcoming bills |
+| `GET /api/v1/summary` | Net worth, current-month budget status, upcoming bills |
 | `GET /api/v1/net-worth` | Assets, liabilities, net, and per-account balances. Add `?range=3m\|1y\|all` for a daily history series and `?forecast=12` (1-24 months) for a net-worth projection |
 | `GET /api/v1/accounts` | All non-archived accounts with balances |
 | `GET /api/v1/budget` | Budget vs. actual per category (`?month=YYYY-MM` optional) |
@@ -389,7 +383,7 @@ Two ways to surface these numbers in Home Assistant:
 - **Dedicated integration** ([`hass-moolah`](https://github.com/vinnymicale/hass-moolah)) - a
   companion custom component (HACS-style) that you point at your Moolah URL and paste the read-only
   token into during setup. It polls `/api/v1` and exposes sensors for net worth (current and
-  12-month projection), assets, liabilities, safe-to-transfer, budget limit/spent/remaining, and
+  12-month projection), assets, liabilities, budget limit/spent/remaining, and
   upcoming bills - ready to drop onto a dashboard. Install it via HACS as a custom repository, or
   copy `custom_components/moolah` into your Home Assistant config.
 - **No-integration option** - a built-in [RESTful
@@ -619,7 +613,7 @@ appreciated.
 Moolah was developed with assistance from AI (Anthropic's Claude). It is a personal
 project provided **as-is, without warranty of any kind**, express or implied. You run it at your own
 risk: review the code before trusting it with real financial data, keep your own backups, and
-remember that anything it shows you (projections, "safe to transfer", debt payoff, net worth) is for
+remember that anything it shows you (projections, debt payoff, net worth) is for
 informational purposes only and is **not financial advice**. You are responsible for the security of
 your own deployment, credentials, and Plaid access tokens.
 
