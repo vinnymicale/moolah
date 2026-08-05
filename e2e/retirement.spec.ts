@@ -59,7 +59,6 @@ test.describe("retirement page", () => {
     await page.goto("/retirement");
     await expect(page.getByText(/^Contribution limits/)).toBeVisible();
     await expect(page.getByText("Growth, last 12 months")).toBeVisible();
-    await expect(page.getByText("Drawdown scenarios")).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Contributions counting toward/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Assumptions" })).toBeVisible();
   });

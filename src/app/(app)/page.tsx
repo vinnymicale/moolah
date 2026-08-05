@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSafeToTransfer, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
+import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
 import { getDemoUserId } from "@/lib/demo-session";
 import {
@@ -20,7 +20,6 @@ import { PageHeader, StatCard, toneTextClass, type Tone } from "@/components/ui-
 import { computeMilestones } from "@/lib/milestones";
 import { summarizeDashboard } from "@/lib/dashboard";
 import { DashboardSections, type DashboardSection } from "./DashboardSections";
-import { SafeTransferCard } from "./SafeTransferCard";
 import { SpendingAlertsCard } from "./SpendingAlertsCard";
 import { MilestonesBanner } from "./MilestonesBanner";
 import { userTodayISO } from "@/lib/user-tz";
@@ -35,7 +34,7 @@ export default async function DashboardPage() {
     ? (await getDemoUserId() ?? "")
     : (await requireUser()).userId;
 
-  const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals, safeTransfer, anomalies, topMerchants] = await Promise.all([
+  const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals, anomalies, topMerchants] = await Promise.all([
     getNetWorth(userId),
     getCalendarMonth(userId, monthISO, todayISO),
     getUpcoming(userId, todayISO, 14),
@@ -48,7 +47,6 @@ export default async function DashboardPage() {
       ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= isoDay(lastMonthFirst) && t.date <= isoDay(endOfUTCMonth(lastMonthFirst))))
       : getTransactionsBetween(userId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
     DEMO_MODE ? Promise.resolve(DEMO_GOALS) : getSavingsGoals(userId),
-    getSafeToTransfer(userId, todayISO),
     getSpendingAnomalies(userId, monthISO),
     getTopMerchants(userId, monthISO),
   ]);
@@ -360,9 +358,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-5">
-        {safeTransfer.show && (
-          <SafeTransferCard data={safeTransfer} goals={goals} />
-        )}
         <DashboardSections sections={sections} />
       </div>
     </div>

@@ -31,7 +31,6 @@ import {
   taxYearOf,
   type ContributionLimitReport,
 } from "@/lib/contribution-limits";
-import { modelDrawdown, type DrawdownReport } from "@/lib/drawdown";
 import { attributeGrowth, type GrowthAttribution } from "@/lib/retirement-growth";
 import type { ContributionSource } from "@/generated/prisma/enums";
 
@@ -74,7 +73,6 @@ export interface RetirementPageData {
   requiredSavings: RequiredSavings | null;
   limits: ContributionLimitReport | null;
   growth: GrowthAttribution | null;
-  drawdown: DrawdownReport | null;
   recentContributions: ContributionDTO[];
   /** Hand-entered YTD totals for the current tax year. Empty when none are set. */
   ytdContributions: YtdContributionDTO[];
@@ -345,7 +343,6 @@ export async function getRetirementPageData(
       requiredSavings: null,
       limits: null,
       growth: null,
-      drawdown: null,
       recentContributions,
       ytdContributions,
       currentTaxYear,
@@ -533,12 +530,6 @@ export async function getRetirementPageData(
         })
       : null;
 
-  const drawdown = modelDrawdown({
-    nestEgg: projection.finalBalance,
-    annualWithdrawal: target.annualFromPortfolio,
-    realAnnualReturn,
-  });
-
   return {
     hasPlan: true,
     hasAccounts,
@@ -551,7 +542,6 @@ export async function getRetirementPageData(
     requiredSavings,
     limits,
     growth,
-    drawdown,
     recentContributions,
     ytdContributions,
     currentTaxYear,
