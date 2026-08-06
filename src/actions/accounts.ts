@@ -24,6 +24,9 @@ const accountSchema = z.object({
   // Debt-only - sent for liability accounts to power the payoff planner.
   interestRate: z.coerce.number().min(0).max(100).optional().nullable(),
   minimumPayment: moneyInput.pipe(z.number().min(0).finite()).optional().nullable(),
+  // Installment-loan only - drives the amortization schedule.
+  termMonths: z.coerce.number().int().min(1).max(1200).optional().nullable(),
+  originationDate: z.string().optional().nullable(),
 });
 
 export type AccountInput = z.input<typeof accountSchema>;
@@ -34,10 +37,20 @@ function isAssetType(type: AccountType): boolean {
 
 /** Debt fields apply only to liabilities; nulled/defaulted for assets. */
 function debtFields(type: AccountType, data: z.infer<typeof accountSchema>) {
-  if (isAssetType(type)) return { interestRate: null, minimumPayment: null, includeInDebtPlanner: true };
+  if (isAssetType(type)) {
+    return {
+      interestRate: null,
+      minimumPayment: null,
+      termMonths: null,
+      originationDate: null,
+      includeInDebtPlanner: true,
+    };
+  }
   return {
     interestRate: data.interestRate ?? null,
     minimumPayment: data.minimumPayment ?? null,
+    termMonths: data.termMonths ?? null,
+    originationDate: data.originationDate ? parseISODay(data.originationDate) : null,
     includeInDebtPlanner: data.includeInDebtPlanner ?? true,
   };
 }
@@ -100,6 +113,12 @@ export async function updateAccountAction(id: string, input: AccountInput): Prom
 const debtTermsSchema = z.object({
   interestRate: z.coerce.number().min(0).max(100),
   minimumPayment: moneyInput.pipe(z.number().min(0).finite()),
+  // Optional: only installment loans carry a fixed term. Empty string clears it.
+  termMonths: z
+    .union([z.literal(""), z.coerce.number().int().min(1).max(1200)])
+    .optional()
+    .nullable(),
+  originationDate: z.string().optional().nullable(),
 });
 
 export type DebtTermsInput = z.input<typeof debtTermsSchema>;
@@ -114,7 +133,12 @@ export async function updateDebtTermsAction(id: string, input: DebtTermsInput): 
     const data = debtTermsSchema.parse(input);
     await prisma.financialAccount.update({
       where: { id },
-      data: { interestRate: data.interestRate, minimumPayment: data.minimumPayment },
+      data: {
+        interestRate: data.interestRate,
+        minimumPayment: data.minimumPayment,
+        termMonths: data.termMonths ? data.termMonths : null,
+        originationDate: data.originationDate ? parseISODay(data.originationDate) : null,
+      },
     });
     revalidatePath("/debt");
     revalidatePath("/accounts");

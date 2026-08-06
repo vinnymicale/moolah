@@ -17,6 +17,8 @@ export interface AccountDTO {
   archived: boolean;
   interestRate: number | null;
   minimumPayment: number | null;
+  termMonths: number | null;
+  originationDate: string | null; // ISO day
   creditLimit: number | null;
   lastStatementBalance: number | null;
   lastStatementDate: string | null; // ISO day
@@ -45,6 +47,8 @@ export async function getAccounts(userId: string, includeArchived = false): Prom
     archived: a.archived,
     interestRate: a.interestRate !== null ? toNumber(a.interestRate) : null,
     minimumPayment: a.minimumPayment !== null ? toNumber(a.minimumPayment) : null,
+    termMonths: a.termMonths,
+    originationDate: a.originationDate ? isoDay(a.originationDate) : null,
     creditLimit: a.creditLimit !== null ? toNumber(a.creditLimit) : null,
     lastStatementBalance: a.lastStatementBalance !== null ? toNumber(a.lastStatementBalance) : null,
     lastStatementDate: a.lastStatementDate ? isoDay(a.lastStatementDate) : null,

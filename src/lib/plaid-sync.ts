@@ -76,6 +76,34 @@ export function plaidCategoryToName(primaryCategory: string, detailCategory?: st
 const TOKEN_NOISE = new Set(["ach", "the", "and", "from", "purchase", "payment", "withdrawal", "autopay", "early", "pay"]);
 
 /** Tokenise a description to meaningful lowercase words (length >= 3). */
+/** Plaid dates are bare YYYY-MM-DD strings; pin them to UTC midnight. */
+export function plaidDay(s: string | null | undefined): Date | null {
+  return s ? new Date(`${s}T00:00:00Z`) : null;
+}
+
+/**
+ * Plaid reports mortgage `loan_term` as free text - "30 year", "360 months",
+ * "15-year fixed". Pull a month count out of it, or null when it doesn't parse.
+ */
+export function parseLoanTerm(term: string | null | undefined): number | null {
+  if (!term) return null;
+  const m = /(\d+)\s*[-\s]?\s*(year|yr|month|mo)/i.exec(term);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!n) return null;
+  const months = /^y/i.test(m[2]) ? n * 12 : n;
+  return months > 0 && months <= 1200 ? months : null;
+}
+
+/** Whole months between two days, used to derive a term from a payoff date. */
+export function monthsBetweenDays(start: Date | null, end: Date | null): number | null {
+  if (!start || !end) return null;
+  const months =
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    (end.getUTCMonth() - start.getUTCMonth());
+  return months > 0 && months <= 1200 ? months : null;
+}
+
 export function tokens(s: string): Set<string> {
   return new Set(
     s.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !TOKEN_NOISE.has(t)),
@@ -514,12 +542,53 @@ export async function syncPlaidItem(
         where: { id: linked.financialAccountId },
         data: {
           lastStatementBalance: card.last_statement_balance ?? null,
-          lastStatementDate: card.last_statement_issue_date ? new Date(`${card.last_statement_issue_date}T00:00:00Z`) : null,
+          lastStatementDate: plaidDay(card.last_statement_issue_date),
           lastPaymentAmount: card.last_payment_amount ?? null,
-          lastPaymentDate: card.last_payment_date ? new Date(`${card.last_payment_date}T00:00:00Z`) : null,
+          lastPaymentDate: plaidDay(card.last_payment_date),
           minimumPayment: card.minimum_payment_amount ?? null,
-          nextPaymentDueDate: card.next_payment_due_date ? new Date(`${card.next_payment_due_date}T00:00:00Z`) : null,
+          nextPaymentDueDate: plaidDay(card.next_payment_due_date),
           isOverdue: card.is_overdue ?? null,
+        },
+      });
+    }
+
+    for (const loan of liabResp.data.liabilities.mortgage ?? []) {
+      const linked = linkedByPlaidId.get(loan.account_id);
+      if (!linked?.financialAccountId) continue;
+      const origination = plaidDay(loan.origination_date);
+      await prisma.financialAccount.update({
+        where: { id: linked.financialAccountId },
+        data: {
+          interestRate: loan.interest_rate?.percentage ?? undefined,
+          minimumPayment: loan.next_monthly_payment ?? undefined,
+          termMonths: parseLoanTerm(loan.loan_term) ?? monthsBetweenDays(origination, plaidDay(loan.maturity_date)) ?? undefined,
+          originationDate: origination ?? undefined,
+          lastPaymentAmount: loan.last_payment_amount ?? null,
+          lastPaymentDate: plaidDay(loan.last_payment_date),
+          nextPaymentDueDate: plaidDay(loan.next_payment_due_date),
+        },
+      });
+    }
+
+    for (const loan of liabResp.data.liabilities.student ?? []) {
+      if (!loan.account_id) continue;
+      const linked = linkedByPlaidId.get(loan.account_id);
+      if (!linked?.financialAccountId) continue;
+      const origination = plaidDay(loan.origination_date);
+      await prisma.financialAccount.update({
+        where: { id: linked.financialAccountId },
+        data: {
+          interestRate: loan.interest_rate_percentage ?? undefined,
+          minimumPayment: loan.minimum_payment_amount ?? undefined,
+          // Student loans carry no term, only an expected payoff date.
+          termMonths: monthsBetweenDays(origination, plaidDay(loan.expected_payoff_date)) ?? undefined,
+          originationDate: origination ?? undefined,
+          lastStatementBalance: loan.last_statement_balance ?? null,
+          lastStatementDate: plaidDay(loan.last_statement_issue_date),
+          lastPaymentAmount: loan.last_payment_amount ?? null,
+          lastPaymentDate: plaidDay(loan.last_payment_date),
+          nextPaymentDueDate: plaidDay(loan.next_payment_due_date),
+          isOverdue: loan.is_overdue ?? null,
         },
       });
     }

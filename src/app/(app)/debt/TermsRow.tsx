@@ -16,7 +16,14 @@ export function TermsRow({ debt }: { debt: AccountDTO }) {
   const save = () =>
     start(async () => {
       setError(null);
-      const res = await updateDebtTermsAction(debt.id, { interestRate: apr, minimumPayment: min });
+      const res = await updateDebtTermsAction(debt.id, {
+        interestRate: apr,
+        minimumPayment: min,
+        // Pass the loan terms back through - this form doesn't edit them, and
+        // omitting them would clear what the account form set.
+        termMonths: debt.termMonths ?? "",
+        originationDate: debt.originationDate ?? "",
+      });
       if (!res.ok) return setError(res.error);
       setEditing(false);
     });
