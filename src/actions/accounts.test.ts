@@ -123,7 +123,27 @@ describe("updateDebtTermsAction", () => {
     expect(result).toEqual({ ok: true });
     expect(account.update).toHaveBeenCalledWith({
       where: { id: "a1" },
-      data: { interestRate: 18.5, minimumPayment: 40 },
+      data: { interestRate: 18.5, minimumPayment: 40, termMonths: null, originationDate: null },
+    });
+  });
+
+  it("stores loan terms when a term and origination date are supplied", async () => {
+    account.findFirst.mockResolvedValue({ id: "a1", type: "LOAN" } as never);
+    const result = await updateDebtTermsAction("a1", {
+      interestRate: 5.4,
+      minimumPayment: 462.18,
+      termMonths: 60,
+      originationDate: "2024-03-01",
+    });
+    expect(result).toEqual({ ok: true });
+    expect(account.update).toHaveBeenCalledWith({
+      where: { id: "a1" },
+      data: {
+        interestRate: 5.4,
+        minimumPayment: 462.18,
+        termMonths: 60,
+        originationDate: new Date("2024-03-01T00:00:00.000Z"),
+      },
     });
   });
 

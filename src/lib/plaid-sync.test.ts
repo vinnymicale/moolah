@@ -5,6 +5,9 @@ import {
   descriptionMatches,
   matchRecurringRule,
   resolveCategoryId,
+  plaidDay,
+  parseLoanTerm,
+  monthsBetweenDays,
   type MatchableRule,
 } from "./plaid-sync";
 import { parseISODay } from "./dates";
@@ -143,5 +146,58 @@ describe("resolveCategoryId", () => {
     expect(
       resolveCategoryId({ ruleCategoryId: null, recurringCategoryId: null, plaidCategoryId: null }),
     ).toBeNull();
+  });
+});
+
+describe("plaidDay", () => {
+  it("pins a bare Plaid date to UTC midnight", () => {
+    expect(plaidDay("2026-03-01")?.toISOString()).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("returns null for a missing date", () => {
+    expect(plaidDay(null)).toBeNull();
+    expect(plaidDay(undefined)).toBeNull();
+    expect(plaidDay("")).toBeNull();
+  });
+});
+
+describe("parseLoanTerm", () => {
+  it.each([
+    ["30 year", 360],
+    ["15-year fixed", 180],
+    ["30 yr", 360],
+    ["360 months", 360],
+    ["48 mo", 48],
+    ["5 Year ARM", 60],
+  ])("reads %s as %i months", (term, expected) => {
+    expect(parseLoanTerm(term)).toBe(expected);
+  });
+
+  it("returns null for text with no term in it", () => {
+    expect(parseLoanTerm("fixed")).toBeNull();
+    expect(parseLoanTerm(null)).toBeNull();
+    expect(parseLoanTerm("")).toBeNull();
+  });
+
+  it("rejects terms outside the 100-year modelling bound", () => {
+    expect(parseLoanTerm("0 year")).toBeNull();
+    expect(parseLoanTerm("200 year")).toBeNull();
+  });
+});
+
+describe("monthsBetweenDays", () => {
+  it("counts whole months between origination and payoff", () => {
+    expect(monthsBetweenDays(plaidDay("2020-01-01"), plaidDay("2050-01-01"))).toBe(360);
+    expect(monthsBetweenDays(plaidDay("2024-03-15"), plaidDay("2029-03-15"))).toBe(60);
+  });
+
+  it("returns null when either end is missing", () => {
+    expect(monthsBetweenDays(null, plaidDay("2050-01-01"))).toBeNull();
+    expect(monthsBetweenDays(plaidDay("2020-01-01"), null)).toBeNull();
+  });
+
+  it("returns null for a payoff date at or before origination", () => {
+    expect(monthsBetweenDays(plaidDay("2026-01-01"), plaidDay("2026-01-01"))).toBeNull();
+    expect(monthsBetweenDays(plaidDay("2026-01-01"), plaidDay("2020-01-01"))).toBeNull();
   });
 });

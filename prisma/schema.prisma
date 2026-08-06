@@ -163,6 +163,10 @@ model FinancialAccount {
   // percentage (e.g. 19.99) and the minimum monthly payment. Null for assets.
   interestRate         Decimal?    @db.Decimal(6, 3)
   minimumPayment       Decimal?    @db.Decimal(14, 2)
+  // Installment-loan fields powering the amortization schedule (mortgage, auto,
+  // student). Null on revolving debt like credit cards, which has no fixed term.
+  termMonths           Int?
+  originationDate      DateTime?
   // Credit card fields — populated from Plaid Liabilities on each sync.
   creditLimit          Decimal?    @db.Decimal(14, 2)
   lastStatementBalance Decimal?    @db.Decimal(14, 2)

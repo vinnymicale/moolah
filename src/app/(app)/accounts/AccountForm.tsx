@@ -32,6 +32,8 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
     color: account?.color ?? "#2563eb",
     interestRate: numField(account?.interestRate),
     minimumPayment: numField(account?.minimumPayment),
+    termMonths: numField(account?.termMonths),
+    originationDate: account?.originationDate ?? "",
   });
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -44,6 +46,8 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
   const router = useRouter();
 
   const isLiability = !ACCOUNT_TYPE_OPTIONS.find((o) => o.value === form.type)?.isAsset;
+  // Only installment debt has a fixed term; a credit card never pays itself off.
+  const isInstallment = form.type === "LOAN" || form.type === "OTHER_LIABILITY";
 
   const onType = (t: AccountType) =>
     setForm((f) => ({
@@ -61,6 +65,8 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
         includeInNetWorth: form.includeInNetWorth, color: form.color,
         interestRate: isLiability && form.interestRate !== "" ? form.interestRate : null,
         minimumPayment: isLiability && form.minimumPayment !== "" ? form.minimumPayment : null,
+        termMonths: isInstallment && form.termMonths !== "" ? form.termMonths : null,
+        originationDate: isInstallment && form.originationDate !== "" ? form.originationDate : null,
         includeInDebtPlanner: true,
       };
       const res = editing ? await updateAccountAction(account!.id, input) : await createAccountAction(input);
@@ -124,7 +130,22 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
                 <input className="input pl-7" inputMode="decimal" value={form.minimumPayment} onChange={(e) => set("minimumPayment", e.target.value)} placeholder="35" />
               </div>
             </div>
-            <p className="col-span-2 -mt-1 text-xs text-muted">Used by the <span className="text-brand">Debt payoff</span> planner.</p>
+            {isInstallment && (
+              <>
+                <div>
+                  <label className="label">Term (months)</label>
+                  <input className="input" inputMode="numeric" value={form.termMonths} onChange={(e) => set("termMonths", e.target.value)} placeholder="360" />
+                </div>
+                <div>
+                  <label className="label">Origination date</label>
+                  <input className="input" type="date" value={form.originationDate} onChange={(e) => set("originationDate", e.target.value)} />
+                </div>
+              </>
+            )}
+            <p className="col-span-2 -mt-1 text-xs text-muted">
+              Used by the <span className="text-brand">Debt payoff</span> planner
+              {isInstallment && <> and the amortization schedule</>}.
+            </p>
           </div>
         )}
         <div>

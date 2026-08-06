@@ -17,6 +17,8 @@ const account = (over: Partial<AccountDTO>): AccountDTO =>
     archived: false,
     interestRate: null,
     minimumPayment: null,
+    termMonths: null,
+    originationDate: null,
     creditLimit: null,
     lastStatementBalance: null,
     lastStatementDate: null,
