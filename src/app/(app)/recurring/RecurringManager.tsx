@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2 } from "lucide-react";
+import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2, EyeOff, Undo2, ChevronDown, ChevronRight } from "lucide-react";
 import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -48,11 +48,17 @@ export function RecurringManager({
   // client render, avoiding a hydration mismatch.
   const [dismissed, setDismissed] = usePersistentState<string[]>(DISMISSED_KEY, NONE);
   const hydrated = useIsHydrated();
+  const [showIgnored, setShowIgnored] = useState(false);
   const catById = new Map(categories.map((c) => [c.id, c]));
 
   const dismiss = (key: string) => setDismissed([...dismissed, key]);
+  const restore = (key: string) => setDismissed(dismissed.filter((k) => k !== key));
 
   const visibleSuggestions = hydrated ? suggestions.filter((s) => !dismissed.includes(s.key)) : [];
+  // Only suggestions the detector still finds can be shown again. Keys for
+  // series that have since stopped repeating stay in storage but have nothing
+  // to render, so they're dropped here rather than counted.
+  const ignoredSuggestions = hydrated ? suggestions.filter((s) => dismissed.includes(s.key)) : [];
   const closeForm = () => { setAdding(false); setEditing(null); setPrefill(null); };
 
   return (
@@ -70,6 +76,17 @@ export function RecurringManager({
           catById={catById}
           onReview={(s) => setPrefill(s)}
           onDismiss={dismiss}
+        />
+      )}
+
+      {ignoredSuggestions.length > 0 && (
+        <IgnoredPanel
+          suggestions={ignoredSuggestions}
+          catById={catById}
+          open={showIgnored}
+          onToggle={() => setShowIgnored((v) => !v)}
+          onRestore={restore}
+          onRestoreAll={() => setDismissed(dismissed.filter((k) => !ignoredSuggestions.some((s) => s.key === k)))}
         />
       )}
 
@@ -142,6 +159,73 @@ function SuggestionsPanel({
           />
         ))}
       </ul>
+    </div>
+  );
+}
+
+function IgnoredPanel({
+  suggestions,
+  catById,
+  open,
+  onToggle,
+  onRestore,
+  onRestoreAll,
+}: {
+  suggestions: RecurringSuggestion[];
+  catById: Map<string, CategoryDTO>;
+  open: boolean;
+  onToggle: () => void;
+  onRestore: (key: string) => void;
+  onRestoreAll: () => void;
+}) {
+  return (
+    <div className="card mb-5 overflow-hidden">
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-surface2"
+      >
+        {open ? <ChevronDown size={16} className="text-muted" /> : <ChevronRight size={16} className="text-muted" />}
+        <EyeOff size={16} className="text-muted" />
+        <h2 className="font-semibold">Ignored suggestions</h2>
+        <span className="text-xs text-muted">{suggestions.length}</span>
+      </button>
+      {open && (
+        <>
+          <ul className="divide-y divide-line border-t border-line">
+            {suggestions.map((s) => {
+              const cat = s.categoryId ? catById.get(s.categoryId) : undefined;
+              return (
+                <li key={s.key} className="flex items-center gap-3 px-4 py-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
+                    <CategoryIcon name={cat?.icon ?? "repeat"} size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{s.description}</p>
+                    <p className="truncate text-xs text-muted">
+                      Seen {s.count}× · {s.cadence}
+                      {cat ? ` · ${cat.name}` : ""}
+                    </p>
+                  </div>
+                  <Amount type={s.type} amount={s.amount} className="shrink-0 font-semibold" />
+                  <button
+                    onClick={() => onRestore(s.key)}
+                    className="btn-ghost h-8 shrink-0 text-xs"
+                    title="Show this suggestion again"
+                  >
+                    <Undo2 size={14} /> Restore
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex justify-end border-t border-line px-4 py-2">
+            <button onClick={onRestoreAll} className="btn-ghost h-8 text-xs">
+              <Undo2 size={14} /> Restore all
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
