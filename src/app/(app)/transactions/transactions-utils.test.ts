@@ -46,7 +46,7 @@ describe("parseTransactionFilters", () => {
 
   it("returns empty filters for missing params", () => {
     const f = parseTransactionFilters({});
-    expect(f).toEqual({ search: "", types: [], statuses: [], categoryIds: [], accountIds: [], tagIds: [] });
+    expect(f).toEqual({ search: "", types: [], statuses: [], categoryIds: [], accountIds: [], tagIds: [], recurringIds: [] });
   });
 });
 
@@ -147,6 +147,20 @@ describe("tag filters", () => {
   it("ignores tags when no tag filter is set", () => {
     const out = filterTransactionDTOs([dtoWithTags("m1", [])], EMPTY_TRANSACTION_FILTERS, new Map());
     expect(out).toHaveLength(1);
+  });
+
+  it("parses the recurring param into recurringIds", () => {
+    expect(parseTransactionFilters({ recurring: "r1, r2" }).recurringIds).toEqual(["r1", "r2"]);
+    expect(parseTransactionFilters({}).recurringIds).toEqual([]);
+  });
+
+  it("filters by recurring rule, with a sentinel for one-off rows", () => {
+    const withRule = (id: string, ruleId: string | null) => ({ ...dtoWithTags(id, []), recurringRuleId: ruleId });
+    const list = [withRule("m1", "r1"), withRule("m2", "r2"), withRule("m3", null)];
+    const byRule = filterTransactionDTOs(list, { ...EMPTY_TRANSACTION_FILTERS, recurringIds: ["r1"] }, new Map());
+    expect(byRule.map((t) => t.id)).toEqual(["m1"]);
+    const oneOff = filterTransactionDTOs(list, { ...EMPTY_TRANSACTION_FILTERS, recurringIds: ["__onetime__"] }, new Map());
+    expect(oneOff.map((t) => t.id)).toEqual(["m3"]);
   });
 });
 

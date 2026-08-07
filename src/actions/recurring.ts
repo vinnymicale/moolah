@@ -213,7 +213,7 @@ export interface LinkableRule {
 }
 
 export type LinkOptions =
-  | { ok: true; rules: LinkableRule[]; matchCount: number }
+  | { ok: true; rules: LinkableRule[]; matchCount: number; linked: LinkableRule | null }
   | { ok: false; error: string };
 
 /**
@@ -221,15 +221,17 @@ export type LinkOptions =
  * (only those can plausibly be the same series) and how many other unlinked
  * transactions share this description, which labels the "also link N others"
  * checkbox. Both are fetched together because the modal always wants both.
+ * `linked` is the rule this transaction already belongs to, returned separately
+ * so the modal can name it even when it is archived and thus not pickable.
  */
 export async function getTransactionLinkOptionsAction(transactionId: string): Promise<LinkOptions> {
-  if (isDemoMode()) return { ok: true, rules: [], matchCount: 0 };
+  if (isDemoMode()) return { ok: true, rules: [], matchCount: 0, linked: null };
   try {
     const { userId } = await requireUser();
 
     const txn = await prisma.transaction.findFirst({
       where: { id: transactionId, userId, deletedAt: null },
-      select: { id: true, type: true, description: true },
+      select: { id: true, type: true, description: true, recurringRuleId: true },
     });
     if (!txn) return { ok: false, error: "Transaction not found" };
 
@@ -248,7 +250,17 @@ export async function getTransactionLinkOptionsAction(transactionId: string): Pr
     const normalized = normalizeDescription(txn.description);
     const matchCount = matchingCandidateIds(candidates, normalized, transactionId).length;
 
-    return { ok: true, rules, matchCount };
+    // Usually already in `rules`; fetched only when it isn't (archived, or a
+    // rule whose type no longer matches the transaction's).
+    let linked = txn.recurringRuleId ? rules.find((r) => r.id === txn.recurringRuleId) ?? null : null;
+    if (txn.recurringRuleId && !linked) {
+      linked = await prisma.recurringRule.findFirst({
+        where: { id: txn.recurringRuleId, userId },
+        select: { id: true, description: true, frequency: true, interval: true },
+      });
+    }
+
+    return { ok: true, rules, matchCount, linked };
   } catch (e) {
     console.error("Action failed:", e);
     return { ok: false, error: "Something went wrong. Please try again." };

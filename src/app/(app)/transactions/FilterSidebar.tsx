@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { CategoryIcon } from "@/components/CategoryIcon";
 
 export interface MultiOption {
@@ -20,31 +20,30 @@ export interface FilterGroup {
 }
 
 /**
- * A single popover holding every transaction filter as a collapsible checklist
- * section. Keeps the toolbar to one control so it never wraps. An empty
- * selection in a group means "all" (no filtering on that group).
+ * Every transaction filter as a collapsible checklist, pinned beside the table.
+ * A fixed column rather than a popover: selecting an option navigates and
+ * re-renders, which used to reposition (and close) the old dropdown after every
+ * click. An empty selection in a group means "all" - no filtering on that group.
+ *
+ * `onClearAll` is required rather than derived from the groups: clearing them
+ * one at a time fires a navigation per group, and each is built from the params
+ * of the current render, so all but the last would be overwritten.
  */
-export function FilterPopover({ groups }: { groups: FilterGroup[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  // Sections start expanded only where a filter is already active.
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(groups.filter((g) => g.selected.size > 0).map((g) => g.key)),
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+export function FilterSidebar({
+  groups,
+  onClearAll,
+  dateRange,
+}: {
+  groups: FilterGroup[];
+  onClearAll: () => void;
+  /** The date-range controls, pinned above the checklists as the first filter. */
+  dateRange?: React.ReactNode;
+}) {
+  // Every section starts open; long lists scroll inside their own section
+  // instead of pushing the rest of the column off screen.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // Below md the column stacks above the list, so it collapses to a summary bar.
+  const [openOnMobile, setOpenOnMobile] = useState(false);
 
   const toggleOption = (group: FilterGroup, value: string) => {
     const next = new Set(group.selected);
@@ -53,7 +52,7 @@ export function FilterPopover({ groups }: { groups: FilterGroup[] }) {
     group.onChange(next);
   };
   const toggleSection = (key: string) =>
-    setExpanded((prev) => {
+    setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -61,29 +60,43 @@ export function FilterPopover({ groups }: { groups: FilterGroup[] }) {
     });
 
   const totalSelected = groups.reduce((sum, g) => sum + g.selected.size, 0);
-  const clearAll = () => groups.forEach((g) => g.selected.size > 0 && g.onChange(new Set()));
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`input flex h-9 w-auto items-center gap-1.5 text-sm ${totalSelected > 0 ? "border-brand/50 text-text" : "text-muted"}`}
-        aria-expanded={open}
-      >
-        <span>Filters</span>
-        {totalSelected > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold text-brand-fg">
-            {totalSelected}
-          </span>
-        )}
-        <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
+    <aside className="w-full shrink-0 md:w-56">
+      <div className="card md:sticky md:top-4">
+        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <SlidersHorizontal size={14} className="shrink-0 text-muted" />
+          <span className="flex-1 text-sm font-medium">Filters</span>
+          {totalSelected > 0 && (
+            <button
+              type="button"
+              onClick={onClearAll}
+              className="flex items-center gap-1 text-xs text-muted hover:text-text"
+              title="Clear every filter"
+            >
+              <X size={12} /> Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpenOnMobile((o) => !o)}
+            className="btn-ghost h-7 w-7 p-0! md:hidden"
+            aria-expanded={openOnMobile}
+            aria-label={openOnMobile ? "Hide filters" : "Show filters"}
+          >
+            <ChevronDown size={14} className={`transition-transform ${openOnMobile ? "rotate-180" : ""}`} />
+          </button>
+        </div>
 
-      {open && (
-        <div className="absolute left-0 z-30 mt-1 max-h-[70vh] w-64 overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
+        <div className={`${openOnMobile ? "block" : "hidden"} max-h-[70vh] overflow-y-auto p-1 md:block md:max-h-[calc(100vh-8rem)]`}>
+          {dateRange && (
+            <div className="border-b border-line px-2 pb-2 pt-1">
+              <p className="pb-1.5 text-xs font-medium text-muted">Date range</p>
+              {dateRange}
+            </div>
+          )}
           {groups.map((group) => {
-            const isOpen = expanded.has(group.key);
+            const isOpen = !collapsed.has(group.key);
             return (
               <div key={group.key} className="border-b border-line last:border-b-0">
                 <button
@@ -98,7 +111,7 @@ export function FilterPopover({ groups }: { groups: FilterGroup[] }) {
                   )}
                 </button>
                 {isOpen && (
-                  <ul className="pb-1">
+                  <ul className="max-h-44 overflow-y-auto pb-1">
                     {group.options.map((o) => {
                       const checked = group.selected.has(o.value);
                       return (
@@ -133,15 +146,8 @@ export function FilterPopover({ groups }: { groups: FilterGroup[] }) {
               </div>
             );
           })}
-          {totalSelected > 0 && (
-            <div className="flex justify-end px-2 py-1.5">
-              <button type="button" onClick={clearAll} className="text-xs text-brand hover:underline">
-                Clear all
-              </button>
-            </div>
-          )}
         </div>
-      )}
-    </div>
+      </div>
+    </aside>
   );
 }
