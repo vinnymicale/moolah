@@ -18,6 +18,7 @@ export function parseTransactionFilters(params: {
   category?: string;
   account?: string;
   tag?: string;
+  recurring?: string;
 }): TransactionFilters {
   return {
     search: (params.q ?? "").trim(),
@@ -26,6 +27,7 @@ export function parseTransactionFilters(params: {
     categoryIds: [...toSet(params.category ?? "")],
     accountIds: [...toSet(params.account ?? "")],
     tagIds: [...toSet(params.tag ?? "")],
+    recurringIds: [...toSet(params.recurring ?? "")],
   };
 }
 
@@ -46,6 +48,7 @@ export function filterTransactionDTOs(
     if (f.categoryIds.length > 0 && !f.categoryIds.includes(t.categoryId ?? "__uncategorized__")) return false;
     if (f.accountIds.length > 0 && !f.accountIds.includes(t.accountId ?? "__none__")) return false;
     if (f.tagIds.length > 0 && !t.tags.some((x) => f.tagIds.includes(x.id))) return false;
+    if (f.recurringIds.length > 0 && !f.recurringIds.includes(t.recurringRuleId ?? "__onetime__")) return false;
     if (q) {
       const cat = t.categoryId ? categoryNameById.get(t.categoryId) ?? "" : "";
       if (
@@ -82,6 +85,8 @@ export interface SavedFilter {
   cats: string[];
   accts: string[];
   tags: string[];
+  /** Absent on filters saved before the recurring filter existed. */
+  recurring?: string[];
 }
 
 /** Split a comma-separated query value into a Set of non-empty tokens. */

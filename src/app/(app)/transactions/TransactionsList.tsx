@@ -36,6 +36,7 @@ export function TransactionsList({
   accounts,
   categories,
   tags,
+  recurring,
   range,
   rangeLabel,
   monthISO,
@@ -47,6 +48,7 @@ export function TransactionsList({
   initialAccountId = "",
   initialCategoryId = "",
   initialTagId = "",
+  initialRecurringId = "",
   focusId = "",
   customFrom = "",
   customTo = "",
@@ -55,6 +57,8 @@ export function TransactionsList({
   accounts: AccountDTO[];
   categories: CategoryDTO[];
   tags: TagDTO[];
+  /** Recurring rules, for the "Recurring" filter group. */
+  recurring: { id: string; description: string }[];
   range: string;
   rangeLabel: string;
   monthISO: string;
@@ -66,6 +70,7 @@ export function TransactionsList({
   initialAccountId?: string;
   initialCategoryId?: string;
   initialTagId?: string;
+  initialRecurringId?: string;
   focusId?: string;
   customFrom?: string;
   customTo?: string;
@@ -92,6 +97,7 @@ export function TransactionsList({
   const catFilter = useMemo(() => toSet(initialCategoryId), [initialCategoryId]);
   const acctFilter = useMemo(() => toSet(initialAccountId), [initialAccountId]);
   const tagFilter = useMemo(() => toSet(initialTagId), [initialTagId]);
+  const recurringFilter = useMemo(() => toSet(initialRecurringId), [initialRecurringId]);
   const [search, setSearch] = useState(initialSearch);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Keep the box in step with the URL (back button, saved filters) but never
@@ -126,6 +132,7 @@ export function TransactionsList({
     if (initialCategoryId) p.category = initialCategoryId;
     if (initialAccountId) p.account = initialAccountId;
     if (initialTagId) p.tag = initialTagId;
+    if (initialRecurringId) p.recurring = initialRecurringId;
     return p;
   };
   const urlWith = (overrides: Record<string, string | null>, path = "/transactions") => {
@@ -155,6 +162,7 @@ export function TransactionsList({
   const setCatFilter = (s: Set<string>) => router.push(urlWith({ category: [...s].join(",") }));
   const setAcctFilter = (s: Set<string>) => router.push(urlWith({ account: [...s].join(",") }));
   const setTagFilter = (s: Set<string>) => router.push(urlWith({ tag: [...s].join(",") }));
+  const setRecurringFilter = (s: Set<string>) => router.push(urlWith({ recurring: [...s].join(",") }));
 
   const filterGroups: FilterGroup[] = [
     {
@@ -208,6 +216,18 @@ export function TransactionsList({
           options: tags.map((t) => ({ value: t.id, label: t.name, color: t.color })),
         }]
       : []),
+    ...(recurring.length > 0
+      ? [{
+          key: "recurring",
+          label: "Recurring",
+          selected: recurringFilter,
+          onChange: setRecurringFilter,
+          options: [
+            ...recurring.map((r) => ({ value: r.id, label: r.description })),
+            { value: "__onetime__", label: "Not recurring" },
+          ],
+        }]
+      : []),
   ];
 
   // Saved filters (named filter combos), persisted in localStorage.
@@ -221,6 +241,7 @@ export function TransactionsList({
       category: f.cats.join(","),
       account: f.accts.join(","),
       tag: (f.tags ?? []).join(",") || null,
+      recurring: (f.recurring ?? []).join(",") || null,
     }));
   };
   const [namingFilter, setNamingFilter] = useState(false);
@@ -240,14 +261,15 @@ export function TransactionsList({
         cats: [...catFilter],
         accts: [...acctFilter],
         tags: [...tagFilter],
+        recurring: [...recurringFilter],
       },
     ];
     persistFilters(next);
   };
-  const hasActiveFilters = !!search.trim() || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0 || tagFilter.size > 0;
+  const hasActiveFilters = !!search.trim() || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0 || tagFilter.size > 0 || recurringFilter.size > 0;
   const clearAllFilters = () => {
     setSearch("");
-    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null, tag: null }));
+    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null, tag: null, recurring: null }));
   };
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);

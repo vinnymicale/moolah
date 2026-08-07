@@ -1,11 +1,11 @@
 import { requireUser } from "@/lib/session";
-import { getAccounts, getCategories, getTags, getTransactionsPage, type TransactionsPageDTO } from "@/lib/queries";
+import { getAccounts, getCategories, getRecurringRules, getTags, getTransactionsPage, type TransactionsPageDTO } from "@/lib/queries";
 import { addUTCMonths, isoDay, parseISODay } from "@/lib/dates";
 import { PageHeader } from "@/components/ui-bits";
 import { TransactionsList } from "./TransactionsList";
 import { resolveTransactionsRange } from "./resolve-range";
 import { filterTransactionDTOs, paginateTransactionDTOs, parseTransactionFilters } from "./transactions-utils";
-import { DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TAGS, DEMO_TRANSACTIONS } from "@/lib/demo-data";
+import { DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_RECURRING, DEMO_TAGS, DEMO_TRANSACTIONS } from "@/lib/demo-data";
 import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -16,6 +16,7 @@ export default async function TransactionsPage({
   searchParams: Promise<{
     m?: string; range?: string; from?: string; to?: string;
     q?: string; type?: string; status?: string; category?: string; account?: string; tag?: string;
+    recurring?: string;
     page?: string; focus?: string;
   }>;
 }) {
@@ -25,9 +26,11 @@ export default async function TransactionsPage({
   const { range, monthISO, startISO, endISO, rangeLabel } = resolveTransactionsRange(params, todayISO);
   const monthFirst = parseISODay(monthISO);
 
-  const [accounts, categories, tags] = DEMO_MODE
-    ? [DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TAGS]
-    : await Promise.all([getAccounts(userId), getCategories(userId), getTags(userId)]);
+  // Archived rules are included: their past transactions still carry the link,
+  // so the filter would otherwise drop options that have matching rows.
+  const [accounts, categories, tags, recurring] = DEMO_MODE
+    ? [DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TAGS, DEMO_RECURRING]
+    : await Promise.all([getAccounts(userId), getCategories(userId), getTags(userId), getRecurringRules(userId, true)]);
 
   // Validate id filters from the URL against real rows, keeping only ids that
   // exist (plus the "uncategorized" / "no account" sentinels).
@@ -38,6 +41,8 @@ export default async function TransactionsPage({
   filters.accountIds = filters.accountIds.filter((v) => v === "__none__" || acctIds.has(v));
   const tagIdSet = new Set(tags.map((t) => t.id));
   filters.tagIds = filters.tagIds.filter((v) => tagIdSet.has(v));
+  const recurringIdSet = new Set(recurring.map((r) => r.id));
+  filters.recurringIds = filters.recurringIds.filter((v) => v === "__onetime__" || recurringIdSet.has(v));
   const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
 
   let txnPage: TransactionsPageDTO;
@@ -57,6 +62,7 @@ export default async function TransactionsPage({
         accounts={accounts}
         categories={categories}
         tags={tags}
+        recurring={recurring.map((r) => ({ id: r.id, description: r.description }))}
         range={range}
         rangeLabel={rangeLabel}
         monthISO={monthISO}
@@ -68,6 +74,7 @@ export default async function TransactionsPage({
         initialCategoryId={filters.categoryIds.join(",")}
         initialAccountId={filters.accountIds.join(",")}
         initialTagId={filters.tagIds.join(",")}
+        initialRecurringId={filters.recurringIds.join(",")}
         focusId={params.focus ?? ""}
         customFrom={range === "custom" ? startISO : ""}
         customTo={range === "custom" ? endISO : ""}

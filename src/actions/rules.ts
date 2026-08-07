@@ -177,8 +177,11 @@ export async function reorderRulesAction(ids: string[]): Promise<ActionResult> {
 // the backfill on large histories.
 const LOOKBACK_DAYS = 365;
 
-async function loadRules(userId: string): Promise<RuleLike[]> {
-  const rows = await prisma.rule.findMany({ where: { userId }, orderBy: { priority: "asc" } });
+async function loadRules(userId: string, ruleId?: string): Promise<RuleLike[]> {
+  const rows = await prisma.rule.findMany({
+    where: { userId, ...(ruleId ? { id: ruleId } : {}) },
+    orderBy: { priority: "asc" },
+  });
   return rows.map((r) => ({
     id: r.id,
     priority: r.priority,
@@ -186,6 +189,16 @@ async function loadRules(userId: string): Promise<RuleLike[]> {
     conditions: r.conditions as unknown as RuleCondition[],
     actions: r.actions as unknown as RuleAction[],
   }));
+}
+
+// A single-rule run still has to respect the enabled flag, but a disabled rule
+// the user explicitly asked to run is a no-op rather than an error, matching
+// what "apply all" does with it.
+async function loadRulesForRun(userId: string, ruleId?: string): Promise<RuleLike[]> {
+  if (!ruleId) return loadRules(userId);
+  const rules = await loadRules(userId, ruleId);
+  if (rules.length === 0) throw new UserError("Rule not found");
+  return rules;
 }
 
 export interface RulePreview {
@@ -199,14 +212,17 @@ export interface RulePreview {
   samples: { description: string; effect: string }[];
 }
 
-/** Dry run: report what applying the current rules would do. No writes. */
-export async function previewRulesAction(): Promise<RulePreview | { ok: false; error: string }> {
+/**
+ * Dry run: report what applying the rules would do. No writes. Pass a ruleId to
+ * scope the run to that one rule instead of the whole list.
+ */
+export async function previewRulesAction(ruleId?: string): Promise<RulePreview | { ok: false; error: string }> {
   if (isDemoMode()) {
     return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [] };
   }
   try {
     const { userId } = await requireUser();
-    const rules = await loadRules(userId);
+    const rules = await loadRulesForRun(userId, ruleId);
     if (rules.length === 0) {
       return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [] };
     }
@@ -276,6 +292,7 @@ export async function previewRulesAction(): Promise<RulePreview | { ok: false; e
 
     return { ok: true, wouldCategorize, wouldRename, wouldMarkTransfer, wouldSplit, wouldTag, samples };
   } catch (e) {
+    if (e instanceof UserError) return { ok: false, error: e.message };
     console.error("previewRules failed:", e);
     return { ok: false, error: "Could not preview rules. Please try again." };
   }
@@ -291,15 +308,16 @@ export interface ApplyResult {
 }
 
 /**
- * Run all enabled rules over existing transactions. Never overwrites a category
- * the user set by hand (only fills empty categories). Marked transfers are then
- * paired via matchTransfers. Returns per-effect counts.
+ * Run enabled rules over existing transactions - all of them, or just `ruleId`
+ * when the user applies a single row. Never overwrites a category the user set
+ * by hand (only fills empty categories). Marked transfers are then paired via
+ * matchTransfers. Returns per-effect counts.
  */
-export async function applyRulesAction(): Promise<ApplyResult | { ok: false; error: string }> {
+export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | { ok: false; error: string }> {
   if (isDemoMode()) return { ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0, tagged: 0 };
   try {
     const { userId } = await requireUser();
-    const rules = await loadRules(userId);
+    const rules = await loadRulesForRun(userId, ruleId);
     if (rules.length === 0) return { ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0, tagged: 0 };
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
@@ -396,6 +414,7 @@ export async function applyRulesAction(): Promise<ApplyResult | { ok: false; err
     revalidatePath("/");
     return { ok: true, categorized, renamed, transfersMarked, split, tagged };
   } catch (e) {
+    if (e instanceof UserError) return { ok: false, error: e.message };
     console.error("applyRules failed:", e);
     return { ok: false, error: "Could not apply rules. Please try again." };
   }

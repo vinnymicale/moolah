@@ -41,6 +41,8 @@ export interface TransactionDTO {
 /** Sentinel filter values for "no category" / "no account" rows. */
 export const UNCATEGORIZED_ID = "__uncategorized__";
 export const NO_ACCOUNT_ID = "__none__";
+/** Sentinel for "not linked to a recurring rule". */
+export const NO_RECURRING_ID = "__onetime__";
 
 /**
  * Server-side filters for the transactions list. Empty arrays / strings mean
@@ -53,6 +55,8 @@ export interface TransactionFilters {
   categoryIds: string[];
   accountIds: string[];
   tagIds: string[];
+  /** Recurring rule ids; may include NO_RECURRING_ID for one-off transactions. */
+  recurringIds: string[];
 }
 
 export const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
@@ -62,6 +66,7 @@ export const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   categoryIds: [],
   accountIds: [],
   tagIds: [],
+  recurringIds: [],
 };
 
 export const TRANSACTIONS_PAGE_SIZE = 100;
@@ -92,6 +97,13 @@ function transactionWhere(
   }
   if (filters.tagIds.length > 0) {
     and.push({ tags: { some: { id: { in: filters.tagIds } } } });
+  }
+  if (filters.recurringIds.length > 0) {
+    const ids = filters.recurringIds.filter((v) => v !== NO_RECURRING_ID);
+    const or: Prisma.TransactionWhereInput[] = [];
+    if (ids.length > 0) or.push({ recurringRuleId: { in: ids } });
+    if (filters.recurringIds.includes(NO_RECURRING_ID)) or.push({ recurringRuleId: null });
+    and.push({ OR: or });
   }
   if (filters.search) {
     const q = filters.search;

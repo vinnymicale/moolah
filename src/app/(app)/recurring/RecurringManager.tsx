@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2, EyeOff, Undo2, ChevronDown, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2, ListFilter, EyeOff, Undo2, ChevronDown, ChevronRight } from "lucide-react";
 import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -101,20 +102,30 @@ export function RecurringManager({
           {rules.map((r) => {
             const cat = r.categoryId ? catById.get(r.categoryId) : undefined;
             return (
-              <button key={r.id} onClick={() => setEditing(r)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface2">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
-                  <CategoryIcon name={cat?.icon ?? "tag"} size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{r.description}</p>
-                  <p className="truncate text-xs text-muted">
-                    {describeFrequency(r.frequency, r.interval)}
-                    {cat ? ` · ${cat.name}` : ""}
-                    {r.endDate ? ` · until ${r.endDate}` : ""}
-                  </p>
-                </div>
-                <Amount type={r.type} amount={r.amount} className="shrink-0 font-semibold" />
-              </button>
+              <div key={r.id} className="flex items-center hover:bg-surface2">
+                <button onClick={() => setEditing(r)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
+                    <CategoryIcon name={cat?.icon ?? "tag"} size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{r.description}</p>
+                    <p className="truncate text-xs text-muted">
+                      {describeFrequency(r.frequency, r.interval)}
+                      {cat ? ` · ${cat.name}` : ""}
+                      {r.endDate ? ` · until ${r.endDate}` : ""}
+                    </p>
+                  </div>
+                  <Amount type={r.type} amount={r.amount} className="shrink-0 font-semibold" />
+                </button>
+                <Link
+                  href={`/transactions?range=12m&recurring=${r.id}`}
+                  className="btn-ghost mr-3 h-8 w-8 shrink-0 p-0! text-muted hover:text-brand"
+                  title={`View transactions for ${r.description}`}
+                  aria-label={`View transactions for ${r.description}`}
+                >
+                  <ListFilter size={15} />
+                </Link>
+              </div>
             );
           })}
         </div>

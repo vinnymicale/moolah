@@ -12,6 +12,8 @@ import {
   previewRulesAction,
   applyRulesAction,
   type RuleInput,
+  type RulePreview,
+  type ApplyResult,
 } from "@/actions/rules";
 import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
@@ -50,6 +52,30 @@ function blankAction(type: RuleAction["type"]): RuleAction {
     case "addTag":
       return { type, tagId: "" };
   }
+}
+
+/** Human summary of a dry run, shared by the header button and the per-row one. */
+function previewSummary(res: RulePreview, scope: string): string {
+  const parts: string[] = [];
+  if (res.wouldCategorize) parts.push(`categorize ${res.wouldCategorize}`);
+  if (res.wouldRename) parts.push(`rename ${res.wouldRename}`);
+  if (res.wouldMarkTransfer) parts.push(`mark ${res.wouldMarkTransfer} transfer${res.wouldMarkTransfer === 1 ? "" : "s"}`);
+  if (res.wouldSplit) parts.push(`split ${res.wouldSplit}`);
+  if (res.wouldTag) parts.push(`tag ${res.wouldTag}`);
+  if (parts.length === 0) return `No transactions in the last year would change (${scope}).`;
+  return `${scope}: would ${parts.join(", ")} (last 365 days). Nothing changed yet.`;
+}
+
+/** Human summary of a real run. */
+function applySummary(res: ApplyResult, scope: string): string {
+  const parts: string[] = [];
+  if (res.categorized) parts.push(`categorized ${res.categorized}`);
+  if (res.renamed) parts.push(`renamed ${res.renamed}`);
+  if (res.transfersMarked) parts.push(`marked ${res.transfersMarked} transfer${res.transfersMarked === 1 ? "" : "s"}`);
+  if (res.split) parts.push(`split ${res.split}`);
+  if (res.tagged) parts.push(`tagged ${res.tagged}`);
+  if (parts.length === 0) return `No transactions matched (${scope}).`;
+  return `${scope}: ${parts.join(", ")}.`;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -156,38 +182,23 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
       router.refresh();
     });
 
-  const preview = () =>
+  // `ruleId` scopes both runs to a single row; omitted, they cover every rule.
+  const preview = (ruleId?: string, scope = "All rules") =>
     start(async () => {
       setError(null);
       setNotice(null);
-      const res = await previewRulesAction();
+      const res = await previewRulesAction(ruleId);
       if (!res.ok) return setError(res.error);
-      const parts: string[] = [];
-      if (res.wouldCategorize) parts.push(`categorize ${res.wouldCategorize}`);
-      if (res.wouldRename) parts.push(`rename ${res.wouldRename}`);
-      if (res.wouldMarkTransfer) parts.push(`mark ${res.wouldMarkTransfer} transfer${res.wouldMarkTransfer === 1 ? "" : "s"}`);
-      if (res.wouldSplit) parts.push(`split ${res.wouldSplit}`);
-      if (res.wouldTag) parts.push(`tag ${res.wouldTag}`);
-      setNotice(
-        parts.length === 0
-          ? "No transactions in the last year would change."
-          : `Would ${parts.join(", ")} (last 365 days). Nothing changed yet.`,
-      );
+      setNotice(previewSummary(res, scope));
     });
 
-  const applyNow = () =>
+  const applyNow = (ruleId?: string, scope = "All rules") =>
     start(async () => {
       setError(null);
       setNotice(null);
-      const res = await applyRulesAction();
+      const res = await applyRulesAction(ruleId);
       if (!res.ok) return setError(res.error);
-      const parts: string[] = [];
-      if (res.categorized) parts.push(`categorized ${res.categorized}`);
-      if (res.renamed) parts.push(`renamed ${res.renamed}`);
-      if (res.transfersMarked) parts.push(`marked ${res.transfersMarked} transfer${res.transfersMarked === 1 ? "" : "s"}`);
-      if (res.split) parts.push(`split ${res.split}`);
-      if (res.tagged) parts.push(`tagged ${res.tagged}`);
-      setNotice(parts.length === 0 ? "No transactions matched a rule." : `Done: ${parts.join(", ")}.`);
+      setNotice(applySummary(res, scope));
       router.refresh();
     });
 
@@ -200,11 +211,11 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
         <div className="flex items-center gap-2">
           {rules.length > 0 && (
             <>
-              <button onClick={preview} disabled={pending} className="btn-ghost h-8 text-xs" title="Dry run — see what would change without writing anything">
+              <button onClick={() => preview()} disabled={pending} className="btn-ghost h-8 text-xs" title="Dry run - see what would change without writing anything">
                 {pending ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                 Preview
               </button>
-              <button onClick={applyNow} disabled={pending} className="btn-ghost h-8 text-xs" title="Run all enabled rules over the last year of transactions">
+              <button onClick={() => applyNow()} disabled={pending} className="btn-ghost h-8 text-xs" title="Run all enabled rules over the last year of transactions">
                 {pending ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
                 Apply to existing
               </button>
@@ -222,7 +233,8 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
         <p className="mb-3 text-xs text-muted">
           When every condition of a rule holds, its actions run automatically on bank sync, CSV import, and
           via &quot;Apply to existing&quot;. Rules run top to bottom and never overwrite a category you set by hand.
-          Drag a rule or use the arrows to change which one takes priority.
+          Drag a rule or use the arrows to change which one takes priority. The preview and play icons on a
+          row run just that rule.
         </p>
 
         {error && <p className="mb-2 text-sm text-expense">{error}</p>}
@@ -348,6 +360,24 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={() => preview(rule.id, rule.name || "This rule")}
+                    disabled={pending}
+                    className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand"
+                    title="Preview just this rule"
+                    aria-label="Preview this rule"
+                  >
+                    <Eye size={13} />
+                  </button>
+                  <button
+                    onClick={() => applyNow(rule.id, rule.name || "This rule")}
+                    disabled={pending}
+                    className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand"
+                    title="Apply just this rule to existing transactions"
+                    aria-label="Apply this rule to existing transactions"
+                  >
+                    <Play size={13} />
+                  </button>
                   <button
                     onClick={() => setEditing(rule.id)}
                     disabled={pending}
