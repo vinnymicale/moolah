@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Link2, Loader2 } from "lucide-react";
 import { describeFrequency } from "@/lib/recurrence";
 import { getTransactionLinkOptionsAction, type LinkableRule } from "@/actions/recurring";
@@ -34,6 +35,7 @@ export function RecurringLinkSection({
 }) {
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState<LinkableRule[] | null>(null);
+  const [linkedRule, setLinkedRule] = useState<LinkableRule | null>(null);
   const [matchCount, setMatchCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, start] = useTransition();
@@ -47,8 +49,16 @@ export function RecurringLinkSection({
       if (!res.ok) return setError(res.error);
       setRules(res.rules);
       setMatchCount(res.matchCount);
+      setLinkedRule(res.linked);
     });
   };
+
+  // A transaction that is already linked names its series up front, so those
+  // rules are needed on mount rather than when the picker opens.
+  useEffect(() => {
+    if (linkedRuleId) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedRuleId, transactionId]);
 
   const openPicker = () => {
     setOpen(true);
@@ -62,7 +72,9 @@ export function RecurringLinkSection({
 
   const linked = linkedRuleId ?? null;
   const chosen = pendingLink ? pendingLink.ruleId : linked;
-  const chosenRule = rules?.find((r) => r.id === chosen);
+  // linkedRule covers the case where the current rule isn't in the pickable
+  // list, so an archived series still shows its name instead of "a recurring series".
+  const chosenRule = rules?.find((r) => r.id === chosen) ?? (chosen && chosen === linkedRule?.id ? linkedRule : undefined);
 
   const pick = (ruleId: string) =>
     onPendingLinkChange(ruleId ? { ruleId, alsoMatching: false } : null);
@@ -84,12 +96,22 @@ export function RecurringLinkSection({
     <div className="space-y-2 rounded-lg border border-line p-3">
       {linked && !pendingLink && (
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm">
+          <p className="min-w-0 text-sm">
             Part of{" "}
-            <span className="font-medium">{chosenRule?.description ?? "a recurring series"}</span>
             {chosenRule ? (
-              <span className="text-muted"> · {describeFrequency(chosenRule.frequency, chosenRule.interval)}</span>
-            ) : null}
+              <>
+                <Link
+                  href={`/transactions?range=12m&recurring=${chosenRule.id}`}
+                  className="font-medium underline decoration-line underline-offset-2 hover:text-brand"
+                  title="View every transaction in this series"
+                >
+                  {chosenRule.description}
+                </Link>
+                <span className="text-muted"> · {describeFrequency(chosenRule.frequency, chosenRule.interval)}</span>
+              </>
+            ) : (
+              <span className="font-medium">a recurring series</span>
+            )}
           </p>
           <div className="flex shrink-0 gap-2">
             <button type="button" onClick={openPicker} className="btn-ghost h-8 text-xs">Change</button>

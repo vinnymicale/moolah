@@ -285,6 +285,7 @@ describe("getTransactionLinkOptionsAction", () => {
       ok: true,
       rules: [{ id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 }],
       matchCount: 0,
+      linked: null,
     });
     expect(rule.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -319,6 +320,23 @@ describe("getTransactionLinkOptionsAction", () => {
     expect(result).toMatchObject({ ok: true, matchCount: 0 });
   });
 
+  it("returns the linked rule from the pickable list without a second query", async () => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix", recurringRuleId: "r1" } as never);
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toMatchObject({
+      ok: true,
+      linked: { id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 },
+    });
+    expect(rule.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("looks up the linked rule when it is archived and thus not pickable", async () => {
+    txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix", recurringRuleId: "old" } as never);
+    rule.findFirst.mockResolvedValue({ id: "old", description: "Retired gym", frequency: "MONTHLY", interval: 1 } as never);
+    const result = await getTransactionLinkOptionsAction("t1");
+    expect(result).toMatchObject({ ok: true, linked: { id: "old", description: "Retired gym" } });
+  });
+
   it("errors when the transaction does not belong to the user", async () => {
     txn.findFirst.mockResolvedValue(null);
     expect(await getTransactionLinkOptionsAction("t1")).toEqual({
@@ -333,6 +351,7 @@ describe("getTransactionLinkOptionsAction", () => {
       ok: true,
       rules: [],
       matchCount: 0,
+      linked: null,
     });
     expect(requireUserMock).not.toHaveBeenCalled();
   });
