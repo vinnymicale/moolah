@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Search, Plus, Download, Clock,
-  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight, Pencil, Paperclip,
+  CheckSquare, Square, Trash, Trash2, X, CheckCircle2, StickyNote, BookmarkPlus, ArrowLeftRight, Pencil, Paperclip, Copy,
 } from "lucide-react";
 import { TransactionModal } from "@/components/TransactionModal";
 import { TrashDrawer } from "./TrashDrawer";
+import { DedupModal } from "../accounts/PlaidLinkButton";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { FilterSidebar, type FilterGroup } from "./FilterSidebar";
 import { formatUSD } from "@/lib/money";
@@ -109,6 +110,7 @@ export function TransactionsList({
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
   const [adding, setAdding] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [dedupOpen, setDedupOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -352,20 +354,30 @@ export function TransactionsList({
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="ml-auto flex gap-2">
-          <button onClick={() => setTrashOpen(true)} className="btn-ghost h-9 w-9 p-0!" title="Recently deleted">
-            <Trash size={15} />
+          <button onClick={() => setDedupOpen(true)} className="btn-ghost h-9" title="Find and remove duplicate transactions">
+            <Copy size={15} /> <span className="hidden sm:inline">Find duplicates</span>
+          </button>
+          <button onClick={() => setTrashOpen(true)} className="btn-ghost h-9" title="Recently deleted">
+            <Trash size={15} /> <span className="hidden sm:inline">Recently deleted</span>
           </button>
           <button onClick={exportCsv} className="btn-ghost h-9" title="Export CSV">
-            <Download size={15} /> <span className="hidden sm:inline">Export</span>
+            <Download size={15} /> <span className="hidden sm:inline">Export Current</span>
           </button>
           <button onClick={exportAttachments} className="btn-ghost h-9" title="Export attachments (.zip)">
-            <Paperclip size={15} /> <span className="hidden sm:inline">Attachments</span>
+            <Paperclip size={15} /> <span className="hidden sm:inline">Export Attachments</span>
           </button>
           <button onClick={() => setAdding(true)} className="btn-primary h-9">
             <Plus size={16} /> Add
           </button>
         </div>
       </div>
+
+      {dedupOpen && (
+        <DedupModal
+          onClose={() => setDedupOpen(false)}
+          onChanged={() => router.refresh()}
+        />
+      )}
 
       <div className="flex flex-col gap-4 md:flex-row md:items-start">
         <FilterSidebar
