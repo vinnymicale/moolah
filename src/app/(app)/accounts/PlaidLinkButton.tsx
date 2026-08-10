@@ -393,7 +393,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
 // copy in each group is kept. Not every match is a mistake - a charge can
 // legitimately hit twice on the same day - so each row can be ignored instead,
 // and the remove buttons only touch the rows still checked.
-function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+export function DedupModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [scan, setScan] = useState<DedupScan | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
