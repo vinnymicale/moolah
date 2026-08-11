@@ -89,7 +89,7 @@ export default async function NetWorthPage() {
         history={history}
         forecast={forecast}
         forecastBasis={projection.basis}
-        realizedMonthly={projection.realizedMonthly}
+        unmodelledMonthly={projection.unmodelledMonthly}
         ytd={ytd}
         ytdPct={ytdPct}
         growthSeries={growthSeries}
