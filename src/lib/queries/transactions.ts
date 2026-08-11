@@ -50,6 +50,8 @@ export const NO_RECURRING_ID = "__onetime__";
  */
 export interface TransactionFilters {
   search: string;
+  /** Set when `search` parses as an amount query; suppresses the text search. */
+  amount?: { min: number | null; max: number | null } | null;
   types: TxnType[];
   statuses: ("CLEARED" | "PENDING")[];
   categoryIds: string[];
@@ -61,6 +63,7 @@ export interface TransactionFilters {
 
 export const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
   search: "",
+  amount: null,
   types: [],
   statuses: [],
   categoryIds: [],
@@ -104,6 +107,14 @@ function transactionWhere(
     if (ids.length > 0) or.push({ recurringRuleId: { in: ids } });
     if (filters.recurringIds.includes(NO_RECURRING_ID)) or.push({ recurringRuleId: null });
     and.push({ OR: or });
+  }
+  if (filters.amount) {
+    const { min, max } = filters.amount;
+    // Amounts are stored non-negative, with direction carried by `type`.
+    const amount: Prisma.DecimalFilter = {};
+    if (min !== null) amount.gte = min;
+    if (max !== null) amount.lte = max;
+    and.push({ amount });
   }
   if (filters.search) {
     const q = filters.search;

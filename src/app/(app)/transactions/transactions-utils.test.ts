@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TransactionDTO } from "@/lib/queries";
 import { EMPTY_TRANSACTION_FILTERS } from "@/lib/queries";
 import {
-  PAGE_SIZE, filterTransactionDTOs, paginateTransactionDTOs, parseTransactionFilters,
+  PAGE_SIZE, filterTransactionDTOs, paginateTransactionDTOs, parseAmountFilter, parseTransactionFilters,
 } from "./transactions-utils";
 import { resolveTransactionsRange } from "./resolve-range";
 
@@ -46,7 +46,36 @@ describe("parseTransactionFilters", () => {
 
   it("returns empty filters for missing params", () => {
     const f = parseTransactionFilters({});
-    expect(f).toEqual({ search: "", types: [], statuses: [], categoryIds: [], accountIds: [], tagIds: [], recurringIds: [] });
+    expect(f).toEqual({ search: "", amount: null, types: [], statuses: [], categoryIds: [], accountIds: [], tagIds: [], recurringIds: [] });
+  });
+
+  it("reads the amount filter from the amin/amax params, not the search box", () => {
+    expect(parseTransactionFilters({ amin: "25", amax: "25" }).amount).toEqual({ min: 25, max: 25 });
+    expect(parseTransactionFilters({ amin: "10" }).amount).toEqual({ min: 10, max: null });
+    expect(parseTransactionFilters({ q: "$25" }).amount).toBeNull();
+    expect(parseTransactionFilters({ q: "2026-06" }).search).toBe("2026-06");
+  });
+});
+
+describe("parseAmountFilter", () => {
+  it("accepts an optional $ and thousands separators", () => {
+    expect(parseAmountFilter("25", "25")).toEqual({ min: 25, max: 25 });
+    expect(parseAmountFilter("$25.00", "")).toEqual({ min: 25, max: null });
+    expect(parseAmountFilter("", " $1,234.56 ")).toEqual({ min: null, max: 1234.56 });
+  });
+
+  it("normalizes a reversed range", () => {
+    expect(parseAmountFilter("50", "10")).toEqual({ min: 10, max: 50 });
+  });
+
+  it("returns null when neither bound is a usable amount", () => {
+    expect(parseAmountFilter()).toBeNull();
+    expect(parseAmountFilter("", "")).toBeNull();
+    expect(parseAmountFilter("uber", "-")).toBeNull();
+  });
+
+  it("ignores an unparseable bound rather than the whole filter", () => {
+    expect(parseAmountFilter("10", "abc")).toEqual({ min: 10, max: null });
   });
 });
 
@@ -72,6 +101,32 @@ describe("filterTransactionDTOs", () => {
     expect(filterTransactionDTOs(list, { ...base, categoryIds: ["__uncategorized__"] }, cats).map((t) => t.id)).toEqual(["b", "c"]);
     expect(filterTransactionDTOs(list, { ...base, accountIds: ["__none__"] }, cats).map((t) => t.id)).toEqual(["a", "b"]);
     expect(filterTransactionDTOs(list, { ...base, accountIds: ["acct1"] }, cats).map((t) => t.id)).toEqual(["c"]);
+  });
+
+  it("filters by amount, inclusive of both bounds", () => {
+    const amounts = [
+      txn({ id: "a", amount: 10, description: "Coffee" }),
+      txn({ id: "b", amount: 25, description: "25 Main St deli" }),
+      txn({ id: "c", amount: 250, description: "Rent" }),
+    ];
+    const exact = parseTransactionFilters({ amin: "25", amax: "25" });
+    expect(filterTransactionDTOs(amounts, exact, cats).map((t) => t.id)).toEqual(["b"]);
+
+    const range = parseTransactionFilters({ amin: "10", amax: "100" });
+    expect(filterTransactionDTOs(amounts, range, cats).map((t) => t.id)).toEqual(["a", "b"]);
+
+    const min = parseTransactionFilters({ amin: "100" });
+    expect(filterTransactionDTOs(amounts, min, cats).map((t) => t.id)).toEqual(["c"]);
+  });
+
+  it("composes the amount filter with the text search", () => {
+    const amounts = [
+      txn({ id: "a", amount: 25, description: "Coffee" }),
+      txn({ id: "b", amount: 25, description: "Rent" }),
+      txn({ id: "c", amount: 250, description: "Rent" }),
+    ];
+    const f = parseTransactionFilters({ q: "rent", amin: "25", amax: "25" });
+    expect(filterTransactionDTOs(amounts, f, cats).map((t) => t.id)).toEqual(["b"]);
   });
 
   it("treats both statuses selected as no constraint", () => {

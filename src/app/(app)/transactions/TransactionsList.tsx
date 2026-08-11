@@ -50,6 +50,8 @@ export function TransactionsList({
   initialCategoryId = "",
   initialTagId = "",
   initialRecurringId = "",
+  initialAmountMin = "",
+  initialAmountMax = "",
   focusId = "",
   customFrom = "",
   customTo = "",
@@ -72,6 +74,8 @@ export function TransactionsList({
   initialCategoryId?: string;
   initialTagId?: string;
   initialRecurringId?: string;
+  initialAmountMin?: string;
+  initialAmountMax?: string;
   focusId?: string;
   customFrom?: string;
   customTo?: string;
@@ -107,6 +111,22 @@ export function TransactionsList({
     if (document.activeElement === searchInputRef.current) return;
     setSearch(initialSearch);
   }, [initialSearch]);
+  // The amount boxes are exact-vs-range alternatives over the same amin/amax
+  // params: an exact value pins both bounds, so filling it clears min/max and
+  // vice versa. Local state debounced into the URL, like the search box.
+  const exactFromUrl = initialAmountMin !== "" && initialAmountMin === initialAmountMax ? initialAmountMin : "";
+  const [amtExact, setAmtExact] = useState(exactFromUrl);
+  const [amtMin, setAmtMin] = useState(exactFromUrl ? "" : initialAmountMin);
+  const [amtMax, setAmtMax] = useState(exactFromUrl ? "" : initialAmountMax);
+  const amountBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (amountBoxRef.current?.contains(document.activeElement)) return;
+    const ex = initialAmountMin !== "" && initialAmountMin === initialAmountMax ? initialAmountMin : "";
+    setAmtExact(ex);
+    setAmtMin(ex ? "" : initialAmountMin);
+    setAmtMax(ex ? "" : initialAmountMax);
+  }, [initialAmountMin, initialAmountMax]);
+
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
   const [adding, setAdding] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -135,6 +155,8 @@ export function TransactionsList({
     if (initialAccountId) p.account = initialAccountId;
     if (initialTagId) p.tag = initialTagId;
     if (initialRecurringId) p.recurring = initialRecurringId;
+    if (initialAmountMin) p.amin = initialAmountMin;
+    if (initialAmountMax) p.amax = initialAmountMax;
     return p;
   };
   const urlWith = (overrides: Record<string, string | null>, path = "/transactions") => {
@@ -158,6 +180,20 @@ export function TransactionsList({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, initialSearch]);
+
+  // Push the amount boxes into the URL. An exact value wins over min/max,
+  // which the change handlers keep mutually exclusive anyway.
+  useEffect(() => {
+    const ex = amtExact.trim();
+    const lo = ex || amtMin.trim();
+    const hi = ex || amtMax.trim();
+    if (lo === initialAmountMin && hi === initialAmountMax) return;
+    const t = setTimeout(() => {
+      router.replace(urlWith({ amin: lo, amax: hi }), { scroll: false });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amtExact, amtMin, amtMax, initialAmountMin, initialAmountMax]);
 
   const setTypeFilter = (s: Set<string>) => router.push(urlWith({ type: [...s].join(",") }));
   const setStatusFilter = (s: Set<string>) => router.push(urlWith({ status: [...s].join(",") }));
@@ -271,7 +307,10 @@ export function TransactionsList({
   const hasActiveFilters = !!search.trim() || typeFilter.size > 0 || statusFilter.size > 0 || catFilter.size > 0 || acctFilter.size > 0 || tagFilter.size > 0 || recurringFilter.size > 0;
   const clearAllFilters = () => {
     setSearch("");
-    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null, tag: null, recurring: null }));
+    setAmtExact("");
+    setAmtMin("");
+    setAmtMax("");
+    router.push(urlWith({ q: null, type: null, status: null, category: null, account: null, tag: null, recurring: null, amin: null, amax: null }));
   };
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
@@ -439,6 +478,42 @@ export function TransactionsList({
           <div className="relative flex-1 min-w-48">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input ref={searchInputRef} data-search="true" className="input pl-9" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+
+          <div ref={amountBoxRef} className="flex items-center gap-1">
+            <input
+              inputMode="decimal"
+              className="input w-28"
+              placeholder="Amount"
+              aria-label="Exact amount"
+              value={amtExact}
+              onChange={(e) => {
+                setAmtExact(e.target.value);
+                if (e.target.value.trim()) { setAmtMin(""); setAmtMax(""); }
+              }}
+            />
+            <input
+              inputMode="decimal"
+              className="input w-24"
+              placeholder="Min"
+              aria-label="Minimum amount"
+              value={amtMin}
+              onChange={(e) => {
+                setAmtMin(e.target.value);
+                if (e.target.value.trim()) setAmtExact("");
+              }}
+            />
+            <input
+              inputMode="decimal"
+              className="input w-24"
+              placeholder="Max"
+              aria-label="Maximum amount"
+              value={amtMax}
+              onChange={(e) => {
+                setAmtMax(e.target.value);
+                if (e.target.value.trim()) setAmtExact("");
+              }}
+            />
           </div>
 
           {/* Saved filters */}

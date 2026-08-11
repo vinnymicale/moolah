@@ -16,7 +16,7 @@ export default async function TransactionsPage({
   searchParams: Promise<{
     m?: string; range?: string; from?: string; to?: string;
     q?: string; type?: string; status?: string; category?: string; account?: string; tag?: string;
-    recurring?: string;
+    recurring?: string; amin?: string; amax?: string;
     page?: string; focus?: string;
   }>;
 }) {
@@ -75,6 +75,8 @@ export default async function TransactionsPage({
         initialAccountId={filters.accountIds.join(",")}
         initialTagId={filters.tagIds.join(",")}
         initialRecurringId={filters.recurringIds.join(",")}
+        initialAmountMin={params.amin ?? ""}
+        initialAmountMax={params.amax ?? ""}
         focusId={params.focus ?? ""}
         customFrom={range === "custom" ? startISO : ""}
         customTo={range === "custom" ? endISO : ""}
