@@ -11,7 +11,7 @@ import { useChartTheme } from "@/lib/useChartTheme";
 import { useMounted } from "@/lib/useMounted";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 import type { NetWorthPoint } from "@/lib/snapshots";
-import type { ForecastPoint } from "@/lib/networth-forecast";
+import type { ForecastBasis, ForecastPoint } from "@/lib/networth-forecast";
 
 const FORECAST_COLOR = "#a855f7";
 
@@ -67,12 +67,16 @@ function NetWorthTooltip({ active, payload, label }: { active?: boolean; payload
 export function NetWorthChart({
   history,
   forecast,
+  forecastBasis = "rules",
+  realizedMonthly = null,
   ytd,
   ytdPct,
   growthSeries,
 }: {
   history: NetWorthPoint[];
   forecast: ForecastPoint[];
+  forecastBasis?: ForecastBasis;
+  realizedMonthly?: number | null;
   ytd: number;
   ytdPct: number | null;
   growthSeries?: { date: string; contributed: number; gains: number }[];
@@ -131,7 +135,14 @@ export function NetWorthChart({
           )}
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-muted">
+          <label
+            className="flex items-center gap-1.5 text-xs text-muted"
+            title={
+              forecastBasis === "calibrated"
+                ? `Scaled down to match your actual trend of ${realizedMonthly !== null && realizedMonthly < 0 ? "-" : ""}$${Math.abs(Math.round(realizedMonthly ?? 0)).toLocaleString()}/mo. Recurring rules alone would project faster growth than your history supports.`
+                : "Projected from your active recurring income and expenses."
+            }
+          >
             <input
               type="checkbox"
               checked={showForecast}
@@ -139,6 +150,9 @@ export function NetWorthChart({
               className="accent-[var(--brand,#4f46e5)]"
             />
             Forecast
+            {forecastBasis === "calibrated" && (
+              <span className="text-[10px] uppercase tracking-wide opacity-70">adjusted</span>
+            )}
           </label>
           {hasGrowthSeries && (
             <label className="flex items-center gap-1.5 text-xs text-muted">

@@ -32,7 +32,8 @@ export default async function NetWorthPage() {
     getNetWorth(userId),
     getInvestmentGrowthSeries(userId, HISTORY_DAYS, today),
   ]);
-  const forecast = await forecastNetWorth(userId, current.net, FORECAST_MONTHS, today);
+  const projection = await forecastNetWorth(userId, current.net, FORECAST_MONTHS, today);
+  const forecast = projection.points;
 
   // Year-to-date change: net now minus net on the first point of the year held.
   const startNet = history[0]?.net ?? current.net;
@@ -84,7 +85,15 @@ export default async function NetWorthPage() {
         />
       </div>
 
-      <NetWorthChart history={history} forecast={forecast} ytd={ytd} ytdPct={ytdPct} growthSeries={growthSeries} />
+      <NetWorthChart
+        history={history}
+        forecast={forecast}
+        forecastBasis={projection.basis}
+        realizedMonthly={projection.realizedMonthly}
+        ytd={ytd}
+        ytdPct={ytdPct}
+        growthSeries={growthSeries}
+      />
     </div>
   );
 }
