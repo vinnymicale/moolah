@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     body.forecast = projection.points;
     body.forecastBasis = projection.basis;
     body.forecastRulesMonthly = projection.rulesMonthly;
-    body.forecastRealizedMonthly = projection.realizedMonthly;
+    body.forecastUnmodelledMonthly = projection.unmodelledMonthly;
   }
 
   return apiJson(body);

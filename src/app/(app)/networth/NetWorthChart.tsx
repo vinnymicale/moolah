@@ -68,7 +68,7 @@ export function NetWorthChart({
   history,
   forecast,
   forecastBasis = "rules",
-  realizedMonthly = null,
+  unmodelledMonthly = null,
   ytd,
   ytdPct,
   growthSeries,
@@ -76,7 +76,7 @@ export function NetWorthChart({
   history: NetWorthPoint[];
   forecast: ForecastPoint[];
   forecastBasis?: ForecastBasis;
-  realizedMonthly?: number | null;
+  unmodelledMonthly?: number | null;
   ytd: number;
   ytdPct: number | null;
   growthSeries?: { date: string; contributed: number; gains: number }[];
@@ -138,9 +138,9 @@ export function NetWorthChart({
           <label
             className="flex items-center gap-1.5 text-xs text-muted"
             title={
-              forecastBasis === "calibrated"
-                ? `Scaled down to match your actual trend of ${realizedMonthly !== null && realizedMonthly < 0 ? "-" : ""}$${Math.abs(Math.round(realizedMonthly ?? 0)).toLocaleString()}/mo. Recurring rules alone would project faster growth than your history supports.`
-                : "Projected from your active recurring income and expenses."
+              forecastBasis === "cashflow"
+                ? `Includes $${Math.abs(Math.round(unmodelledMonthly ?? 0)).toLocaleString()}/mo of everyday spending measured from your transactions, on top of your recurring rules.`
+                : "Projected from your active recurring income and expenses. Too little transaction history to include everyday spending yet."
             }
           >
             <input
@@ -150,8 +150,8 @@ export function NetWorthChart({
               className="accent-[var(--brand,#4f46e5)]"
             />
             Forecast
-            {forecastBasis === "calibrated" && (
-              <span className="text-[10px] uppercase tracking-wide opacity-70">adjusted</span>
+            {forecastBasis === "cashflow" && (
+              <span className="text-[10px] uppercase tracking-wide opacity-70">cash flow</span>
             )}
           </label>
           {hasGrowthSeries && (
