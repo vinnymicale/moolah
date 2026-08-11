@@ -48,7 +48,11 @@ export async function GET(req: NextRequest) {
   const forecastRaw = Number(sp.get("forecast"));
   if (Number.isFinite(forecastRaw) && forecastRaw > 0) {
     const months = Math.min(24, Math.trunc(forecastRaw));
-    body.forecast = await forecastNetWorth(auth.userId, nw.net, months, todayISO);
+    const projection = await forecastNetWorth(auth.userId, nw.net, months, todayISO);
+    body.forecast = projection.points;
+    body.forecastBasis = projection.basis;
+    body.forecastRulesMonthly = projection.rulesMonthly;
+    body.forecastRealizedMonthly = projection.realizedMonthly;
   }
 
   return apiJson(body);
