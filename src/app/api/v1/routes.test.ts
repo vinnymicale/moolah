@@ -85,7 +85,12 @@ describe("GET /api/v1/net-worth", () => {
       assets: 1000, liabilities: 250, net: 750, accounts: [],
     } as unknown as Awaited<ReturnType<typeof getNetWorth>>);
     history.mockResolvedValue([{ date: "2026-06-13", assets: 1000, liabilities: 250, net: 750 }]);
-    forecast.mockResolvedValue([{ date: "2026-07-13", net: 800 }]);
+    forecast.mockResolvedValue({
+      points: [{ date: "2026-07-13", net: 800 }],
+      basis: "rules",
+      rulesMonthly: 50,
+      realizedMonthly: null,
+    });
 
     const { GET } = await import("./net-worth/route");
     const body = await (await GET(req("http://localhost/api/v1/net-worth?range=1y&forecast=6"))).json();
