@@ -12,109 +12,56 @@
 // and the gap compounded across the horizon - producing a steep rise for users
 // whose net worth had actually been flat for months.
 //
-// To correct for that we calibrate against realized history. The snapshot line
-// already records what net worth actually did, so we derive an observed monthly
-// rate of change from it and compare that to the rate the rules imply. When the
-// rules are more optimistic than reality we scale them down to match. Rules
-// still drive the *shape* of the line (timing of large scheduled flows), while
-// realized history sets its overall slope.
+// The fix is to model the missing spending rather than to correct for it after
+// the fact. unmodelled-cashflow.ts measures, straight from transaction history,
+// the average monthly cash flow that no rule accounts for. Adding that residual
+// to the rules projection produces a line built entirely from observed cash
+// movement: rules supply the *shape* (timing of large scheduled flows) and the
+// residual supplies the steady drag of everyday spending.
 //
-// Calibration depends on the realized rate being measured over real snapshots.
-// The history feed pads days with no snapshot as net = 0, so the leading pad
-// has to be dropped before measuring; otherwise a user who started snapshotting
-// recently looks like they went from $0 to their full balance in days, the
-// realized rate dwarfs the rules rate, and the damping never engages - exactly
-// the steep line this calibration exists to prevent.
+// An earlier version instead damped the slope to match realized net worth. That
+// was a fudge factor on top of a known-incomplete model, and it silently failed
+// whenever snapshot history was thin. Projecting the real spending is both more
+// accurate and easier to explain, so it replaces the damping entirely.
+//
+// Investment growth is deliberately not modelled. This projects cash in and
+// out; balances that move with the market stay flat at today's value rather
+// than embedding a market prediction in a budgeting tool.
 
 import { prisma } from "./prisma";
 import { toNumber } from "./money";
 import { addUTCDays, addUTCMonths, isoDay, parseISODay } from "./dates";
 import { expandOccurrences } from "./recurrence";
-import { getNetWorthHistory } from "./snapshots";
+import { unmodelledMonthlyRate } from "./unmodelled-cashflow";
 
 export interface ForecastPoint {
   date: string;
   net: number;
 }
 
-/** How the slope of the returned line was arrived at. */
-export type ForecastBasis = "rules" | "calibrated";
+/**
+ * How the slope of the returned line was arrived at. "rules" means the rules
+ * projected alone, because transaction history was too thin to measure the
+ * residual; "cashflow" means observed unmodelled spending is included.
+ */
+export type ForecastBasis = "rules" | "cashflow";
 
 export interface ForecastResult {
   points: ForecastPoint[];
   basis: ForecastBasis;
   /** Net change per month the rules on their own imply. */
   rulesMonthly: number;
-  /** Net change per month actually observed, or null when history is too thin. */
-  realizedMonthly: number | null;
+  /**
+   * Net change per month from real transactions that no rule models, or null
+   * when there is too little history to measure it. Usually negative.
+   */
+  unmodelledMonthly: number | null;
 }
 
-// Realized rate is measured over this many days of trailing history. Long
-// enough to smooth out a single unusual month, short enough to reflect current
-// habits rather than a job change from a year ago.
-const CALIBRATION_DAYS = 120;
-
-// Below this many days of history the realized rate is too noisy to trust, and
-// we fall back to the raw rules projection.
-const MIN_CALIBRATION_DAYS = 45;
-
-/**
- * Average net change per month observed in the snapshot line, or null when
- * there is not enough history to measure one.
- *
- * Uses first and last point rather than a fitted slope: net worth lines are
- * dominated by their endpoints, and a regression over a noisy daily series
- * mostly buys complexity rather than accuracy here.
- */
-export function realizedMonthlyRate(
-  history: { date: string; net: number }[],
-): number | null {
-  if (history.length < 2) return null;
-  // getNetWorthHistory returns one point per requested day whether or not a
-  // snapshot exists, and days before the user's first snapshot come back as
-  // net = 0 - absence of data rather than a real zero net worth. Measuring from
-  // one of those invents a jump from $0 to the whole balance, which reads as
-  // enormous growth and suppresses calibration entirely. Skip the leading
-  // zero-run so the rate is measured only across genuinely observed days.
-  //
-  // Only a *leading* run is skipped: a line that legitimately crosses zero
-  // mid-history keeps every point after its first non-zero observation.
-  const firstReal = history.findIndex((p) => p.net !== 0);
-  if (firstReal === -1) return null;
-  const observed = history.slice(firstReal);
-  if (observed.length < 2) return null;
-  const first = observed[0];
-  const last = observed[observed.length - 1];
-  const spanDays =
-    (parseISODay(last.date).getTime() - parseISODay(first.date).getTime()) / 86_400_000;
-  if (spanDays < MIN_CALIBRATION_DAYS) return null;
-  return (last.net - first.net) / (spanDays / 30.44);
-}
-
-/**
- * Scale factor to apply to rules-derived deltas so the projection's slope
- * matches what has actually been happening.
- *
- * Only ever damps an over-optimistic projection; we never scale a projection
- * *up* to meet a rosier realized rate. A good recent stretch (a bonus, a market
- * run) is a weak basis for promising the same every month, whereas rules that
- * outrun reality are a known, systematic bias worth correcting.
- */
-export function calibrationFactor(
-  rulesMonthly: number,
-  realizedMonthly: number | null,
-): number {
-  if (realizedMonthly === null) return 1;
-  // Rules predict losing money: already pessimistic, leave it alone.
-  if (rulesMonthly <= 0) return 1;
-  // Reality is at least as good as the rules predict: no correction needed.
-  if (realizedMonthly >= rulesMonthly) return 1;
-  // Reality is flat or shrinking while rules predict growth. Damp the growth
-  // to nothing rather than going negative, which would overcorrect into an
-  // equally unfounded decline.
-  if (realizedMonthly <= 0) return 0;
-  return realizedMonthly / rulesMonthly;
-}
+// Unmodelled cash flow is measured over this many days of trailing
+// transaction history. Long enough to smooth out a single unusual month, short
+// enough to reflect current habits rather than spending from a year ago.
+const CASHFLOW_DAYS = 120;
 
 /**
  * Project net worth forward `months` from `todayISO`. Returns one point per
@@ -122,8 +69,8 @@ export function calibrationFactor(
  * last historical point). An empty result is returned when there are no active
  * recurring rules, since there is then nothing to project.
  *
- * The slope is calibrated against realized snapshot history where enough of it
- * exists; see the module header for why.
+ * Unmodelled everyday spending is measured from transaction history and added
+ * to the rules projection where enough history exists; see the module header.
  */
 export async function forecastNetWorth(
   userId: string,
@@ -137,7 +84,7 @@ export async function forecastNetWorth(
     points: [],
     basis: "rules",
     rulesMonthly: 0,
-    realizedMonthly: null,
+    unmodelledMonthly: null,
   };
 
   const rules = await prisma.recurringRule.findMany({
@@ -188,9 +135,40 @@ export async function forecastNetWorth(
   for (const v of deltaByDay.values()) totalDelta += v;
   const rulesMonthly = totalDelta / months;
 
-  const history = await getNetWorthHistory(userId, CALIBRATION_DAYS, todayISO);
-  const realizedMonthly = realizedMonthlyRate(history);
-  const factor = calibrationFactor(rulesMonthly, realizedMonthly);
+  // Spending the rules never captured, measured from real transactions. This is
+  // the correction that keeps the line honest; see the module header.
+  const cashflowStart = addUTCDays(today, -CASHFLOW_DAYS);
+  const txns = await prisma.transaction.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      date: { gte: cashflowStart, lte: today },
+    },
+    select: {
+      date: true,
+      type: true,
+      amount: true,
+      recurringRuleId: true,
+      isTransfer: true,
+      account: { select: { type: true } },
+    },
+  });
+  const unmodelledMonthly = unmodelledMonthlyRate(
+    txns.map((t) => ({
+      date: isoDay(t.date),
+      type: t.type as "INCOME" | "EXPENSE",
+      amount: toNumber(t.amount),
+      recurringRuleId: t.recurringRuleId,
+      isTransfer: t.isTransfer,
+      accountType: t.account?.type ?? null,
+    })),
+    isoDay(cashflowStart),
+    // End exclusive at tomorrow so today's transactions are inside the window.
+    isoDay(windowStart),
+  );
+  // Spread the monthly residual evenly across days: it represents a steady
+  // drift of everyday spending, not an event on any particular date.
+  const dailyResidual = unmodelledMonthly === null ? 0 : unmodelledMonthly / 30.44;
 
   // Walk month by month, accumulating every delta that lands on or before each
   // month boundary.
@@ -200,16 +178,16 @@ export async function forecastNetWorth(
   for (let m = 1; m <= months; m++) {
     const boundary = addUTCMonths(today, m);
     for (let day = cursor; day.getTime() <= boundary.getTime(); day = addUTCDays(day, 1)) {
-      running += (deltaByDay.get(isoDay(day)) ?? 0) * factor;
+      running += (deltaByDay.get(isoDay(day)) ?? 0) + dailyResidual;
     }
     cursor = addUTCDays(boundary, 1);
     points.push({ date: isoDay(boundary), net: Math.round(running * 100) / 100 });
   }
   return {
     points,
-    basis: factor === 1 ? "rules" : "calibrated",
+    basis: unmodelledMonthly === null ? "rules" : "cashflow",
     rulesMonthly: Math.round(rulesMonthly * 100) / 100,
-    realizedMonthly:
-      realizedMonthly === null ? null : Math.round(realizedMonthly * 100) / 100,
+    unmodelledMonthly:
+      unmodelledMonthly === null ? null : Math.round(unmodelledMonthly * 100) / 100,
   };
 }

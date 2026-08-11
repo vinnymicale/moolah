@@ -89,7 +89,7 @@ describe("GET /api/v1/net-worth", () => {
       points: [{ date: "2026-07-13", net: 800 }],
       basis: "rules",
       rulesMonthly: 50,
-      realizedMonthly: null,
+      unmodelledMonthly: null,
     });
 
     const { GET } = await import("./net-worth/route");
