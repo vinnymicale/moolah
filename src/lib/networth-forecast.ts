@@ -18,6 +18,13 @@
 // rules are more optimistic than reality we scale them down to match. Rules
 // still drive the *shape* of the line (timing of large scheduled flows), while
 // realized history sets its overall slope.
+//
+// Calibration depends on the realized rate being measured over real snapshots.
+// The history feed pads days with no snapshot as net = 0, so the leading pad
+// has to be dropped before measuring; otherwise a user who started snapshotting
+// recently looks like they went from $0 to their full balance in days, the
+// realized rate dwarfs the rules rate, and the damping never engages - exactly
+// the steep line this calibration exists to prevent.
 
 import { prisma } from "./prisma";
 import { toNumber } from "./money";
@@ -63,8 +70,21 @@ export function realizedMonthlyRate(
   history: { date: string; net: number }[],
 ): number | null {
   if (history.length < 2) return null;
-  const first = history[0];
-  const last = history[history.length - 1];
+  // getNetWorthHistory returns one point per requested day whether or not a
+  // snapshot exists, and days before the user's first snapshot come back as
+  // net = 0 - absence of data rather than a real zero net worth. Measuring from
+  // one of those invents a jump from $0 to the whole balance, which reads as
+  // enormous growth and suppresses calibration entirely. Skip the leading
+  // zero-run so the rate is measured only across genuinely observed days.
+  //
+  // Only a *leading* run is skipped: a line that legitimately crosses zero
+  // mid-history keeps every point after its first non-zero observation.
+  const firstReal = history.findIndex((p) => p.net !== 0);
+  if (firstReal === -1) return null;
+  const observed = history.slice(firstReal);
+  if (observed.length < 2) return null;
+  const first = observed[0];
+  const last = observed[observed.length - 1];
   const spanDays =
     (parseISODay(last.date).getTime() - parseISODay(first.date).getTime()) / 86_400_000;
   if (spanDays < MIN_CALIBRATION_DAYS) return null;

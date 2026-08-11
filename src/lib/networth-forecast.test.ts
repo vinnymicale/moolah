@@ -37,6 +37,11 @@ function historySpanning(days: number, startNet: number, change: number) {
   ];
 }
 
+/** ISO day `offset` days after a fixed epoch, for building day-by-day series. */
+function isoAfter(offset: number) {
+  return new Date(Date.UTC(2026, 1, 1) + offset * 86_400_000).toISOString().slice(0, 10);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: no usable history, so the rules projection passes through intact.
@@ -142,6 +147,41 @@ describe("realizedMonthlyRate", () => {
   it("reports a negative rate for a declining history", () => {
     const rate = realizedMonthlyRate(historySpanning(91, 10_000, -600));
     expect(rate).toBeCloseTo(-200.7, 1);
+  });
+
+  // getNetWorthHistory always returns one point per requested day, and days
+  // before the user's first snapshot carry net = 0 because no balance has been
+  // seen yet. Those leading zeros are absence of data, not a real $0 net worth,
+  // and treating them as observations invents enormous growth.
+  it("ignores the zero-filled run before the first real snapshot", () => {
+    const history = [
+      ...Array.from({ length: 110 }, (_, i) => ({ date: isoAfter(i), net: 0 })),
+      ...Array.from({ length: 10 }, (_, i) => ({ date: isoAfter(110 + i), net: 50_000 })),
+    ];
+    // Only 10 days of genuine history: below the 45-day floor, so unmeasurable.
+    expect(realizedMonthlyRate(history)).toBeNull();
+  });
+
+  it("measures from the first real snapshot when enough genuine history exists", () => {
+    const history = [
+      ...Array.from({ length: 30 }, (_, i) => ({ date: isoAfter(i), net: 0 })),
+      ...Array.from({ length: 91 }, (_, i) => ({
+        date: isoAfter(30 + i),
+        net: 10_000 + (900 * i) / 90,
+      })),
+    ];
+    // +$900 across the 90 days that actually have data (~2.96 months).
+    expect(realizedMonthlyRate(history)).toBeCloseTo(304.4, 0);
+  });
+
+  it("still measures a history that legitimately passes through zero", () => {
+    // A real line that starts negative and crosses zero must not be mistaken
+    // for zero-fill: only the leading run before any data is skipped.
+    const history = Array.from({ length: 91 }, (_, i) => ({
+      date: isoAfter(i),
+      net: -1000 + (2000 * i) / 90,
+    }));
+    expect(realizedMonthlyRate(history)).toBeCloseTo(676.4, 0);
   });
 });
 
