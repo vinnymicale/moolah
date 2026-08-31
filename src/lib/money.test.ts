@@ -33,6 +33,26 @@ describe("moneyInput", () => {
     expect(moneyInput.parse(900)).toBe(900);
     expect(moneyInput.parse("900")).toBe(900);
   });
+
+  // Values pasted out of a bank or brokerage page arrive dressed up: a currency
+  // symbol, non-breaking spaces from the HTML, sometimes parens for a negative.
+  it("accepts pasted currency formatting", () => {
+    expect(moneyInput.parse("$107,486.92")).toBe(107486.92);
+    expect(moneyInput.parse(" 107,486.92 ")).toBe(107486.92);
+    expect(moneyInput.parse("\u00a01,234.56")).toBe(1234.56);
+    expect(moneyInput.parse("USD 1,234.56")).toBe(1234.56);
+    expect(moneyInput.parse("+1,234.56")).toBe(1234.56);
+  });
+
+  it("reads accounting-style parentheses as negative", () => {
+    expect(moneyInput.parse("(1,234.56)")).toBe(-1234.56);
+    expect(moneyInput.parse("($500)")).toBe(-500);
+  });
+
+  it("rejects genuine garbage with a readable message", () => {
+    expect(() => moneyInput.parse("abc")).toThrow(/valid amount/i);
+    expect(() => moneyInput.parse("1.2.3")).toThrow(/valid amount/i);
+  });
 });
 
 describe("sumMoney", () => {
