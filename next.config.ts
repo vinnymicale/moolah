@@ -3,8 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Emit a self-contained server bundle (.next/standalone) for the Docker image.
-  // Ignored by Vercel, which uses its own build output.
-  output: "standalone",
+  // Vercel must not build in standalone mode: it skips the top-level .nft.json
+  // trace manifests its packager reads, and the deploy fails looking for
+  // next-server.js.nft.json.
+  output: process.env.VERCEL ? undefined : "standalone",
   async headers() {
     return [
       {
