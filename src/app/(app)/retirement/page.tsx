@@ -9,6 +9,7 @@ import { VerdictHeader, RequiredSavingsPanel } from "./VerdictHeader";
 import { ProjectionChart } from "./ProjectionChart";
 import { ContributionLimits } from "./ContributionLimits";
 import { GrowthAttribution } from "./GrowthAttribution";
+import { AccountAdvice } from "./AccountAdvice";
 import { ContributionSchedules } from "./ContributionSchedules";
 import { ContributionLog } from "./ContributionLog";
 import { AssumptionsPanel } from "./AssumptionsPanel";
@@ -94,6 +95,7 @@ export default async function RetirementPage({
         ytdContributions={data.ytdContributions}
         availableTaxYears={data.availableTaxYears}
       />
+      {data.accountAdvice && <AccountAdvice advice={data.accountAdvice} />}
       {data.growth && <GrowthAttribution growth={data.growth} />}
       <ContributionSchedules schedules={data.contributionSchedules} accounts={data.accounts} />
       <ContributionLog

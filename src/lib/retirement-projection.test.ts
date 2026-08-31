@@ -14,6 +14,7 @@ const assumptions = (over: Partial<RetirementAssumptions> = {}): RetirementAssum
   expectedSocialSecurityMonthly: 0,
   currentAnnualSalary: 100_000,
   salaryGrowthRate: 0,
+  filingStatus: "SINGLE",
   ...over,
 });
 

@@ -7,7 +7,7 @@
 // All percentage fields are human-readable: 7 means 7%, not 0.07.
 
 import { z } from "zod";
-import type { ContributionSource } from "@/generated/prisma/enums";
+import type { ContributionSource, FilingStatus } from "@/generated/prisma/enums";
 
 export interface RetirementAssumptions {
   birthYear: number;
@@ -37,6 +37,8 @@ export interface RetirementAssumptions {
    * projection.
    */
   salaryGrowthRate: number;
+  /** Federal filing status, used to pick the marginal bracket behind the account advice. */
+  filingStatus: FilingStatus;
 }
 
 /** One tier of an employer match: "matchPercent% of the next upToPercentOfSalary% of salary". */

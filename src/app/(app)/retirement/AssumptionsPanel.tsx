@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { saveRetirementPlanAction, saveEmployerMatchAction } from "@/actions/retirement";
 import { formatUSDWhole } from "@/lib/money";
 import type { RetirementAssumptions } from "@/lib/retirement-types";
+import type { FilingStatus } from "@/generated/prisma/enums";
 import type {
   ContributionScheduleDTO,
   EmployerMatchDTO,
@@ -12,6 +13,13 @@ import type {
 } from "@/lib/queries/retirement";
 
 type TierDraft = { matchPercent: string; upToPercentOfSalary: string };
+
+const FILING_STATUS_LABELS: Record<FilingStatus, string> = {
+  SINGLE: "Single",
+  MARRIED_JOINT: "Married, filing jointly",
+  MARRIED_SEPARATE: "Married, filing separately",
+  HEAD_OF_HOUSEHOLD: "Head of household",
+};
 
 export function AssumptionsPanel({
   assumptions,
@@ -69,6 +77,7 @@ export function AssumptionsPanel({
     String(assumptions.currentAnnualSalary),
   );
   const [salaryGrowthRate, setSalaryGrowthRate] = useState(String(assumptions.salaryGrowthRate));
+  const [filingStatus, setFilingStatus] = useState<FilingStatus>(assumptions.filingStatus);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +93,7 @@ export function AssumptionsPanel({
       expectedSocialSecurityMonthly,
       currentAnnualSalary,
       salaryGrowthRate,
+      filingStatus,
     });
     if (!r.ok) {
       setError(r.error);
@@ -158,6 +168,7 @@ export function AssumptionsPanel({
             label="Real salary growth"
             value={`${assumptions.salaryGrowthRate}%`}
           />
+          <SummaryItem label="Filing status" value={FILING_STATUS_LABELS[assumptions.filingStatus]} />
           <SummaryItem
             label="Your deferral"
             value={deferralPercent > 0 ? `${deferralPercent.toFixed(1)}% of salary` : "Not set"}
@@ -225,6 +236,19 @@ export function AssumptionsPanel({
               value={safeWithdrawalRate}
               onChange={(e) => setSafeWithdrawalRate(e.target.value)}
             />
+          </Field>
+          <Field label="Filing status">
+            <select
+              className="input"
+              value={filingStatus}
+              onChange={(e) => setFilingStatus(e.target.value as FilingStatus)}
+            >
+              {(Object.keys(FILING_STATUS_LABELS) as FilingStatus[]).map((v) => (
+                <option key={v} value={v}>
+                  {FILING_STATUS_LABELS[v]}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Social Security (monthly, today's $)">
             <input
