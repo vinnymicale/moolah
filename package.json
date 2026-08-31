@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "start:all": "concurrently -k -n db,web -c blue,green \"npm:db:local\" \"npm:dev\"",
