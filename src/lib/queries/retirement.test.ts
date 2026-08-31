@@ -43,6 +43,7 @@ const planRow = {
   expectedSocialSecurityMonthly: "0",
   currentAnnualSalary: "100000",
   salaryGrowthRate: "0",
+  filingStatus: "SINGLE",
   completedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 

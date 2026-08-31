@@ -83,6 +83,9 @@
     "@prisma/dev": {
       "find-my-way": "^9.7.0",
       "valibot": "^1.4.2"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.2"
     }
   }
 }

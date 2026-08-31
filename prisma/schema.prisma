@@ -610,6 +610,16 @@ enum ContributionSource {
   ROLLOVER
 }
 
+// Federal filing status, for picking the right marginal tax bracket when
+// advising traditional vs. Roth. Only the statuses with distinct bracket tables
+// that matter here; qualifying widow(er) shares the joint table.
+enum FilingStatus {
+  SINGLE
+  MARRIED_JOINT
+  MARRIED_SEPARATE
+  HEAD_OF_HOUSEHOLD
+}
+
 // How a contribution schedule states its size. A flat dollar amount drifts as a
 // share of pay once salary changes; a percentage tracks it.
 enum ContributionBasis {
@@ -636,6 +646,8 @@ model RetirementPlan {
   currentAnnualSalary           Decimal @default(0) @db.Decimal(14, 2)
   // Real (above-inflation) annual salary growth. 0 means raises track inflation.
   salaryGrowthRate              Decimal @default(0) @db.Decimal(6, 3)
+  // Drives the marginal-bracket estimate behind the traditional-vs-Roth advice.
+  filingStatus                  FilingStatus @default(SINGLE)
 
   completedAt DateTime?
   createdAt   DateTime  @default(now())

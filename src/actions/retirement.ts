@@ -30,6 +30,9 @@ const planSchema = z.object({
   expectedSocialSecurityMonthly: moneyInput.pipe(z.number().min(0)),
   currentAnnualSalary: moneyInput.pipe(z.number().min(0)),
   salaryGrowthRate: z.coerce.number().min(-10).max(20),
+  filingStatus: z
+    .enum(["SINGLE", "MARRIED_JOINT", "MARRIED_SEPARATE", "HEAD_OF_HOUSEHOLD"])
+    .default("SINGLE"),
 });
 
 const contributionSchema = z.object({

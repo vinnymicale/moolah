@@ -9,11 +9,61 @@ import { z } from "zod";
 
 export type MoneyInput = number | string | { toString(): string } | null | undefined;
 
-/** Zod preprocessor for user-typed money amounts: strips thousands separators (e.g. "1,234.56") before coercing to a number. */
-export const moneyInput = z.preprocess(
-  (v) => (typeof v === "string" ? v.replace(/,/g, "") : v),
-  z.coerce.number(),
-);
+/**
+ * Normalise a user-typed or pasted money string to something Number() accepts.
+ *
+ * Amounts copied out of a bank or brokerage page rarely arrive bare: they carry
+ * a currency symbol, thousands separators, non-breaking spaces left over from
+ * the HTML, and occasionally accounting parentheses for a negative. Stripping
+ * all of that is friendlier than rejecting a paste the user can plainly read as
+ * a number.
+ *
+ * Returns null when what's left isn't a single well-formed number, so callers
+ * can report bad input rather than silently treating it as zero.
+ */
+export function normalizeMoneyString(raw: string): number | null {
+  let s = raw.replace(/[\s\u00a0\u202f]/g, "");
+  if (s === "") return null;
+
+  // Accounting notation: (1,234.56) means -1,234.56.
+  let negative = false;
+  const parens = /^\((.*)\)$/.exec(s);
+  if (parens) {
+    negative = true;
+    s = parens[1];
+  }
+
+  s = s.replace(/[$€£¥]|USD/gi, "").replace(/,/g, "");
+
+  // A leading sign is fine, but only one, and only here.
+  const signed = /^([+-])(.*)$/.exec(s);
+  if (signed) {
+    if (signed[1] === "-") negative = !negative;
+    s = signed[2];
+  }
+
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  return negative ? -n : n;
+}
+
+/**
+ * Zod schema for user-typed money amounts. Accepts pasted formatting (commas,
+ * currency symbols, parentheses) and reports anything genuinely unparseable in
+ * language a user can act on, rather than Zod's "expected number, received NaN".
+ */
+export const moneyInput = z.union([
+  z.number(),
+  z.string().transform((v, ctx) => {
+    const n = normalizeMoneyString(v);
+    if (n === null) {
+      ctx.addIssue({ code: "custom", message: `"${v}" isn't a valid amount.` });
+      return z.NEVER;
+    }
+    return n;
+  }),
+]);
 
 /** Convert a Prisma Decimal / string / number to a JS number (dollars). */
 export function toNumber(value: MoneyInput): number {

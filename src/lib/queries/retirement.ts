@@ -32,6 +32,7 @@ import {
   type ContributionLimitReport,
 } from "@/lib/contribution-limits";
 import { attributeGrowth, type GrowthAttribution } from "@/lib/retirement-growth";
+import { buildAccountAdvice, type AccountAdvice } from "@/lib/account-advice";
 import type { ContributionSource } from "@/generated/prisma/enums";
 
 /** Account types that fund retirement. */
@@ -72,6 +73,8 @@ export interface RetirementPageData {
   target: RetirementTarget | null;
   requiredSavings: RequiredSavings | null;
   limits: ContributionLimitReport | null;
+  /** Which accounts to fund next, and the traditional-vs-Roth lean behind them. */
+  accountAdvice: AccountAdvice | null;
   growth: GrowthAttribution | null;
   recentContributions: ContributionDTO[];
   /** Hand-entered YTD totals for the current tax year. Empty when none are set. */
@@ -342,6 +345,7 @@ export async function getRetirementPageData(
       target: null,
       requiredSavings: null,
       limits: null,
+      accountAdvice: null,
       growth: null,
       recentContributions,
       ytdContributions,
@@ -365,6 +369,7 @@ export async function getRetirementPageData(
     expectedSocialSecurityMonthly: toNumber(planRow.expectedSocialSecurityMonthly),
     currentAnnualSalary: toNumber(planRow.currentAnnualSalary),
     salaryGrowthRate: toNumber(planRow.salaryGrowthRate),
+    filingStatus: planRow.filingStatus,
   };
 
   const realAnnualReturn =
@@ -492,6 +497,18 @@ export async function getRetirementPageData(
     annualDeferralPace: monthlyDeferral * 12,
   });
 
+  const accountAdvice = buildAccountAdvice({
+    age,
+    currentAnnualSalary: assumptions.currentAnnualSalary,
+    incomeReplacementRatio: assumptions.incomeReplacementRatio,
+    filingStatus: assumptions.filingStatus,
+    taxYear: currentTaxYear,
+    annualContribution: monthlyDeferral * 12,
+    match: limits.match,
+    hasWorkplacePlan: accounts.some((a) => !a.isIra),
+    hasIra: accounts.some((a) => a.isIra),
+  });
+
   // Growth attribution over the last year of snapshot history, restricted to
   // the retirement/investment accounts. endBalance is totalBalance, which sums
   // only those accounts, so startBalance has to come from the same set - a
@@ -541,6 +558,7 @@ export async function getRetirementPageData(
     target,
     requiredSavings,
     limits,
+    accountAdvice,
     growth,
     recentContributions,
     ytdContributions,

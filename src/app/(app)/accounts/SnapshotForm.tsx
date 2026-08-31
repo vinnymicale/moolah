@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/Modal";
 import { addSnapshotAction } from "@/actions/accounts";
+import { normalizeMoneyString } from "@/lib/money";
 import type { AccountDTO } from "@/lib/queries";
 
 export function SnapshotForm({ account, onClose }: { account: AccountDTO; onClose: () => void }) {
@@ -14,10 +15,16 @@ export function SnapshotForm({ account, onClose }: { account: AccountDTO; onClos
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  const parsed = normalizeMoneyString(balance);
+
   const submit = async () => {
+    if (parsed === null) {
+      setError("Enter a valid amount, e.g. 107,486.92");
+      return;
+    }
     setError(null);
     setPending(true);
-    const res = await addSnapshotAction({ accountId: account.id, balance, date, note, setCurrent: true });
+    const res = await addSnapshotAction({ accountId: account.id, balance: parsed, date, note, setCurrent: true });
     if (!res.ok) {
       setError("error" in res ? (res.error as string) : "Error");
       setPending(false);
@@ -39,7 +46,16 @@ export function SnapshotForm({ account, onClose }: { account: AccountDTO; onClos
             <label className="label">New balance</label>
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">$</span>
-              <input className="input pl-7" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} autoFocus />
+              <input
+                className="input pl-7"
+                inputMode="decimal"
+                value={balance}
+                onChange={(e) => setBalance(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                }}
+                autoFocus
+              />
             </div>
           </div>
           <div>
