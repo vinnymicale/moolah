@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { expandOccurrences } from "@/lib/recurrence";
+import { expandVersioned } from "@/lib/recurrence";
 import { addUTCDays, isoDay, parseISODay } from "@/lib/dates";
 import type { TriggerDef, TriggerEvent } from "../types";
 
@@ -34,14 +34,11 @@ export const recurringMissing: TriggerDef = {
     const windowStart = addUTCDays(today, -60);
     const rules = await prisma.recurringRule.findMany({
       where: { userId: ctx.userId, archived: false },
-      select: {
-        id: true, description: true, frequency: true, interval: true,
-        startDate: true, endDate: true, dayOfMonth: true, weekday: true,
-      },
+      select: { id: true, description: true, versions: { orderBy: { effectiveFrom: "asc" } } },
     });
     const events: TriggerEvent[] = [];
     for (const rule of rules) {
-      const expected = expandOccurrences(rule, windowStart, cutoff).at(-1);
+      const expected = expandVersioned(rule.versions, windowStart, cutoff).at(-1)?.date;
       if (!expected) continue;
       const matched = await prisma.transaction.findFirst({
         where: {

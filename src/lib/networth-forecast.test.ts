@@ -36,6 +36,15 @@ function spendingRun(todayISO: string, amount: number, everyDays: number, count:
   }));
 }
 
+/** Wraps flat rule fields into the single-version shape the forecast reads. */
+function versioned(fields: Record<string, unknown>) {
+  return {
+    id: "r1",
+    description: "Rule",
+    versions: [{ effectiveFrom: new Date(`${fields.startDate}T00:00:00Z`), ...fields }],
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: no transactions, so the rules projection passes through intact.
@@ -52,11 +61,11 @@ describe("forecastNetWorth", () => {
   it("returns empty when rules produce no occurrences in the horizon", async () => {
     // A rule that ended in the past yields nothing forward.
     ruleFind.mockResolvedValue([
-      {
+      versioned({
         frequency: "MONTHLY", interval: 1, startDate: "2020-01-01",
         endDate: "2020-12-31", dayOfMonth: 1, weekday: null,
         amount: 500, type: "INCOME",
-      },
+      }),
     ] as never);
     const res = await forecastNetWorth("u1", 1000, 3, "2026-06-14");
     expect(res.points).toEqual([]);
@@ -64,11 +73,11 @@ describe("forecastNetWorth", () => {
 
   it("adds monthly recurring income to net at each month boundary", async () => {
     ruleFind.mockResolvedValue([
-      {
+      versioned({
         frequency: "MONTHLY", interval: 1, startDate: "2026-01-01",
         endDate: null, dayOfMonth: 1, weekday: null,
         amount: 100, type: "INCOME",
-      },
+      }),
     ] as never);
 
     const res = await forecastNetWorth("u1", 1000, 3, "2026-06-14");
@@ -83,11 +92,11 @@ describe("forecastNetWorth", () => {
 
   it("subtracts recurring expense from net", async () => {
     ruleFind.mockResolvedValue([
-      {
+      versioned({
         frequency: "MONTHLY", interval: 1, startDate: "2026-01-10",
         endDate: null, dayOfMonth: 10, weekday: null,
         amount: 200, type: "EXPENSE",
-      },
+      }),
     ] as never);
 
     const res = await forecastNetWorth("u1", 1000, 2, "2026-06-14");
@@ -101,16 +110,16 @@ describe("forecastNetWorth", () => {
 
   it("nets income against expense within the same period", async () => {
     ruleFind.mockResolvedValue([
-      {
+      versioned({
         frequency: "MONTHLY", interval: 1, startDate: "2026-01-01",
         endDate: null, dayOfMonth: 1, weekday: null,
         amount: 1000, type: "INCOME",
-      },
-      {
+      }),
+      versioned({
         frequency: "MONTHLY", interval: 1, startDate: "2026-01-15",
         endDate: null, dayOfMonth: 15, weekday: null,
         amount: 400, type: "EXPENSE",
-      },
+      }),
     ] as never);
 
     const res = await forecastNetWorth("u1", 0, 1, "2026-06-14");
@@ -124,11 +133,11 @@ describe("forecastNetWorth", () => {
 
 describe("forecastNetWorth unmodelled spending", () => {
   const paycheckRule = [
-    {
+    versioned({
       frequency: "MONTHLY", interval: 1, startDate: "2026-01-01",
       endDate: null, dayOfMonth: 1, weekday: null,
       amount: 1000, type: "INCOME",
-    },
+    }),
   ];
 
   it("projects rules alone when there are no transactions to measure", async () => {

@@ -144,14 +144,20 @@ describe("createTransactionAction", () => {
     expect(recurring.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         userId: "u1",
-        type: "EXPENSE",
-        amount: 25,
         description: "Coffee beans",
-        frequency: "MONTHLY",
-        interval: 1,
-        dayOfMonth: 1,
-        weekday: null,
-        endDate: null,
+        versions: {
+          create: [
+            expect.objectContaining({
+              type: "EXPENSE",
+              amount: 25,
+              frequency: "MONTHLY",
+              interval: 1,
+              dayOfMonth: 1,
+              weekday: null,
+              endDate: null,
+            }),
+          ],
+        },
       }),
     });
     expect(txn.create.mock.calls[0][0].data.recurringRuleId).toBe("rr1");
@@ -376,18 +382,25 @@ describe("convertToRecurringAction", () => {
     expect(recurring.create).toHaveBeenCalledWith({
       data: {
         userId: "u1",
-        accountId: "acc1",
-        categoryId: "cat1",
-        type: "EXPENSE",
-        amount: 15.99,
         description: "Netflix",
-        note: null,
-        frequency: "MONTHLY",
-        interval: 1,
-        dayOfMonth: 15,
-        weekday: null,
-        startDate: sourceTxn.date,
-        endDate: null,
+        versions: {
+          create: [
+            {
+              effectiveFrom: sourceTxn.date,
+              accountId: "acc1",
+              categoryId: "cat1",
+              type: "EXPENSE",
+              amount: 15.99,
+              note: null,
+              frequency: "MONTHLY",
+              interval: 1,
+              dayOfMonth: 15,
+              weekday: null,
+              startDate: sourceTxn.date,
+              endDate: null,
+            },
+          ],
+        },
       },
     });
     expect(txn.update).toHaveBeenCalledWith({
@@ -400,12 +413,21 @@ describe("convertToRecurringAction", () => {
 describe("materializeOccurrenceAction", () => {
   const rule = {
     id: "rr1",
-    accountId: "acc1",
-    categoryId: "cat1",
-    type: "EXPENSE",
-    amount: 1200,
     description: "Rent",
-    note: null,
+    versions: [{
+      effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+      accountId: "acc1",
+      categoryId: "cat1",
+      type: "EXPENSE",
+      amount: 1200,
+      note: null,
+      frequency: "MONTHLY",
+      interval: 1,
+      startDate: new Date("2026-01-01T00:00:00Z"),
+      endDate: null,
+      dayOfMonth: 1,
+      weekday: null,
+    }],
   };
 
   it("errors when the rule isn't the user's", async () => {

@@ -82,7 +82,8 @@ describe("cc-due", () => {
 describe("recurring-price-change", () => {
   it("fires when a matched transaction differs from its rule by at least minPercent", async () => {
     vi.mocked(prisma.transaction.findMany).mockResolvedValue([
-      { id: "t1", amount: 18.99, recurringRule: { id: "r1", description: "Netflix", amount: 15.49 } },
+      { id: "t1", amount: 18.99, date: new Date("2026-07-01T00:00:00Z"),
+        recurringRule: { id: "r1", description: "Netflix", versions: [{ effectiveFrom: new Date("2026-01-01T00:00:00Z"), amount: 15.49 }] } },
     ] as never);
     const events = await recurringPriceChange.evaluate(
       ctx({ params: { minPercent: 10 }, event: { kind: "plaid-sync", newTransactionIds: ["t1"] } }),
@@ -97,7 +98,8 @@ describe("recurring-price-change", () => {
 
   it("is silent under the threshold and without an event", async () => {
     vi.mocked(prisma.transaction.findMany).mockResolvedValue([
-      { id: "t1", amount: 15.99, recurringRule: { id: "r1", description: "Netflix", amount: 15.49 } },
+      { id: "t1", amount: 15.99, date: new Date("2026-07-01T00:00:00Z"),
+        recurringRule: { id: "r1", description: "Netflix", versions: [{ effectiveFrom: new Date("2026-01-01T00:00:00Z"), amount: 15.49 }] } },
     ] as never);
     expect(
       await recurringPriceChange.evaluate(
@@ -106,12 +108,30 @@ describe("recurring-price-change", () => {
     ).toEqual([]);
     expect(await recurringPriceChange.evaluate(ctx({ params: { minPercent: 10 } }))).toEqual([]);
   });
+
+  it("compares against the version in force on the transaction's own date", async () => {
+    vi.mocked(prisma.transaction.findMany).mockResolvedValue([
+      { id: "t1", amount: 15.49, date: new Date("2026-03-01T00:00:00Z"),
+        recurringRule: { id: "r1", description: "Netflix", versions: [
+          { effectiveFrom: new Date("2026-01-01T00:00:00Z"), amount: 15.49 },
+          { effectiveFrom: new Date("2026-06-01T00:00:00Z"), amount: 18.99 },
+        ] } },
+    ] as never);
+    expect(
+      await recurringPriceChange.evaluate(
+        ctx({ params: { minPercent: 10 }, event: { kind: "plaid-sync", newTransactionIds: ["t1"] } }),
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("recurring-missing", () => {
   const rule = {
-    id: "r1", description: "Netflix", frequency: "MONTHLY", interval: 1,
-    startDate: new Date("2026-01-01T00:00:00Z"), endDate: null, dayOfMonth: 1, weekday: null,
+    id: "r1", description: "Netflix",
+    versions: [{
+      effectiveFrom: new Date("2026-01-01T00:00:00Z"), frequency: "MONTHLY", interval: 1,
+      startDate: new Date("2026-01-01T00:00:00Z"), endDate: null, dayOfMonth: 1, weekday: null,
+    }],
   };
 
   it("fires when the last expected occurrence has no matching transaction past the grace period", async () => {

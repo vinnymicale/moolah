@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { parseISODay, isoDay } from "@/lib/dates";
 import { toCents } from "@/lib/money";
-import { expandOccurrences } from "@/lib/recurrence";
+import { expandVersioned } from "@/lib/recurrence";
+import { versionsInclude } from "@/lib/recurring-versions";
 import { guessCategoryName, type ImportType } from "@/lib/csv-import";
 import { evaluateRules, type RuleAction, type RuleCondition, type RuleLike } from "@/lib/rules";
 import { matchTransfers } from "@/lib/plaid-sync";
@@ -75,23 +76,13 @@ export async function analyzeImportAction(
     // day, so a set is enough).
     const recurringRules = await prisma.recurringRule.findMany({
       where: { userId, archived: false },
+      include: versionsInclude,
     });
     const recurringKeys = new Set<string>();
     for (const rule of recurringRules) {
-      const occ = expandOccurrences(
-        {
-          frequency: rule.frequency,
-          interval: rule.interval,
-          startDate: rule.startDate,
-          endDate: rule.endDate,
-          dayOfMonth: rule.dayOfMonth,
-          weekday: rule.weekday,
-        },
-        rangeStart,
-        rangeEnd,
-      );
-      const cents = toCents(rule.amount);
-      for (const d of occ) recurringKeys.add(key(rule.type, isoDay(d), cents));
+      for (const { date, version } of expandVersioned(rule.versions, rangeStart, rangeEnd)) {
+        recurringKeys.add(key(version.type, isoDay(date), toCents(version.amount)));
+      }
     }
 
     // Category lookup by (name, kind).

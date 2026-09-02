@@ -4,6 +4,7 @@ import {
   tokens,
   descriptionMatches,
   matchRecurringRule,
+  matchedCategoryId,
   resolveCategoryId,
   plaidDay,
   parseLoanTerm,
@@ -62,19 +63,31 @@ describe("descriptionMatches", () => {
   });
 });
 
-const rule = (over: Partial<MatchableRule>): MatchableRule => ({
-  id: "r1",
-  type: "EXPENSE",
-  amount: 100,
-  description: "Netflix",
-  frequency: "MONTHLY",
-  interval: 1,
-  startDate: parseISODay("2026-01-15"),
-  endDate: null,
-  dayOfMonth: 15,
-  weekday: null,
-  ...over,
-});
+type VersionOverride = Partial<MatchableRule["versions"][number]>;
+
+/** A single-version rule, so a test can override version fields inline. */
+const rule = (
+  over: Partial<Pick<MatchableRule, "id" | "description">> & VersionOverride,
+): MatchableRule => {
+  const { id, description, ...version } = over;
+  return {
+    id: id ?? "r1",
+    description: description ?? "Netflix",
+    versions: [{
+      effectiveFrom: parseISODay("2026-01-15"),
+      type: "EXPENSE",
+      amount: 100,
+      categoryId: null,
+      frequency: "MONTHLY",
+      interval: 1,
+      startDate: parseISODay("2026-01-15"),
+      endDate: null,
+      dayOfMonth: 15,
+      weekday: null,
+      ...version,
+    }],
+  };
+};
 
 describe("matchRecurringRule", () => {
   const date = parseISODay("2026-06-15");
@@ -120,6 +133,42 @@ describe("matchRecurringRule", () => {
   it("returns the first matching rule", () => {
     const rules = [rule({ id: "a" }), rule({ id: "b" })];
     expect(matchRecurringRule(rules, "EXPENSE", date, 100, "NETFLIX")).toBe("a");
+  });
+
+  it("matches a pre-boundary transaction on the old amount, not the new one", () => {
+    const versioned: MatchableRule = {
+      id: "r1",
+      description: "Netflix",
+      versions: [
+        ...rule({}).versions,
+        { ...rule({}).versions[0], effectiveFrom: parseISODay("2026-07-15"), amount: 200 },
+      ],
+    };
+    expect(matchRecurringRule([versioned], "EXPENSE", date, 100, "NETFLIX")).toBe("r1");
+    expect(matchRecurringRule([versioned], "EXPENSE", date, 200, "NETFLIX")).toBeNull();
+    const after = parseISODay("2026-08-15");
+    expect(matchRecurringRule([versioned], "EXPENSE", after, 200, "NETFLIX")).toBe("r1");
+    expect(matchRecurringRule([versioned], "EXPENSE", after, 100, "NETFLIX")).toBeNull();
+  });
+});
+
+describe("matchedCategoryId", () => {
+  const versioned: MatchableRule = {
+    id: "r1",
+    description: "Netflix",
+    versions: [
+      { ...rule({}).versions[0], categoryId: "old" },
+      { ...rule({}).versions[0], effectiveFrom: parseISODay("2026-07-15"), categoryId: "new" },
+    ],
+  };
+
+  it("returns the category the rule carried on the transaction's date", () => {
+    expect(matchedCategoryId([versioned], "r1", parseISODay("2026-06-15"))).toBe("old");
+    expect(matchedCategoryId([versioned], "r1", parseISODay("2026-08-15"))).toBe("new");
+  });
+
+  it("returns null for an unknown rule", () => {
+    expect(matchedCategoryId([versioned], "nope", parseISODay("2026-06-15"))).toBeNull();
   });
 });
 

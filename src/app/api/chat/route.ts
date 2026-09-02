@@ -373,18 +373,24 @@ async function executeTool(
           ? accounts.find((a) => a.name.toLowerCase().includes(input.account_name!.toLowerCase()))
           : null;
 
+        const startDate = new Date(`${input.start_date}T00:00:00.000Z`);
         await prisma.recurringRule.create({
           data: {
             userId,
-            type: input.type,
-            amount: input.amount,
             description: input.description,
-            frequency: input.frequency,
-            interval: input.interval || 1,
-            startDate: new Date(`${input.start_date}T00:00:00.000Z`),
-            dayOfMonth: input.day_of_month || null,
-            categoryId: category?.id || null,
-            accountId: account?.id || null,
+            versions: {
+              create: [{
+                effectiveFrom: startDate,
+                type: input.type,
+                amount: input.amount,
+                frequency: input.frequency,
+                interval: input.interval || 1,
+                startDate,
+                dayOfMonth: input.day_of_month || null,
+                categoryId: category?.id || null,
+                accountId: account?.id || null,
+              }],
+            },
           },
         });
         return JSON.stringify({

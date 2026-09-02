@@ -7,16 +7,17 @@ import { Plus, Trash2, Repeat, Sparkles, X, Check, Loader2, Link2, ListFilter, E
 import { useConfirmAction } from "@/lib/useConfirmAction";
 import { Modal } from "@/components/Modal";
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { describeFrequency } from "@/lib/recurrence";
+import { describeFrequency, expandOccurrences } from "@/lib/recurrence";
 import { categoryColor } from "@/lib/colors";
 import { useIsHydrated, usePersistentState } from "@/lib/usePersistentState";
 import { Amount } from "@/components/Amount";
 import type { AccountDTO, CategoryDTO, RecurringDTO, RecurringSuggestion } from "@/lib/queries";
 import {
   createRecurringAction, updateRecurringAction, deleteRecurringAction,
-  linkSuggestionToRuleAction, type RecurringInput,
+  deleteRecurringVersionAction, linkSuggestionToRuleAction,
+  type EditMode, type RecurringInput,
 } from "@/actions/recurring";
-import { localTodayISO } from "@/lib/dates";
+import { addUTCDays, formatMonthDayYear, isoDay, localTodayISO, parseISODay } from "@/lib/dates";
 import type { Frequency, TxnType } from "@/generated/prisma/enums";
 
 const DISMISSED_KEY = "dismissedRecurringSuggestions";
@@ -375,6 +376,30 @@ function SuggestionRow({
   );
 }
 
+/**
+ * The first occurrence strictly after `afterISO` under `sched`. Used to default
+ * a forward-dated edit to the next charge, and to preview when the new schedule
+ * first bites.
+ */
+function nextOccurrence(
+  sched: { frequency: Frequency; interval: number; startDate: string; endDate: string | null; dayOfMonth: number | null; weekday: number | null },
+  afterISO: string,
+): string | null {
+  const from = addUTCDays(parseISODay(afterISO), 1);
+  const dates = expandOccurrences(sched, from, addUTCDays(from, 400));
+  return dates.length ? isoDay(dates[0]) : null;
+}
+
+/** "Since Sep 5, 2026" / "Jan 1 - Sep 4, 2026" for one row of the history list. */
+function versionRange(rule: RecurringDTO, index: number): string {
+  const v = rule.versions[index];
+  // versions is newest-first, so the one that superseded this is at index - 1.
+  const next = index > 0 ? rule.versions[index - 1] : null;
+  const from = formatMonthDayYear(v.effectiveFrom);
+  if (!next) return `Since ${from}`;
+  return `${from} - ${formatMonthDayYear(isoDay(addUTCDays(parseISODay(next.effectiveFrom), -1)))}`;
+}
+
 function RecurringForm({
   rule,
   prefill,
@@ -398,6 +423,11 @@ function RecurringForm({
   const [interval, setInterval] = useState(String(rule?.interval ?? prefill?.interval ?? 1));
   const [startDate, setStartDate] = useState(rule?.startDate ?? prefill?.startDate ?? localTodayISO());
   const [endDate, setEndDate] = useState(rule?.endDate ?? "");
+  const [mode, setMode] = useState<"forward" | "correct">("forward");
+  const [effectiveFrom, setEffectiveFrom] = useState(
+    () => (rule ? nextOccurrence(rule, localTodayISO()) ?? localTodayISO() : localTodayISO()),
+  );
+  const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -411,7 +441,10 @@ function RecurringForm({
         type, amount, description, categoryId: categoryId || null, accountId: accountId || null,
         frequency, interval, startDate, endDate: endDate || null,
       };
-      const res = editing ? await updateRecurringAction(rule!.id, input) : await createRecurringAction(input);
+      const edit: EditMode = mode === "forward" ? { mode: "forward", effectiveFrom } : { mode: "correct" };
+      const res = editing
+        ? await updateRecurringAction(rule!.id, input, edit)
+        : await createRecurringAction(input);
       if (!res.ok) return setError(res.error);
       router.refresh();
       onClose();
@@ -428,9 +461,62 @@ function RecurringForm({
 
   const confirmRemove = useConfirmAction(remove);
 
+  const revert = (versionId: string) =>
+    start(async () => {
+      if (!rule) return;
+      const res = await deleteRecurringVersionAction(rule.id, versionId);
+      if (!res.ok) return setError(res.error);
+      router.refresh();
+      onClose();
+    });
+
+  // What the edit will actually do, recomputed as the fields change, so the
+  // double-charge case is visible here rather than on the calendar.
+  const preview = (() => {
+    if (!editing || mode !== "forward") return null;
+    const first = nextOccurrence(
+      { frequency, interval: Number(interval) || 1, startDate, endDate: endDate || null, dayOfMonth: rule!.dayOfMonth, weekday: rule!.weekday },
+      isoDay(addUTCDays(parseISODay(effectiveFrom), -1)),
+    );
+    return {
+      before: formatMonthDayYear(effectiveFrom),
+      first: first ? formatMonthDayYear(first) : null,
+    };
+  })();
+
   return (
     <Modal open onClose={onClose} title={editing ? "Edit recurring" : "Add recurring"}>
       <div className="space-y-4">
+        {editing && (
+          <div className="space-y-2 rounded-lg border border-border p-3">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="radio" className="mt-1" checked={mode === "forward"} onChange={() => setMode("forward")} />
+              <span className="flex-1">
+                <span className="font-medium">Change going forward</span>
+                {mode === "forward" && (
+                  <span className="mt-2 flex items-center gap-2">
+                    <span className="text-muted">Starting</span>
+                    <input className="input w-auto" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+                  </span>
+                )}
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="radio" className="mt-1" checked={mode === "correct"} onChange={() => setMode("correct")} />
+              <span className="flex-1">
+                <span className="font-medium">Fix this rule everywhere</span>
+                <span className="block text-xs text-muted">Corrects history too. Use for typos and wrong entries.</span>
+              </span>
+            </label>
+            {preview && (
+              <p className="text-xs text-muted">
+                Occurrences before {preview.before} keep the current values.
+                {preview.first ? ` First occurrence under the new settings: ${preview.first}.` : ""}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2 rounded-lg bg-surface2 p-1">
           {(["EXPENSE", "INCOME"] as TxnType[]).map((t) => (
             <button key={t} onClick={() => { setType(t); setCategoryId(""); }} className={`btn text-sm ${type === t ? (t === "EXPENSE" ? "bg-surface text-expense shadow-sm" : "bg-surface text-income shadow-sm") : "text-muted"}`}>
@@ -482,14 +568,44 @@ function RecurringForm({
             <input className="input" inputMode="numeric" value={interval} onChange={(e) => setInterval(e.target.value)} />
           </div>
           <div>
-            <label className="label">Starts</label>
-            <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <label className="label">{editing ? "Series began" : "First occurrence"}</label>
+            {editing ? (
+              <p className="input flex items-center text-muted">{formatMonthDayYear(startDate)}</p>
+            ) : (
+              <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            )}
           </div>
           <div>
             <label className="label">Ends (optional)</label>
             <input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
+
+        {editing && (
+          <div className="rounded-lg border border-border">
+            <button onClick={() => setShowHistory(!showHistory)} className="flex w-full items-center gap-1 px-3 py-2 text-sm text-muted">
+              {showHistory ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              History ({rule!.versions.length})
+            </button>
+            {showHistory && (
+              <ul className="border-t border-border">
+                {rule!.versions.map((v, i) => (
+                  <li key={v.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="w-40 shrink-0 text-muted">{versionRange(rule!, i)}</span>
+                    <span className="flex-1">
+                      ${v.amount.toLocaleString()} · {describeFrequency(v.frequency, v.interval)}
+                    </span>
+                    {i === 0 && rule!.versions.length > 1 && (
+                      <button onClick={() => revert(v.id)} disabled={pending} className="btn-ghost text-xs">
+                        <Undo2 size={12} /> Revert
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {error && <p className="text-sm text-expense">{error}</p>}
 

@@ -91,13 +91,40 @@ async function main() {
   });
 
   // ── Recurring rules ──────────────────────────────────────────────────────
+  // Rules are versioned; a seeded rule starts life with a single version
+  // covering the whole series.
+  const rule = (v: {
+    accountId: string; categoryId: string | null; type: "INCOME" | "EXPENSE"; amount: number;
+    description: string; frequency: "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "YEARLY" | "DAILY";
+    interval?: number; dayOfMonth?: number; startDate: Date;
+  }) =>
+    prisma.recurringRule.create({
+      data: {
+        userId: demoUser.id,
+        description: v.description,
+        versions: {
+          create: [{
+            effectiveFrom: v.startDate,
+            accountId: v.accountId,
+            categoryId: v.categoryId,
+            type: v.type,
+            amount: v.amount,
+            frequency: v.frequency,
+            interval: v.interval ?? 1,
+            dayOfMonth: v.dayOfMonth ?? null,
+            startDate: v.startDate,
+          }],
+        },
+      },
+    });
+
   const rules = await Promise.all([
-    prisma.recurringRule.create({ data: { userId: demoUser.id, accountId: checking.id, categoryId: cat("Salary"), type: "INCOME", amount: 2600, description: "Paycheck", frequency: "BIWEEKLY", interval: 1, startDate: day(2, -1) } }),
-    prisma.recurringRule.create({ data: { userId: demoUser.id, accountId: checking.id, categoryId: cat("Rent / Mortgage"), type: "EXPENSE", amount: 2150, description: "Mortgage", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -2) } }),
-    prisma.recurringRule.create({ data: { userId: demoUser.id, accountId: checking.id, categoryId: cat("Utilities"), type: "EXPENSE", amount: 180, description: "Electric & Gas", frequency: "MONTHLY", dayOfMonth: 12, startDate: day(12, -2) } }),
-    prisma.recurringRule.create({ data: { userId: demoUser.id, accountId: creditCard.id, categoryId: cat("Subscriptions"), type: "EXPENSE", amount: 15.99, description: "Netflix", frequency: "MONTHLY", dayOfMonth: 8, startDate: day(8, -3) } }),
-    prisma.recurringRule.create({ data: { userId: demoUser.id, accountId: creditCard.id, categoryId: cat("Subscriptions"), type: "EXPENSE", amount: 10.99, description: "Spotify", frequency: "MONTHLY", dayOfMonth: 20, startDate: day(20, -3) } }),
-    prisma.recurringRule.create({ data: { userId: demoUser.id, accountId: checking.id, categoryId: cat("Savings / Investing"), type: "EXPENSE", amount: 500, description: "Auto-transfer to savings", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -3) } }),
+    rule({ accountId: checking.id, categoryId: cat("Salary"), type: "INCOME", amount: 2600, description: "Paycheck", frequency: "BIWEEKLY", interval: 1, startDate: day(2, -1) }),
+    rule({ accountId: checking.id, categoryId: cat("Rent / Mortgage"), type: "EXPENSE", amount: 2150, description: "Mortgage", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -2) }),
+    rule({ accountId: checking.id, categoryId: cat("Utilities"), type: "EXPENSE", amount: 180, description: "Electric & Gas", frequency: "MONTHLY", dayOfMonth: 12, startDate: day(12, -2) }),
+    rule({ accountId: creditCard.id, categoryId: cat("Subscriptions"), type: "EXPENSE", amount: 15.99, description: "Netflix", frequency: "MONTHLY", dayOfMonth: 8, startDate: day(8, -3) }),
+    rule({ accountId: creditCard.id, categoryId: cat("Subscriptions"), type: "EXPENSE", amount: 10.99, description: "Spotify", frequency: "MONTHLY", dayOfMonth: 20, startDate: day(20, -3) }),
+    rule({ accountId: checking.id, categoryId: cat("Savings / Investing"), type: "EXPENSE", amount: 500, description: "Auto-transfer to savings", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -3) }),
   ]);
 
   // ── Concrete transactions for the current month ──────────────────────────

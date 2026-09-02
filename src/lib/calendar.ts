@@ -11,7 +11,8 @@ import {
   parseISODay,
   toUTCDay,
 } from "@/lib/dates";
-import { expandOccurrences } from "@/lib/recurrence";
+import { expandVersioned } from "@/lib/recurrence";
+import { flattenVersion, versionsInclude } from "@/lib/recurring-versions";
 import { projectDailyBalances, type DayProjection, type ProjTxn } from "@/lib/projection";
 import { getAccounts } from "@/lib/queries";
 import { isEffectiveTransfer } from "@/lib/transfers";
@@ -210,7 +211,10 @@ export async function getUpcoming(
     });
   }
 
-  const rules = await prisma.recurringRule.findMany({ where: { userId, archived: false } });
+  const rules = await prisma.recurringRule.findMany({
+    where: { userId, archived: false },
+    include: versionsInclude,
+  });
   const materialised = new Set(
     (await prisma.transaction.findMany({
       where: { userId, deletedAt: null, recurringRuleId: { not: null }, date: { gte: start, lte: end } },
@@ -218,23 +222,22 @@ export async function getUpcoming(
     })).map((t) => `${t.recurringRuleId}|${isoDay(t.date)}`),
   );
   for (const rule of rules) {
-    const ruleAcct = rule.accountId ? accountById.get(rule.accountId) : null;
-    if (isEffectiveTransfer({ type: rule.type, isTransfer: false, accountType: ruleAcct?.type ?? null })) {
-      continue;
-    }
-    for (const occ of expandOccurrences(
-      { frequency: rule.frequency, interval: rule.interval, startDate: rule.startDate, endDate: rule.endDate, dayOfMonth: rule.dayOfMonth, weekday: rule.weekday },
-      start,
-      end,
-    )) {
-      const iso = isoDay(occ);
+    // The account and type are per-version, so the transfer check has to happen
+    // per occurrence rather than once for the whole rule.
+    for (const { date, version } of expandVersioned(rule.versions, start, end)) {
+      const v = flattenVersion(version);
+      const ruleAcct = v.accountId ? accountById.get(v.accountId) : null;
+      if (isEffectiveTransfer({ type: v.type, isTransfer: false, accountType: ruleAcct?.type ?? null })) {
+        continue;
+      }
+      const iso = isoDay(date);
       if (materialised.has(`${rule.id}|${iso}`)) continue;
       items.push({
         date: iso,
         description: rule.description,
-        amount: toNumber(rule.amount),
-        type: rule.type,
-        categoryId: rule.categoryId,
+        amount: v.amount,
+        type: v.type,
+        categoryId: v.categoryId,
         recurring: true,
       });
     }
@@ -309,37 +312,29 @@ export async function getCalendarMonth(
   // Project recurring rules across the range.
   const rules = await prisma.recurringRule.findMany({
     where: { userId, archived: false },
+    include: versionsInclude,
   });
   for (const rule of rules) {
-    const occurrences = expandOccurrences(
-      {
-        frequency: rule.frequency,
-        interval: rule.interval,
-        startDate: rule.startDate,
-        endDate: rule.endDate,
-        dayOfMonth: rule.dayOfMonth,
-        weekday: rule.weekday,
-      },
-      rangeStart,
-      rangeEnd,
-    );
-    const ruleAcct = rule.accountId ? accountById.get(rule.accountId) : null;
-    for (const occ of occurrences) {
+    // Each occurrence carries the version in force on its own date, so a past
+    // month keeps the amount and schedule the rule had back then.
+    for (const { date: occ, version } of expandVersioned(rule.versions, rangeStart, rangeEnd)) {
       if (occurrenceIsMatched(occ, materialisedByRule.get(rule.id))) continue;
+      const v = flattenVersion(version);
+      const ruleAcct = v.accountId ? accountById.get(v.accountId) : null;
       const iso = isoDay(occ);
       events.push({
         id: `rule:${rule.id}:${iso}`,
         date: iso,
-        type: rule.type,
-        amount: toNumber(rule.amount),
+        type: v.type,
+        amount: v.amount,
         description: rule.description,
-        note: rule.note,
-        categoryId: rule.categoryId,
-        accountId: rule.accountId,
+        note: v.note,
+        categoryId: v.categoryId,
+        accountId: v.accountId,
         cleared: false,
         isVirtual: true,
         isTransfer: isEffectiveTransfer({
-          type: rule.type,
+          type: v.type,
           isTransfer: false,
           accountType: ruleAcct?.type ?? null,
         }),

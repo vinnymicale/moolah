@@ -37,25 +37,32 @@ const account = (over: Partial<AccountDTO>): AccountDTO =>
     ...over,
   }) as AccountDTO;
 
-// A recurring rule row as Prisma would return it (Date fields, Decimal amount).
-const rule = (over: Record<string, unknown> = {}) => ({
-  id: "r1",
-  userId: "u1",
-  description: "Rent",
-  amount: 1500,
-  type: "EXPENSE",
-  frequency: "MONTHLY",
-  interval: 1,
-  startDate: new Date("2026-01-01T00:00:00Z"),
-  endDate: null,
-  dayOfMonth: 1,
-  weekday: null,
-  categoryId: "housing",
-  note: null,
-  accountId: "checking",
-  archived: false,
-  ...over,
-});
+// A recurring rule row as Prisma would return it: identity on the rule, the
+// schedule on a single version so flat overrides still read naturally.
+const rule = (over: Record<string, unknown> = {}) => {
+  const { id, description, userId, archived, ...version } = over;
+  return {
+    id: id ?? "r1",
+    userId: userId ?? "u1",
+    description: description ?? "Rent",
+    archived: archived ?? false,
+    versions: [{
+      effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+      amount: 1500,
+      type: "EXPENSE",
+      frequency: "MONTHLY",
+      interval: 1,
+      startDate: new Date("2026-01-01T00:00:00Z"),
+      endDate: null,
+      dayOfMonth: 1,
+      weekday: null,
+      categoryId: "housing",
+      note: null,
+      accountId: "checking",
+      ...version,
+    }],
+  };
+};
 
 const txn = (over: Record<string, unknown> = {}) => ({
   id: "t1",
@@ -176,6 +183,24 @@ describe("getCalendarMonth", () => {
     // June occurrence suppressed (materialised June 2); only later months' virtuals, if any, survive.
     expect(virtuals.every((e) => e.date >= "2026-06-30" || !e.date.startsWith("2026-06"))).toBe(true);
     expect(all.some((e) => e.id === "rent-real")).toBe(true);
+  });
+
+  it("projects a past month at the amount that was in force then", async () => {
+    // Rent went from 1500 to 1700 in August; June must still show 1500.
+    const base = rule({ dayOfMonth: 1 }) as ReturnType<typeof rule>;
+    ruleFind.mockResolvedValue([
+      {
+        ...base,
+        versions: [
+          ...base.versions,
+          { ...base.versions[0], effectiveFrom: new Date("2026-08-01T00:00:00Z"), amount: 1700 },
+        ],
+      },
+    ] as never);
+    const june = await getCalendarMonth("u1", "2026-06-01", "2026-06-15");
+    const august = await getCalendarMonth("u1", "2026-08-01", "2026-08-15");
+    expect(june.eventsByDay["2026-06-01"]?.[0]).toMatchObject({ isVirtual: true, amount: 1500 });
+    expect(august.eventsByDay["2026-08-01"]?.[0]).toMatchObject({ isVirtual: true, amount: 1700 });
   });
 
   it("shows a CC payment-due chip on its due day within the grid", async () => {

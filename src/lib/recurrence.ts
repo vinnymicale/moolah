@@ -141,3 +141,72 @@ export function describeFrequency(frequency: Frequency, interval = 1): string {
   if (frequency === "BIWEEKLY") return `Every ${2 * interval} weeks`;
   return `Every ${interval} ${FREQ_LABELS[frequency]}s`;
 }
+
+/**
+ * A rule as it stood from `effectiveFrom` onward. Versions of a rule are sorted
+ * ascending by `effectiveFrom`, and version i is in force over
+ * [v[i].effectiveFrom, v[i+1].effectiveFrom) - half-open, so an occurrence
+ * landing on a boundary day belongs to the newer version only and can never be
+ * counted twice.
+ */
+export interface VersionLike extends RuleLike {
+  effectiveFrom: Date | string;
+}
+
+export interface VersionedOccurrence<V extends VersionLike> {
+  date: Date;
+  version: V;
+}
+
+/**
+ * Expand a versioned rule across [rangeStart, rangeEnd], tagging each occurrence
+ * with the version that was in force on that day. `versions` must be non-empty;
+ * it is sorted here rather than trusted, since callers get it from a query.
+ */
+export function expandVersioned<V extends VersionLike>(
+  versions: V[],
+  rangeStart: Date,
+  rangeEnd: Date,
+): VersionedOccurrence<V>[] {
+  const sorted = [...versions].sort(
+    (a, b) => toUTCDay(a.effectiveFrom).getTime() - toUTCDay(b.effectiveFrom).getTime(),
+  );
+  const winStart = toUTCDay(rangeStart);
+  const winEnd = toUTCDay(rangeEnd);
+
+  const out: VersionedOccurrence<V>[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const version = sorted[i];
+    const from = toUTCDay(version.effectiveFrom);
+    const next = sorted[i + 1];
+    // Half-open above: the successor's first day belongs to the successor.
+    const until = next ? addUTCDays(toUTCDay(next.effectiveFrom), -1) : winEnd;
+
+    const sliceStart = from.getTime() > winStart.getTime() ? from : winStart;
+    const sliceEnd = until.getTime() < winEnd.getTime() ? until : winEnd;
+    if (sliceStart.getTime() > sliceEnd.getTime()) continue;
+
+    for (const date of expandOccurrences(version, sliceStart, sliceEnd)) {
+      out.push({ date, version });
+    }
+  }
+  out.sort((a, b) => a.date.getTime() - b.date.getTime());
+  return out;
+}
+
+/**
+ * The version in force on `asOf`: the newest one whose `effectiveFrom` is on or
+ * before that day. Falls back to the earliest version when `asOf` predates the
+ * series, so callers asking about a rule's "current" shape always get one.
+ */
+export function currentVersion<V extends VersionLike>(versions: V[], asOf: Date): V {
+  const sorted = [...versions].sort(
+    (a, b) => toUTCDay(a.effectiveFrom).getTime() - toUTCDay(b.effectiveFrom).getTime(),
+  );
+  const day = toUTCDay(asOf);
+  let found = sorted[0];
+  for (const v of sorted) {
+    if (toUTCDay(v.effectiveFrom).getTime() <= day.getTime()) found = v;
+  }
+  return found;
+}

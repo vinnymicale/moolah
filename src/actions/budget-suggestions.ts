@@ -13,6 +13,7 @@ import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { toNumber, toCents, fromCents } from "@/lib/money";
 import { isoDay, parseISODay, startOfUTCMonth, addUTCMonths } from "@/lib/dates";
 import { detectRecurringCandidates } from "@/lib/recurring-suggestions";
+import { flattenAsOf, versionsInclude } from "@/lib/recurring-versions";
 import {
   buildBudgetSuggestions,
   type BudgetSuggestionsDTO,
@@ -39,7 +40,7 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
     const since = startOfUTCMonth(addUTCMonths(monthStart, -12));
 
     const [rules, txns, cats, budgets] = await Promise.all([
-      prisma.recurringRule.findMany({ where: { userId } }),
+      prisma.recurringRule.findMany({ where: { userId }, include: versionsInclude }),
       prisma.transaction.findMany({
         where: { userId, deletedAt: null, isTransfer: false, date: { gte: since } },
         select: {
@@ -81,12 +82,16 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
 
     // Only active rules contribute amounts: not archived, not ended before
     // the target month (an ended subscription shouldn't inflate the budget).
+    // The version in force at the start of the target month, so budgeting a
+    // past month uses the amounts that applied back then.
     const activeRules: RuleForBudget[] = rules
-      .filter((r) => !r.archived && (!r.endDate || r.endDate >= monthStart))
+      .filter((r) => !r.archived)
+      .map((r) => flattenAsOf(r, monthStart))
+      .filter((r) => !r.endDate || r.endDate >= monthStart)
       .map((r) => ({
         id: r.id,
         description: r.description,
-        amount: toNumber(r.amount),
+        amount: r.amount,
         type: r.type as "INCOME" | "EXPENSE",
         categoryId: r.categoryId,
         frequency: r.frequency as RuleForBudget["frequency"],
