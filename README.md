@@ -32,6 +32,12 @@ Planned improvements, roughly in priority order:
   codes, per-member attribution on transactions, and a shared calendar. Local name+password
   accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
 
+- **Plaid webhooks** - let Plaid push `SYNC_UPDATES_AVAILABLE` to a verified `/api/plaid/webhook`
+  endpoint so new transactions land the moment the bank reports them, instead of waiting for the
+  next scheduled sweep. Needs a public HTTPS entry point (Cloudflare Tunnel, Tailscale Funnel, or a
+  reverse proxy), so it stays opt-in behind a `PLAID_WEBHOOK_URL` env var - the background sync
+  scheduler remains the default and the fallback when a webhook is missed.
+
 ### Recently shipped
 
 - **Retirement planning** - a dedicated page for 401(k), IRA, and brokerage accounts: a projection
@@ -349,6 +355,8 @@ CREATE DATABASE moolah OWNER moolah;
 | `PLAID_CLIENT_ID` | no | — | Only if you want automatic bank sync. From your Plaid dashboard. |
 | `PLAID_SECRET` | no | — | Plaid API secret (matches `PLAID_ENV`). |
 | `PLAID_ENV` | no | `sandbox` | `sandbox` for fake test data, `production` for real banks. |
+| `PLAID_SYNC_CRON` | no | `*/30 * * * *` | How often the background sync checks for new bank data, so transactions and notifications land without a browser open. Standard cron syntax. An invalid value disables background sync (the app still syncs when you open it). |
+| `PLAID_STALE_MS` | no | `3600000` | How old an item's last sync must be before it's re-synced, in milliseconds (default 1 hour). Guards against hammering Plaid; lower it only if you really need fresher data. |
 | `BACKUP_LOCAL_DIR` | no | `/backups` | Where scheduled backups land for the **local** destination. The template pre-sets this to `/backups` and mounts it from the host via the **Backups** path, so leave it as-is unless you also change that mapping. Ignored for the Google Drive destination. |
 
 ---
