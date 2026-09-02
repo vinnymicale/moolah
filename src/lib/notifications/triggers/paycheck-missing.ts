@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { expandOccurrences } from "@/lib/recurrence";
+import { expandVersioned } from "@/lib/recurrence";
 import { addUTCDays, isoDay, parseISODay } from "@/lib/dates";
 import type { TriggerDef, TriggerEvent } from "../types";
 
@@ -31,16 +31,16 @@ export const paycheckMissing: TriggerDef = {
     const cutoff = addUTCDays(today, -graceDays);
     const windowStart = addUTCDays(today, -60);
     const rules = await prisma.recurringRule.findMany({
-      where: { userId: ctx.userId, archived: false, type: "INCOME" },
-      select: {
-        id: true, description: true, frequency: true, interval: true,
-        startDate: true, endDate: true, dayOfMonth: true, weekday: true,
-      },
+      // Type is per-version now, so filter on any income version and confirm
+      // against the version that actually covers the expected occurrence.
+      where: { userId: ctx.userId, archived: false, versions: { some: { type: "INCOME" } } },
+      select: { id: true, description: true, versions: { orderBy: { effectiveFrom: "asc" } } },
     });
     const events: TriggerEvent[] = [];
     for (const rule of rules) {
-      const expected = expandOccurrences(rule, windowStart, cutoff).at(-1);
-      if (!expected) continue;
+      const last = expandVersioned(rule.versions, windowStart, cutoff).at(-1);
+      if (!last || last.version.type !== "INCOME") continue;
+      const expected = last.date;
       const matched = await prisma.transaction.findFirst({
         where: {
           userId: ctx.userId, recurringRuleId: rule.id, deletedAt: null, isTransfer: false,

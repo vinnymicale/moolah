@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { formatUSD, toNumber } from "@/lib/money";
+import { currentVersion } from "@/lib/recurrence";
 import type { TriggerDef, TriggerEvent } from "../types";
 
 export const recurringPriceChange: TriggerDef = {
@@ -40,13 +41,19 @@ export const recurringPriceChange: TriggerDef = {
       select: {
         id: true,
         amount: true,
-        recurringRule: { select: { id: true, description: true, amount: true } },
+        date: true,
+        recurringRule: {
+          select: { id: true, description: true, versions: { orderBy: { effectiveFrom: "asc" } } },
+        },
       },
     });
     const events: TriggerEvent[] = [];
     for (const t of txns) {
       if (!t.recurringRule) continue;
-      const expected = toNumber(t.recurringRule.amount);
+      // Compare against the price the rule carried on the day of the charge,
+      // not today's - otherwise every transaction predating a price change
+      // reports as a change of its own.
+      const expected = toNumber(currentVersion(t.recurringRule.versions, t.date).amount);
       const charged = toNumber(t.amount);
       if (expected <= 0) continue;
       const changePct = ((charged - expected) / expected) * 100;

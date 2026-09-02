@@ -248,7 +248,30 @@ export const DEMO_ACCOUNTS: AccountDTO[] = [
 // Recurring rules
 // ---------------------------------------------------------------------------
 
-export const DEMO_RECURRING: RecurringDTO[] = [
+// Demo rules have never been edited, so each carries exactly one version
+// spanning its whole series.
+function oneVersion(r: Omit<RecurringDTO, "versions">): RecurringDTO {
+  return {
+    ...r,
+    versions: [{
+      id: `${r.id}-v1`,
+      effectiveFrom: r.startDate,
+      type: r.type,
+      amount: r.amount,
+      note: r.note,
+      accountId: r.accountId,
+      categoryId: r.categoryId,
+      frequency: r.frequency,
+      interval: r.interval,
+      dayOfMonth: r.dayOfMonth,
+      weekday: r.weekday,
+      startDate: r.startDate,
+      endDate: r.endDate,
+    }],
+  };
+}
+
+export const DEMO_RECURRING: RecurringDTO[] = ([
   {
     id: "rec-paycheck",
     type: "INCOME",
@@ -339,7 +362,7 @@ export const DEMO_RECURRING: RecurringDTO[] = [
     startDate: day(5, -3),
     endDate: null,
   },
-];
+] as Omit<RecurringDTO, "versions">[]).map(oneVersion);
 
 // ---------------------------------------------------------------------------
 // Transactions (current month + last month)

@@ -20,6 +20,8 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    recurringRuleVersion: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
     transaction: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -32,6 +34,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import {
   createRecurringAction,
+  updateRecurringAction,
   deleteRecurringAction,
   linkSuggestionToRuleAction,
   linkTransactionToRuleAction,
@@ -42,6 +45,7 @@ import { requireUser } from "@/lib/session";
 
 const requireUserMock = vi.mocked(requireUser);
 const rule = vi.mocked(prisma.recurringRule);
+const version = vi.mocked(prisma.recurringRuleVersion);
 const txn = vi.mocked(prisma.transaction);
 
 const validInput = {
@@ -82,11 +86,17 @@ describe("createRecurringAction", () => {
     expect(rule.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         userId: "u1",
-        accountId: null,
-        categoryId: null,
-        note: null,
-        endDate: null,
-        interval: 1,
+        versions: {
+          create: [
+            expect.objectContaining({
+              accountId: null,
+              categoryId: null,
+              note: null,
+              endDate: null,
+              interval: 1,
+            }),
+          ],
+        },
       }),
     });
   });
@@ -101,6 +111,85 @@ describe("createRecurringAction", () => {
     const result = await createRecurringAction({ ...validInput, weekday: 9 });
     expect(result.ok).toBe(false);
     expect(rule.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateRecurringAction", () => {
+  // A rent rule that has only ever been $1500, running since January.
+  const existing = {
+    id: "r1",
+    description: "Rent",
+    versions: [{
+      id: "v1",
+      effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+      type: "EXPENSE",
+      amount: 1500,
+      note: null,
+      accountId: null,
+      categoryId: null,
+      frequency: "MONTHLY",
+      interval: 1,
+      startDate: new Date("2026-01-01T00:00:00Z"),
+      endDate: null,
+      dayOfMonth: 1,
+      weekday: null,
+    }],
+  };
+  const raised = {
+    type: "EXPENSE" as const,
+    amount: 1700,
+    description: "Rent",
+    frequency: "MONTHLY" as const,
+    startDate: "2026-01-01",
+    dayOfMonth: 1,
+  };
+
+  beforeEach(() => {
+    rule.findFirst.mockResolvedValue(existing as never);
+  });
+
+  it("adds a version at the effective date and leaves the old one alone", async () => {
+    expect(await updateRecurringAction("r1", raised, { mode: "forward", effectiveFrom: "2026-10-01" }))
+      .toEqual({ ok: true });
+
+    expect(version.update).not.toHaveBeenCalled();
+    expect(version.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        ruleId: "r1",
+        amount: 1700,
+        effectiveFrom: new Date("2026-10-01T00:00:00Z"),
+        // The series start belongs to the rule, not to the edit.
+        startDate: new Date("2026-01-01T00:00:00Z"),
+      }),
+    });
+  });
+
+  it("rewrites the existing version when correcting the rule everywhere", async () => {
+    expect(await updateRecurringAction("r1", raised, { mode: "correct" })).toEqual({ ok: true });
+
+    expect(version.create).not.toHaveBeenCalled();
+    expect(version.update).toHaveBeenCalledWith({
+      where: { id: "v1" },
+      data: expect.objectContaining({ amount: 1700, startDate: new Date("2026-01-01T00:00:00Z") }),
+    });
+  });
+
+  it("refuses an effective date before the series began", async () => {
+    expect(await updateRecurringAction("r1", raised, { mode: "forward", effectiveFrom: "2025-06-01" }))
+      .toEqual({ ok: false, error: "That date is before this rule started." });
+    expect(version.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a second change on a date that already has one", async () => {
+    expect(await updateRecurringAction("r1", raised, { mode: "forward", effectiveFrom: "2026-01-01" }))
+      .toEqual({ ok: false, error: "A change already takes effect on that date." });
+    expect(version.create).not.toHaveBeenCalled();
+  });
+
+  it("errors when the rule is not the user's", async () => {
+    rule.findFirst.mockResolvedValue(null);
+    expect(await updateRecurringAction("r1", raised, { mode: "correct" }))
+      .toEqual({ ok: false, error: "Recurring rule not found" });
   });
 });
 
@@ -274,7 +363,7 @@ describe("getTransactionLinkOptionsAction", () => {
   beforeEach(() => {
     txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix" } as never);
     rule.findMany.mockResolvedValue([
-      { id: "r1", description: "Streaming", frequency: "MONTHLY", interval: 1 },
+      { id: "r1", description: "Streaming", versions: [{ effectiveFrom: new Date("2026-01-01T00:00:00Z"), type: "EXPENSE", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-01T00:00:00Z"), endDate: null, dayOfMonth: 1, weekday: null, amount: 10, categoryId: null, accountId: null, note: null }] },
     ] as never);
     txn.findMany.mockResolvedValue([] as never);
   });
@@ -289,7 +378,7 @@ describe("getTransactionLinkOptionsAction", () => {
     });
     expect(rule.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: "u1", type: "EXPENSE", archived: false },
+        where: { userId: "u1", archived: false, versions: { some: { type: "EXPENSE" } } },
       }),
     );
   });
@@ -332,7 +421,7 @@ describe("getTransactionLinkOptionsAction", () => {
 
   it("looks up the linked rule when it is archived and thus not pickable", async () => {
     txn.findFirst.mockResolvedValue({ id: "t1", type: "EXPENSE", description: "Netflix", recurringRuleId: "old" } as never);
-    rule.findFirst.mockResolvedValue({ id: "old", description: "Retired gym", frequency: "MONTHLY", interval: 1 } as never);
+    rule.findFirst.mockResolvedValue({ id: "old", description: "Retired gym", versions: [{ effectiveFrom: new Date("2026-01-01T00:00:00Z"), type: "EXPENSE", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-01T00:00:00Z"), endDate: null, dayOfMonth: 1, weekday: null, amount: 10, categoryId: null, accountId: null, note: null }] } as never);
     const result = await getTransactionLinkOptionsAction("t1");
     expect(result).toMatchObject({ ok: true, linked: { id: "old", description: "Retired gym" } });
   });

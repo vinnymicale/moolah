@@ -31,7 +31,8 @@
 import { prisma } from "./prisma";
 import { toNumber } from "./money";
 import { addUTCDays, addUTCMonths, isoDay, parseISODay } from "./dates";
-import { expandOccurrences } from "./recurrence";
+import { expandVersioned } from "./recurrence";
+import { versionsInclude } from "./recurring-versions";
 import { unmodelledMonthlyRate } from "./unmodelled-cashflow";
 
 export interface ForecastPoint {
@@ -89,16 +90,7 @@ export async function forecastNetWorth(
 
   const rules = await prisma.recurringRule.findMany({
     where: { userId, archived: false },
-    select: {
-      frequency: true,
-      interval: true,
-      startDate: true,
-      endDate: true,
-      dayOfMonth: true,
-      weekday: true,
-      amount: true,
-      type: true,
-    },
+    include: versionsInclude,
   });
   if (rules.length === 0) return empty;
 
@@ -109,23 +101,10 @@ export async function forecastNetWorth(
   // Daily signed cash delta keyed by ISO day across the whole horizon.
   const deltaByDay = new Map<string, number>();
   for (const rule of rules) {
-    const sign = rule.type === "INCOME" ? 1 : -1;
-    const amount = toNumber(rule.amount) * sign;
-    const occ = expandOccurrences(
-      {
-        frequency: rule.frequency,
-        interval: rule.interval,
-        startDate: rule.startDate,
-        endDate: rule.endDate,
-        dayOfMonth: rule.dayOfMonth,
-        weekday: rule.weekday,
-      },
-      windowStart,
-      horizon,
-    );
-    for (const d of occ) {
-      const iso = isoDay(d);
-      deltaByDay.set(iso, (deltaByDay.get(iso) ?? 0) + amount);
+    for (const { date, version } of expandVersioned(rule.versions, windowStart, horizon)) {
+      const sign = version.type === "INCOME" ? 1 : -1;
+      const iso = isoDay(date);
+      deltaByDay.set(iso, (deltaByDay.get(iso) ?? 0) + toNumber(version.amount) * sign);
     }
   }
   if (deltaByDay.size === 0) return empty;

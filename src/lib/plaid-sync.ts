@@ -9,7 +9,8 @@ import { getPlaidClient } from "./plaid";
 import { decryptSecret } from "./crypto";
 import { prisma } from "./prisma";
 import { parseISODay, isoDay } from "./dates";
-import { expandOccurrences } from "./recurrence";
+import { currentVersion, expandOccurrences, expandVersioned } from "./recurrence";
+import { versionsInclude } from "./recurring-versions";
 import { findTransferPairs, type MatchableTxn } from "./transfer-match";
 import { evaluateRules, type RuleAction, type RuleCondition, type RuleLike } from "./rules";
 import { captureNetWorthSnapshot } from "./snapshots";
@@ -124,12 +125,12 @@ export function descriptionMatches(txnDesc: string, ruleDesc: string): boolean {
 }
 
 /** The recurring-rule fields needed to match a transaction against a rule. */
-export interface MatchableRule {
-  id: string;
+export interface MatchableVersion {
+  effectiveFrom: Date;
   type: TxnType;
   /** number, or a Prisma Decimal - coerced with Number() before comparison. */
   amount: number | { toString(): string };
-  description: string;
+  categoryId: string | null;
   frequency: Parameters<typeof expandOccurrences>[0]["frequency"];
   interval: number;
   startDate: Date;
@@ -138,8 +139,17 @@ export interface MatchableRule {
   weekday: number | null;
 }
 
+export interface MatchableRule {
+  id: string;
+  description: string;
+  versions: MatchableVersion[];
+}
+
 /**
  * Return the best-matching rule id for a transaction, or null.
+ *
+ * Amount and type are compared against the version in force on the occurrence's
+ * own date, so a charge from before a price rise still matches on the old price.
  *
  * Matching criteria:
  * - Amount within 15% of the rule amount
@@ -162,18 +172,25 @@ export function matchRecurringRule(
   const windowEnd = new Date(date.getTime() + windowMs);
 
   for (const rule of rules) {
-    if (rule.type !== type) continue;
-    if (Math.abs(Number(rule.amount) - amount) > tolerance) continue;
     if (type === "EXPENSE" && !descriptionMatches(description, rule.description)) continue;
 
-    const occs = expandOccurrences(
-      { frequency: rule.frequency, interval: rule.interval, startDate: rule.startDate, endDate: rule.endDate, dayOfMonth: rule.dayOfMonth, weekday: rule.weekday },
-      windowStart,
-      windowEnd,
-    );
-    if (occs.length > 0) return rule.id;
+    for (const { version } of expandVersioned(rule.versions, windowStart, windowEnd)) {
+      if (version.type !== type) continue;
+      if (Math.abs(Number(version.amount) - amount) > tolerance) continue;
+      return rule.id;
+    }
   }
   return null;
+}
+
+/** The category the matched rule carried on the transaction's own date. */
+export function matchedCategoryId(
+  rules: MatchableRule[],
+  ruleId: string,
+  date: Date,
+): string | null {
+  const rule = rules.find((r) => r.id === ruleId);
+  return rule ? currentVersion(rule.versions, date).categoryId : null;
 }
 
 /**
@@ -257,11 +274,11 @@ export async function syncPlaidItem(
   // of the live bank data.
   const rules = await prisma.recurringRule.findMany({
     where: { userId: item.userId, archived: false },
+    include: versionsInclude,
   });
 
   const matchRule = (type: TxnType, date: Date, amount: number, description: string) =>
     matchRecurringRule(rules, type, date, amount, description);
-  const recurringCategoryById = new Map(rules.map((r) => [r.id, r.categoryId]));
 
   const result: SyncResult = { added: 0, modified: 0, removed: 0, balancesUpdated: 0 };
   const newTxnIds: string[] = [];
@@ -311,7 +328,7 @@ export async function syncPlaidItem(
       const plaidCategoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
       const categoryId = resolveCategoryId({
         ruleCategoryId: effect.categoryId ?? null,
-        recurringCategoryId: recurringRuleId ? recurringCategoryById.get(recurringRuleId) ?? null : null,
+        recurringCategoryId: recurringRuleId ? matchedCategoryId(rules, recurringRuleId, txnDate) : null,
         plaidCategoryId,
       });
 
@@ -436,7 +453,7 @@ export async function syncPlaidItem(
       const modPlaidCategoryId = catName ? catByName.get(catName.toLowerCase())?.id ?? null : null;
       const categoryId = resolveCategoryId({
         ruleCategoryId: modEffect.categoryId ?? null,
-        recurringCategoryId: modRuleId ? recurringCategoryById.get(modRuleId) ?? null : null,
+        recurringCategoryId: modRuleId ? matchedCategoryId(rules, modRuleId, modDate) : null,
         plaidCategoryId: modPlaidCategoryId,
       });
 

@@ -82,15 +82,20 @@ describe("analyzeImportAction", () => {
   it("flags a row that matches a projected recurring occurrence", async () => {
     vi.mocked(prisma.recurringRule.findMany).mockResolvedValue([
       {
-        type: "EXPENSE",
-        amount: "15.99",
-        frequency: "MONTHLY",
-        interval: 1,
-        startDate: new Date("2026-01-05T00:00:00Z"),
-        endDate: null,
-        dayOfMonth: 5,
-        weekday: null,
+        id: "r1",
+        description: "Netflix",
         archived: false,
+        versions: [{
+          effectiveFrom: new Date("2026-01-05T00:00:00Z"),
+          type: "EXPENSE",
+          amount: "15.99",
+          frequency: "MONTHLY",
+          interval: 1,
+          startDate: new Date("2026-01-05T00:00:00Z"),
+          endDate: null,
+          dayOfMonth: 5,
+          weekday: null,
+        }],
       },
     ] as never);
 

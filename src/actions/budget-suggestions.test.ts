@@ -71,8 +71,9 @@ describe("getBudgetSuggestionsAction", () => {
     budget.findMany.mockResolvedValue([{ categoryId: "cat-bills", limit: "80" }] as never);
     recurringRule.findMany.mockResolvedValue([
       {
-        id: "r1", description: "Electric Co", amount: "75.50", type: "EXPENSE",
-        categoryId: "cat-bills", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"),
+        id: "r1", description: "Electric Co",
+        versions: [{ effectiveFrom: new Date("2026-01-10T00:00:00Z"), amount: "75.50", type: "EXPENSE",
+        categoryId: "cat-bills", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"), endDate: null, dayOfMonth: 10, weekday: null }],
       },
     ] as never);
     // Four monthly Spotify charges -> detected recurring expense in cat-fun.
@@ -105,8 +106,9 @@ describe("getBudgetSuggestionsAction", () => {
     category.findMany.mockResolvedValue([{ id: "cat-fun", name: "Fun", color: "#f00", icon: "party" }] as never);
     recurringRule.findMany.mockResolvedValue([
       {
-        id: "r1", description: "Spotify Premium", amount: "11.99", type: "EXPENSE",
-        categoryId: "cat-fun", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"),
+        id: "r1", description: "Spotify Premium",
+        versions: [{ effectiveFrom: new Date("2026-01-10T00:00:00Z"), amount: "11.99", type: "EXPENSE",
+        categoryId: "cat-fun", frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"), endDate: null, dayOfMonth: 10, weekday: null }],
       },
     ] as never);
     transaction.findMany.mockResolvedValue(
@@ -161,8 +163,9 @@ describe("getBudgetSuggestionsAction", () => {
   it("counts uncategorized recurring charges instead of including them", async () => {
     recurringRule.findMany.mockResolvedValue([
       {
-        id: "r1", description: "Mystery sub", amount: "9.99", type: "EXPENSE",
-        categoryId: null, frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"),
+        id: "r1", description: "Mystery sub",
+        versions: [{ effectiveFrom: new Date("2026-01-10T00:00:00Z"), amount: "9.99", type: "EXPENSE",
+        categoryId: null, frequency: "MONTHLY", interval: 1, startDate: new Date("2026-01-10T00:00:00Z"), endDate: null, dayOfMonth: 10, weekday: null }],
       },
     ] as never);
 

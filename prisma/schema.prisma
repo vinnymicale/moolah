@@ -182,7 +182,7 @@ model FinancialAccount {
 
   snapshots             AccountSnapshot[]
   transactions          Transaction[]
-  recurring             RecurringRule[]
+  recurring             RecurringRuleVersion[]
   plaidLinkedAccounts   PlaidLinkedAccount[]
   contributions         Contribution[]
   contributionSchedules ContributionSchedule[]
@@ -222,7 +222,7 @@ model Category {
   children Category[] @relation("CategoryChildren")
 
   transactions Transaction[]
-  recurring    RecurringRule[]
+  recurring    RecurringRuleVersion[]
   budgets      Budget[]
   splits       TransactionSplit[]
 
@@ -358,10 +358,40 @@ model Attachment {
   @@index([userId])
 }
 
+// A recurring series. Holds only what never changes over the life of the series:
+// its identity and its name. Everything that can change - amount, schedule,
+// category, account - lives on RecurringRuleVersion, so editing a rule going
+// forward leaves what past months looked like intact.
 model RecurringRule {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Stays on the rule rather than the version: it is the identity users match
+  // on, and both the suggestion detector's dedup and the Plaid matcher key off
+  // it. Renaming is always retroactive.
+  description String
+
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions     RecurringRuleVersion[]
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+// The rule as it stood from effectiveFrom onward. A rule always has at least
+// one version; the earliest one's effectiveFrom equals its startDate. A version
+// is in force over [effectiveFrom, nextVersion.effectiveFrom), half-open so an
+// occurrence landing on a boundary day belongs to the newer version only.
+model RecurringRuleVersion {
+  id     String        @id @default(cuid())
+  ruleId String
+  rule   RecurringRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  effectiveFrom DateTime
 
   accountId String?
   account   FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
@@ -369,10 +399,9 @@ model RecurringRule {
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
-  type        TxnType
-  amount      Decimal @db.Decimal(14, 2)
-  description String
-  note        String?
+  type   TxnType
+  amount Decimal @db.Decimal(14, 2)
+  note   String?
 
   frequency  Frequency
   interval   Int       @default(1) // every N units of frequency
@@ -383,13 +412,10 @@ model RecurringRule {
   // Anchor weekday for WEEKLY/BIWEEKLY (0=Sun..6=Sat); ignored otherwise.
   weekday    Int?
 
-  archived  Boolean  @default(false)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  transactions Transaction[]
-
-  @@index([userId])
+  @@unique([ruleId, effectiveFrom])
+  @@index([ruleId])
 }
 
 model Budget {

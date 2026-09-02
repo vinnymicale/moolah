@@ -11,6 +11,7 @@ import {
   type DedupScan,
 } from "@/lib/dedup-transactions";
 import { requireUser } from "@/lib/session";
+import { flattenAsOf, versionsInclude } from "@/lib/recurring-versions";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -119,18 +120,23 @@ export async function createTransactionAction(
         const rule = await tx.recurringRule.create({
           data: {
             userId,
-            accountId: data.accountId || null,
-            categoryId: data.categoryId || null,
-            type: data.type,
-            amount: data.amount,
             description: data.description,
-            note: data.note || null,
-            frequency: data.recurring.frequency,
-            interval: data.recurring.interval ?? 1,
-            dayOfMonth: data.recurring.dayOfMonth ?? null,
-            weekday: data.recurring.weekday ?? null,
-            startDate: parseISODay(data.date),
-            endDate: data.recurring.endDate ? parseISODay(data.recurring.endDate) : null,
+            versions: {
+              create: [{
+                effectiveFrom: parseISODay(data.date),
+                accountId: data.accountId || null,
+                categoryId: data.categoryId || null,
+                type: data.type,
+                amount: data.amount,
+                note: data.note || null,
+                frequency: data.recurring.frequency,
+                interval: data.recurring.interval ?? 1,
+                dayOfMonth: data.recurring.dayOfMonth ?? null,
+                weekday: data.recurring.weekday ?? null,
+                startDate: parseISODay(data.date),
+                endDate: data.recurring.endDate ? parseISODay(data.recurring.endDate) : null,
+              }],
+            },
           },
         });
         recurringRuleId = rule.id;
@@ -415,18 +421,23 @@ export async function convertToRecurringAction(id: string, input: ConvertToRecur
       const rule = await tx.recurringRule.create({
         data: {
           userId,
-          accountId: txn.accountId,
-          categoryId: txn.categoryId,
-          type: txn.type,
-          amount: txn.amount,
           description: txn.description,
-          note: txn.note,
-          frequency: data.frequency,
-          interval: data.interval ?? 1,
-          dayOfMonth: data.dayOfMonth ?? null,
-          weekday: data.weekday ?? null,
-          startDate: txn.date,
-          endDate: data.endDate ? parseISODay(data.endDate) : null,
+          versions: {
+            create: [{
+              effectiveFrom: txn.date,
+              accountId: txn.accountId,
+              categoryId: txn.categoryId,
+              type: txn.type,
+              amount: txn.amount,
+              note: txn.note,
+              frequency: data.frequency,
+              interval: data.interval ?? 1,
+              dayOfMonth: data.dayOfMonth ?? null,
+              weekday: data.weekday ?? null,
+              startDate: txn.date,
+              endDate: data.endDate ? parseISODay(data.endDate) : null,
+            }],
+          },
         },
       });
       await tx.transaction.update({ where: { id }, data: { recurringRuleId: rule.id } });
@@ -445,9 +456,14 @@ export async function materializeOccurrenceAction(ruleId: string, dateISO: strin
   if (isDemoMode()) return { ok: true };
   return run(async () => {
     const { userId } = await requireUser();
-    const rule = await prisma.recurringRule.findFirst({ where: { id: ruleId, userId } });
-    if (!rule) throw new UserError("Recurring rule not found");
+    const found = await prisma.recurringRule.findFirst({
+      where: { id: ruleId, userId },
+      include: versionsInclude,
+    });
+    if (!found) throw new UserError("Recurring rule not found");
     const date = parseISODay(dateISO);
+    // Materialize with the rule as it stood on the occurrence's own date.
+    const rule = flattenAsOf(found, date);
 
     const existing = await prisma.transaction.findFirst({
       where: { userId, recurringRuleId: ruleId, date },
