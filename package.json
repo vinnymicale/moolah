@@ -79,7 +79,7 @@
     "shell-quote": "^1.9.0",
     "sharp": "^0.35.3",
     "postcss": "^8.5.22",
-    "fast-uri": "^4.1.2",
+    "fast-uri": "^4.1.4",
     "@prisma/dev": {
       "find-my-way": "^9.7.0",
       "valibot": "^1.4.2"
