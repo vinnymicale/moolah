@@ -33,6 +33,8 @@ services:
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
+      PLAID_SYNC_CRON: ${PLAID_SYNC_CRON:-*/30 * * * *}
+      PLAID_STALE_MS: ${PLAID_STALE_MS:-3600000}
       # Auth.js needs the public origin to build callback URLs behind a proxy.
       AUTH_TRUST_HOST: "true"
       # Scheduled local backups land here; the bind mount below keeps them on the
