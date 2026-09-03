@@ -17,13 +17,6 @@ dataset, and anything you change stays in your browser only.
 > accordingly - review the code yourself before trusting it with sensitive financial data, and note
 > that it comes with no warranty (see [Disclaimer](#disclaimer)).
 
-![Moolah dashboard](docs/screenshots/dashboard.png)
-
-> The dashboard, showing net-worth milestones, spending alerts, top payees, budgets, and recent
-> activity. _(Sample data for illustration.)_
-
----
-
 ## Roadmap
 
 Planned improvements, roughly in priority order:
@@ -206,51 +199,6 @@ Have a request? Open an issue on GitHub.
   chat, `i` import CSV, `/` focus the page's search box, and `?` for a cheat sheet - are ignored
   while typing in a field. Recurrence / projection / debt-payoff / matching math is unit-tested,
   with a Playwright e2e suite and CI on every push and PR.
-
----
-
-## Screenshots
-
-A tour of the pages. _(Sample data - generated from the isolated `demo@example.com` account.)_
-
-**Calendar**
-![Calendar](docs/screenshots/calendar.png)
-
-**Transactions**
-![Transactions](docs/screenshots/transactions.png)
-
-**Recurring**
-![Recurring](docs/screenshots/recurring.png)
-
-**Budgets**
-![Budgets](docs/screenshots/budgets.png)
-
-**Savings goals**
-![Savings goals](docs/screenshots/goals.png)
-
-**Debt payoff**
-![Debt payoff](docs/screenshots/debt.png)
-
-**Accounts & net worth**
-![Accounts & net worth](docs/screenshots/accounts.png)
-
-**Net Worth**
-![Net Worth](docs/screenshots/networth.png)
-
-**Retirement**
-![Retirement](docs/screenshots/retirement.png)
-
-**Trends**
-![Trends](docs/screenshots/trends.png)
-
-**Categories**
-![Categories](docs/screenshots/categories.png)
-
-**Settings**
-![Settings](docs/screenshots/settings.png)
-
-**Dark mode** carries across every page.
-![Dashboard in dark mode](docs/screenshots/dashboard-dark.png)
 
 ---
 

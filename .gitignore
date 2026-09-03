@@ -66,3 +66,10 @@ moolah-backup-*.json
 # local planning docs, not for version control
 docs/superpowers/
 .superpowers/
+
+# screenshots - never commit these, they are captured from a real account
+docs/screenshots/
+
+# feature design docs stay local
+docs/*-design.md
+docs/design/
