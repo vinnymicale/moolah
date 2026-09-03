@@ -48,7 +48,7 @@
     "next-auth": "^5.0.0-beta.31",
     "node-cron": "^4.6.0",
     "pg": "^8.23.0",
-    "plaid": "^45.0.0",
+    "plaid": "^46.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-plaid-link": "^5.0.0",
