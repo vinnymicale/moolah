@@ -182,12 +182,26 @@ export function BudgetsManager({
   );
 }
 
+/** "June 2026" from a YYYY-MM-DD month key, for the save confirmation copy. */
+function monthTitleOf(monthISO: string): string {
+  const [y, m] = monthISO.split("-");
+  return new Date(Date.UTC(Number(y), Number(m) - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }) {
   const demo = useDemoStoreOrNull();
   const [value, setValue] = useState(line.limit > 0 ? String(line.limit) : "");
   const [pending, start] = useTransition();
   const [rolloverPending, startRollover] = useTransition();
   const [justSaved, setJustSaved] = useState(false);
+  // The limit just written to this month, offered for extension to later
+  // months. Cleared once extended or once the prompt times out.
+  const [extendable, setExtendable] = useState<number | null>(null);
+  const [extended, setExtended] = useState(false);
 
   const hasBudget = line.limit > 0;
   const effective = line.effectiveLimit;
@@ -209,8 +223,30 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
       }
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 1500);
+      // Demo mode has no future months to write, so don't offer it there.
+      if (!demo && next > 0) {
+        setExtended(false);
+        setExtendable(next);
+      }
     });
   };
+
+  // Restate the same limit as the new normal: every later month picks it up
+  // instead of the user re-typing it twelve times.
+  const applyForward = () =>
+    start(async () => {
+      if (extendable == null) return;
+      const res = await setBudgetAction({
+        categoryId: line.categoryId,
+        month: monthISO,
+        limit: extendable,
+        scope: "forward",
+      });
+      if (!res.ok) return;
+      setExtendable(null);
+      setExtended(true);
+      setTimeout(() => setExtended(false), 2500);
+    });
 
   const toggleRollover = () =>
     startRollover(async () => {
@@ -256,7 +292,7 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
               onClick={toggleRollover}
               disabled={rolloverPending}
               aria-pressed={line.rollover}
-              title={line.rollover ? "Rollover on: last month's leftover adds to this limit" : "Roll over last month's leftover into this limit"}
+              title={line.rollover ? "Rollover on: leftover from earlier months adds to this limit" : "Roll leftover from earlier months into this limit"}
               className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
                 line.rollover ? "bg-brand/15 text-brand" : "text-muted hover:bg-surface2 hover:text-text"
               }`}
@@ -284,6 +320,17 @@ function BudgetRow({ line, monthISO }: { line: BudgetLineDTO; monthISO: string }
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface2">
           <div className="bar-fill h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
         </div>
+      )}
+      {extendable != null && (
+        <p className="mt-2 pl-12 text-xs text-muted">
+          Saved for {monthTitleOf(monthISO)} only.{" "}
+          <button onClick={applyForward} disabled={pending} className="text-brand underline underline-offset-2 hover:no-underline disabled:opacity-50">
+            Apply to future months too
+          </button>
+        </p>
+      )}
+      {extended && (
+        <p className="mt-2 pl-12 text-xs text-muted">Applied from {monthTitleOf(monthISO)} onward.</p>
       )}
     </li>
   );

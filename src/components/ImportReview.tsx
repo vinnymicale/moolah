@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, FileWarning, Loader2 } from "lucide-react";
 import { Modal } from "./Modal";
-import { parseBankCsv, type ParseResult } from "@/lib/csv-import";
+import { parseBankCsv, MAX_ROWS, type ParseResult } from "@/lib/csv-import";
 import { analyzeImportAction, commitImportAction, type AnalyzedRow } from "@/actions/import";
 import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
@@ -173,6 +173,12 @@ export function ImportReview({ open, onClose, csvText, filename, accounts, categ
               </p>
               {parsed && parsed.skipped.length > 0 && (
                 <p className="text-warning">{parsed.skipped.length} line(s) skipped (unreadable date/amount).</p>
+              )}
+              {parsed?.truncated && (
+                <p className="text-warning">
+                  Only the first {MAX_ROWS.toLocaleString()} rows were read. Split the file and
+                  import the rest separately.
+                </p>
               )}
             </div>
             <div className="min-w-48">

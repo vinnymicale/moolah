@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2, Plus, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
+import { Wand2, Plus, Loader2, Play, Pencil, Eye, X, ChevronUp, ChevronDown, GripVertical, Undo2 } from "lucide-react";
 import {
   createRuleAction,
   updateRuleAction,
@@ -11,14 +11,17 @@ import {
   reorderRulesAction,
   previewRulesAction,
   applyRulesAction,
+  undoRuleRunAction,
   type RuleInput,
   type RulePreview,
+  type PreviewSample,
   type ApplyResult,
 } from "@/actions/rules";
 import { createTagAction } from "@/actions/tags";
 import type { CategoryDTO, AccountDTO, RuleDTO, TagDTO } from "@/lib/queries";
 import { conditionLabel, actionLabel, type RuleCondition, type RuleAction } from "@/lib/rules";
 import { moveInArray, reconcileOrder } from "@/lib/collections";
+import { formatUSD } from "@/lib/money";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 
 type Props = { rules: RuleDTO[]; categories: CategoryDTO[]; accounts: AccountDTO[]; tags: TagDTO[] };
@@ -66,6 +69,64 @@ function previewSummary(res: RulePreview, scope: string): string {
   return `${scope}: would ${parts.join(", ")} (last 365 days). Nothing changed yet.`;
 }
 
+/**
+ * The dry run's sample rows, each field shown as current value → what the rule
+ * would make it. Counts alone don't tell the user whether a rule is matching
+ * the rows they meant, so the before side is the point of this table.
+ */
+function PreviewTable({ samples, more, onClose }: { samples: PreviewSample[]; more: number; onClose: () => void }) {
+  return (
+    <div className="mb-3 overflow-hidden rounded-lg border border-line">
+      <div className="flex items-center justify-between border-b border-line px-3 py-2">
+        <span className="text-xs font-medium text-muted">
+          {samples.length === 1 ? "1 example row" : `${samples.length} example rows`}
+          {more > 0 && ` (${more} more would change)`}
+        </span>
+        <button onClick={onClose} className="text-muted hover:text-text" title="Hide preview">
+          <X size={14} />
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead className="text-muted">
+            <tr className="border-b border-line">
+              <th className="px-3 py-2 font-medium">Transaction</th>
+              <th className="px-3 py-2 font-medium">Field</th>
+              <th className="px-3 py-2 font-medium">Now</th>
+              <th className="px-3 py-2 font-medium">After</th>
+            </tr>
+          </thead>
+          <tbody>
+            {samples.map((sample, i) =>
+              sample.changes.map((change, j) => (
+                <tr key={`${i}-${j}`} className="border-b border-line last:border-0">
+                  {j === 0 && (
+                    <td rowSpan={sample.changes.length} className="max-w-[16rem] px-3 py-2 align-top">
+                      <div className="truncate font-medium">{sample.description}</div>
+                      <div className="text-muted">
+                        {sample.date} · {formatUSD(sample.amount)}
+                      </div>
+                    </td>
+                  )}
+                  <td className="px-3 py-2 align-top text-muted">{change.field}</td>
+                  <td className="max-w-[12rem] px-3 py-2 align-top">
+                    {change.before ? (
+                      <span className="line-through decoration-muted">{change.before}</span>
+                    ) : (
+                      <span className="text-muted">empty</span>
+                    )}
+                  </td>
+                  <td className="max-w-[12rem] px-3 py-2 align-top font-medium">{change.after}</td>
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /** Human summary of a real run. */
 function applySummary(res: ApplyResult, scope: string): string {
   const parts: string[] = [];
@@ -94,6 +155,10 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Sample rows from the last dry run, shown as a before/after table.
+  const [preview, setPreview] = useState<RulePreview | null>(null);
+  // The run behind the current notice, so it can be rolled back in one click.
+  const [undoableRun, setUndoableRun] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [pending, start] = useTransition();
 
@@ -183,22 +248,38 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
     });
 
   // `ruleId` scopes both runs to a single row; omitted, they cover every rule.
-  const preview = (ruleId?: string, scope = "All rules") =>
+  const runPreview = (ruleId?: string, scope = "All rules") =>
     start(async () => {
       setError(null);
       setNotice(null);
+      setPreview(null);
+      setUndoableRun(null);
       const res = await previewRulesAction(ruleId);
       if (!res.ok) return setError(res.error);
       setNotice(previewSummary(res, scope));
+      if (res.samples.length > 0) setPreview(res);
     });
 
   const applyNow = (ruleId?: string, scope = "All rules") =>
     start(async () => {
       setError(null);
       setNotice(null);
+      setPreview(null);
+      setUndoableRun(null);
       const res = await applyRulesAction(ruleId);
       if (!res.ok) return setError(res.error);
       setNotice(applySummary(res, scope));
+      setUndoableRun(res.runId ?? null);
+      router.refresh();
+    });
+
+  const undoRun = (runId: string) =>
+    start(async () => {
+      setError(null);
+      const res = await undoRuleRunAction(runId);
+      if (!res.ok) return setError(res.error);
+      setNotice("Undone. Those transactions are back to how they were.");
+      setUndoableRun(null);
       router.refresh();
     });
 
@@ -211,7 +292,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
         <div className="flex items-center gap-2">
           {rules.length > 0 && (
             <>
-              <button onClick={() => preview()} disabled={pending} className="btn-ghost h-8 text-xs" title="Dry run - see what would change without writing anything">
+              <button onClick={() => runPreview()} disabled={pending} className="btn-ghost h-8 text-xs" title="Dry run - see what would change without writing anything">
                 {pending ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                 Preview
               </button>
@@ -238,7 +319,24 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
         </p>
 
         {error && <p className="mb-2 text-sm text-expense">{error}</p>}
-        {notice && <p className="mb-2 text-sm text-income">{notice}</p>}
+        {notice && (
+          <p className="mb-2 flex items-center gap-2 text-sm text-income">
+            <span>{notice}</span>
+            {undoableRun && (
+              <button
+                onClick={() => undoRun(undoableRun)}
+                disabled={pending}
+                className="btn-ghost h-6 text-xs"
+                title="Put every transaction this run changed back the way it was"
+              >
+                <Undo2 size={12} /> Undo
+              </button>
+            )}
+          </p>
+        )}
+        {preview && (
+          <PreviewTable samples={preview.samples} more={preview.moreSamples} onClose={() => setPreview(null)} />
+        )}
 
         {editing === "new" && (
           <RuleEditor
@@ -361,7 +459,7 @@ export function RulesCard({ rules, categories, accounts, tags }: Props) {
                     </>
                   )}
                   <button
-                    onClick={() => preview(rule.id, rule.name || "This rule")}
+                    onClick={() => runPreview(rule.id, rule.name || "This rule")}
                     disabled={pending}
                     className="btn-ghost h-7 w-7 p-0! text-muted hover:text-brand"
                     title="Preview just this rule"

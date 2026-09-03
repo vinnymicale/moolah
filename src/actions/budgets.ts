@@ -12,9 +12,18 @@ const budgetSchema = z.object({
   categoryId: z.string().min(1),
   month: z.string().min(1),
   limit: z.coerce.number().min(0),
+  // "month" touches only the month being viewed. "forward" also rewrites the
+  // months after it, which is what someone means by "my grocery budget is now
+  // $600" - they're stating a new normal, not amending one month's number.
+  scope: z.enum(["month", "forward"]).default("month"),
 });
 
 export type BudgetInput = z.input<typeof budgetSchema>;
+
+// How far ahead "from this month on" reaches. Budgets are only ever set a year
+// or so out in practice, and an unbounded rewrite would touch rows the user has
+// no way to see.
+const FORWARD_MONTHS = 24;
 
 /** Create or update a category budget for a given month. A limit of 0 removes it. */
 export async function setBudgetAction(input: BudgetInput): Promise<ActionResult> {
@@ -26,7 +35,9 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
     if (!category) throw new UserError("Category not found");
     const month = parseISODay(data.month);
 
-    if (data.limit <= 0) {
+    if (data.scope === "forward") {
+      await applyForward(userId, data.categoryId, month, data.limit);
+    } else if (data.limit <= 0) {
       await prisma.budget.deleteMany({ where: { userId, categoryId: data.categoryId, month } });
     } else {
       await prisma.budget.upsert({
@@ -39,6 +50,34 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
     revalidatePath("/budgets");
     revalidatePath("/");
   });
+}
+
+/**
+ * Write `limit` to `month` and to every month after it inside the forward
+ * window. Later months that already have a budget are overwritten rather than
+ * left alone: the point of "from this month on" is that one number holds, and a
+ * stale limit sitting three months out would quietly contradict it. A limit of
+ * zero clears the whole span instead.
+ */
+async function applyForward(userId: string, categoryId: string, month: Date, limit: number): Promise<void> {
+  const months = Array.from({ length: FORWARD_MONTHS }, (_, i) =>
+    new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + i, 1)),
+  );
+  if (limit <= 0) {
+    await prisma.budget.deleteMany({ where: { userId, categoryId, month: { in: months } } });
+    return;
+  }
+  // Rollover is deliberately not touched: it is a per-month preference about
+  // carrying leftovers, not part of the limit the user is restating.
+  await prisma.$transaction(
+    months.map((m) =>
+      prisma.budget.upsert({
+        where: { userId_categoryId_month: { userId, categoryId, month: m } },
+        update: { limit },
+        create: { userId, categoryId, month: m, limit },
+      }),
+    ),
+  );
 }
 
 const rolloverSchema = z.object({

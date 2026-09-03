@@ -17,7 +17,7 @@ import {
   getTopMerchants,
 } from "@/lib/queries";
 import { isoDay } from "@/lib/dates";
-import { formatUSD } from "@/lib/money";
+import { isWriteTool, stageWrite, type StagedWrite } from "@/lib/chat-writes";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +30,37 @@ export interface ChatMessage {
 
 interface ChatRequest {
   messages: ChatMessage[];
+}
+
+/**
+ * A non-OK response from the AI provider. The provider's response body can
+ * echo back request details (the URL it was called on, prompt fragments, parts
+ * of the key in some auth errors), so it is logged server-side and never sent
+ * to the client. The status is safe and genuinely useful - 401 means the key is
+ * wrong, 429 means the account is throttled - so it survives into the message.
+ */
+class UpstreamError extends Error {
+  constructor(
+    readonly provider: string,
+    readonly status: number,
+    readonly detail: string,
+  ) {
+    super(`${provider} API error ${status}`);
+  }
+
+  /** What the user sees. No upstream body, no stack, no URL. */
+  userMessage(): string {
+    if (this.status === 401 || this.status === 403) {
+      return `Your ${this.provider} API key was rejected. Check it in Settings.`;
+    }
+    if (this.status === 429) {
+      return `${this.provider} is rate-limiting this key. Try again in a moment.`;
+    }
+    if (this.status >= 500) {
+      return `${this.provider} is having trouble right now. Try again in a moment.`;
+    }
+    return `${this.provider} rejected the request (${this.status}).`;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -168,50 +199,29 @@ const TOOLS = [
 // Tool execution
 // ---------------------------------------------------------------------------
 
-// Model-supplied arguments are untrusted input - validate before any DB write.
-const isoDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
-
-const createTransactionArgs = z.object({
-  type: z.enum(["INCOME", "EXPENSE"]),
-  amount: z.number().positive().finite(),
-  date: isoDaySchema,
-  description: z.string().min(1).max(120),
-  note: z.string().max(500).optional(),
-  category_name: z.string().optional(),
-  account_name: z.string().optional(),
-  cleared: z.boolean().optional(),
-});
-
-const createRecurringArgs = z.object({
-  type: z.enum(["INCOME", "EXPENSE"]),
-  amount: z.number().positive().finite(),
-  description: z.string().min(1).max(120),
-  frequency: z.enum(["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "YEARLY"]),
-  interval: z.number().int().min(1).max(366).optional(),
-  start_date: isoDaySchema,
-  day_of_month: z.number().int().min(1).max(31).optional(),
-  category_name: z.string().optional(),
-  account_name: z.string().optional(),
-});
-
-const setBudgetArgs = z.object({
-  category_name: z.string().min(1),
-  limit: z.number().min(0).finite(),
-  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
-});
-
 async function executeTool(
   name: string,
   args: Record<string, unknown>,
   userId: string,
+  staged: StagedWrite[],
 ): Promise<string> {
   const today = isoDay(new Date());
 
-  // The write tools below bypass the server-action layer, so re-apply the same
-  // demo-mode guard those actions enforce: no model-driven mutation in demo mode.
-  const WRITE_TOOLS = new Set(["create_transaction", "create_recurring_rule", "set_budget"]);
-  if (WRITE_TOOLS.has(name) && isDemoMode()) {
-    return JSON.stringify({ success: false, error: "This is a read-only demo. Changes are disabled." });
+  if (isWriteTool(name)) {
+    // The write tools bypass the server-action layer, so re-apply the same
+    // demo-mode guard those actions enforce: no model-driven mutation in demo mode.
+    if (isDemoMode()) {
+      return JSON.stringify({ success: false, error: "This is a read-only demo. Changes are disabled." });
+    }
+    // Nothing is written here. The call is validated and resolved into a
+    // descriptor the user confirms in the panel; /api/chat/confirm commits it.
+    try {
+      const outcome = await stageWrite(name, args, userId);
+      if (outcome.staged) staged.push(outcome.staged);
+      return outcome.toolResult;
+    } catch (err) {
+      return JSON.stringify({ error: String(err) });
+    }
   }
 
   try {
@@ -328,117 +338,6 @@ async function executeTool(
         );
       }
 
-      case "create_transaction": {
-        const input = createTransactionArgs.parse(args);
-        const [categories, accounts] = await Promise.all([
-          getCategories(userId),
-          getAccounts(userId),
-        ]);
-        const category = input.category_name
-          ? categories.find((c) => c.name.toLowerCase().includes(input.category_name!.toLowerCase()))
-          : null;
-        const account = input.account_name
-          ? accounts.find((a) => a.name.toLowerCase().includes(input.account_name!.toLowerCase()))
-          : null;
-
-        await prisma.transaction.create({
-          data: {
-            userId,
-            type: input.type,
-            amount: input.amount,
-            date: new Date(`${input.date}T00:00:00.000Z`),
-            description: input.description,
-            note: input.note || null,
-            categoryId: category?.id || null,
-            accountId: account?.id || null,
-            cleared: input.cleared ?? true,
-          },
-        });
-        return JSON.stringify({
-          success: true,
-          message: `Created ${input.type} transaction: ${input.description} for ${formatUSD(input.amount)}`,
-        });
-      }
-
-      case "create_recurring_rule": {
-        const input = createRecurringArgs.parse(args);
-        const [categories, accounts] = await Promise.all([
-          getCategories(userId),
-          getAccounts(userId),
-        ]);
-        const category = input.category_name
-          ? categories.find((c) => c.name.toLowerCase().includes(input.category_name!.toLowerCase()))
-          : null;
-        const account = input.account_name
-          ? accounts.find((a) => a.name.toLowerCase().includes(input.account_name!.toLowerCase()))
-          : null;
-
-        const startDate = new Date(`${input.start_date}T00:00:00.000Z`);
-        await prisma.recurringRule.create({
-          data: {
-            userId,
-            description: input.description,
-            versions: {
-              create: [{
-                effectiveFrom: startDate,
-                type: input.type,
-                amount: input.amount,
-                frequency: input.frequency,
-                interval: input.interval || 1,
-                startDate,
-                dayOfMonth: input.day_of_month || null,
-                categoryId: category?.id || null,
-                accountId: account?.id || null,
-              }],
-            },
-          },
-        });
-        return JSON.stringify({
-          success: true,
-          message: `Created recurring ${input.type}: ${input.description} — ${formatUSD(input.amount)} ${input.frequency}`,
-        });
-      }
-
-      case "set_budget": {
-        const input = setBudgetArgs.parse(args);
-        const categories = await getCategories(userId);
-        const category = categories.find((c) =>
-          c.name.toLowerCase().includes(input.category_name.toLowerCase()),
-        );
-        if (!category) {
-          return JSON.stringify({
-            success: false,
-            error: `No category found matching "${input.category_name}"`,
-          });
-        }
-
-        const now = new Date();
-        const monthStr = input.month ||
-          `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-        const monthDate = new Date(`${monthStr}-01T00:00:00.000Z`);
-
-        await prisma.budget.upsert({
-          where: {
-            userId_categoryId_month: {
-              userId,
-              categoryId: category.id,
-              month: monthDate,
-            },
-          },
-          create: {
-            userId,
-            categoryId: category.id,
-            month: monthDate,
-            limit: input.limit,
-          },
-          update: { limit: input.limit },
-        });
-        return JSON.stringify({
-          success: true,
-          message: `Set budget for ${category.name} to ${formatUSD(input.limit)}/month`,
-        });
-      }
-
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -464,6 +363,7 @@ async function callAnthropic(
   systemPrompt: string,
   messages: ChatMessage[],
   userId: string,
+  staged: StagedWrite[],
 ): Promise<string> {
   const anthropicTools = TOOLS.map((t) => ({
     name: t.name,
@@ -504,8 +404,7 @@ async function callAnthropic(
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Anthropic API error ${res.status}: ${err}`);
+      throw new UpstreamError("Anthropic", res.status, await res.text());
     }
 
     const data = (await res.json()) as {
@@ -534,7 +433,7 @@ async function callAnthropic(
         toolUses.map(async (tu) => ({
           type: "tool_result" as const,
           tool_use_id: tu.id,
-          content: await executeTool(tu.name, tu.input, userId),
+          content: await executeTool(tu.name, tu.input, userId, staged),
         })),
       );
       convMessages.push({ role: "user", content: toolResults });
@@ -556,6 +455,7 @@ async function callOpenAI(
   systemPrompt: string,
   messages: ChatMessage[],
   userId: string,
+  staged: StagedWrite[],
 ): Promise<string> {
   const openaiTools = TOOLS.map((t) => ({
     type: "function",
@@ -589,8 +489,7 @@ async function callOpenAI(
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`OpenAI API error ${res.status}: ${err}`);
+      throw new UpstreamError("OpenAI", res.status, await res.text());
     }
 
     const data = (await res.json()) as {
@@ -635,6 +534,7 @@ async function callOpenAI(
             tc.function.name,
             JSON.parse(tc.function.arguments) as Record<string, unknown>,
             userId,
+            staged,
           ),
         })),
       );
@@ -653,6 +553,7 @@ async function callGemini(
   systemPrompt: string,
   messages: ChatMessage[],
   userId: string,
+  staged: StagedWrite[],
 ): Promise<string> {
   const geminiTools = [
     {
@@ -693,8 +594,7 @@ async function callGemini(
     );
 
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Gemini API error ${res.status}: ${err}`);
+      throw new UpstreamError("Gemini", res.status, await res.text());
     }
 
     const data = (await res.json()) as {
@@ -723,7 +623,7 @@ async function callGemini(
       functionCalls.map(async (fc) => ({
         functionResponse: {
           name: fc.functionCall.name,
-          response: { content: await executeTool(fc.functionCall.name, fc.functionCall.args, userId) },
+          response: { content: await executeTool(fc.functionCall.name, fc.functionCall.args, userId, staged) },
         },
       })),
     );
@@ -787,33 +687,41 @@ You have access to tools to read and write their financial data. Use them proact
 
 Guidelines:
 - When asked about spending, budgets, or balances, always call the relevant tool first to get current data.
-- When the user asks you to add a transaction, create a recurring expense, or set a budget, use the appropriate tool to do it — then confirm what you did.
+- When the user asks you to add a transaction, create a recurring expense, or set a budget, call the appropriate tool. These tools do not save anything on their own: they prepare the change and the user gets a confirm button. Say what you have prepared and that it needs their confirmation. Never claim you saved, created or updated something.
 - Format money as dollar amounts (e.g. $1,234.56).
 - Be concise and direct. Don't pad answers with financial disclaimers unless the question is genuinely about professional financial advice.
-- If you create or modify data, tell the user exactly what you did so they can verify it.`;
+- Don't repeat the full details of a prepared change back to the user - the confirmation card already shows them. One short sentence is enough.`;
 
   try {
     let reply: string;
     const userId = user.id;
     const apiKey = decryptSecret(user.aiApiKey);
+    const staged: StagedWrite[] = [];
 
     switch (user.aiProvider) {
       case "anthropic":
-        reply = await callAnthropic(apiKey, systemPrompt, body.messages, userId);
+        reply = await callAnthropic(apiKey, systemPrompt, body.messages, userId, staged);
         break;
       case "openai":
-        reply = await callOpenAI(apiKey, systemPrompt, body.messages, userId);
+        reply = await callOpenAI(apiKey, systemPrompt, body.messages, userId, staged);
         break;
       case "gemini":
-        reply = await callGemini(apiKey, systemPrompt, body.messages, userId);
+        reply = await callGemini(apiKey, systemPrompt, body.messages, userId, staged);
         break;
       default:
         return NextResponse.json({ error: "Unknown AI provider" }, { status: 422 });
     }
 
-    return NextResponse.json({ reply });
+    return NextResponse.json({ reply, staged });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Whatever went wrong, the details stay in the server log. Anything thrown
+    // in here can carry provider response bodies, connection strings or stack
+    // frames, and none of that belongs in a chat bubble.
+    console.error("[chat] request failed:", err);
+    if (err instanceof UpstreamError) {
+      console.error(`[chat] ${err.provider} responded ${err.status}:`, err.detail);
+      return NextResponse.json({ error: err.userMessage() }, { status: 502 });
+    }
+    return NextResponse.json({ error: "Something went wrong handling that message." }, { status: 500 });
   }
 }

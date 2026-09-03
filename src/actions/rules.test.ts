@@ -32,8 +32,13 @@ vi.mock("@/lib/prisma", () => ({
     category: { count: vi.fn() },
     financialAccount: { count: vi.fn() },
     tag: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
-    transaction: { findMany: vi.fn(), update: vi.fn() },
-    transactionSplit: { createMany: vi.fn() },
+    transaction: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    transactionSplit: { createMany: vi.fn(), deleteMany: vi.fn() },
+    ruleRun: {
+      create: vi.fn(async () => ({ id: "run1" })),
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
     $transaction: vi.fn(async (ops) => (Array.isArray(ops) ? Promise.all(ops) : ops)),
   },
 }));
@@ -44,6 +49,7 @@ import {
   setRuleEnabledAction,
   reorderRulesAction,
   applyRulesAction,
+  undoRuleRunAction,
 } from "./rules";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -56,6 +62,8 @@ const category = vi.mocked(prisma.category);
 const account = vi.mocked(prisma.financialAccount);
 const tag = vi.mocked(prisma.tag);
 const txn = vi.mocked(prisma.transaction);
+const ruleRun = vi.mocked(prisma.ruleRun);
+const txnSplit = vi.mocked(prisma.transactionSplit);
 const evaluateRulesMock = vi.mocked(evaluateRules);
 const splitByRatioMock = vi.mocked(splitByRatio);
 
@@ -69,6 +77,7 @@ beforeEach(() => {
   demoMode.value = false;
   requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
   evaluateRulesMock.mockReturnValue({});
+  ruleRun.create.mockResolvedValue({ id: "run1" } as never);
 });
 
 describe("demo-mode guard", () => {
@@ -301,5 +310,217 @@ describe("applyRulesAction", () => {
       where: { id: "t1" },
       data: { tags: { connect: [{ id: "tag-new" }] } },
     });
+  });
+});
+
+describe("applyRulesAction run recording", () => {
+  it("records the prior description and category on a run the user can undo", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "COSTCO WHSE #1", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, transferPeerId: null, splits: [], tags: [] },
+    ] as never);
+    evaluateRulesMock.mockReturnValue({ categoryId: "cat1", description: "Costco" });
+
+    const result = await applyRulesAction();
+    expect(result).toMatchObject({ ok: true, runId: "run1" });
+
+    const created = ruleRun.create.mock.calls[0][0] as never as {
+      data: { userId: string; ruleId: string | null; changes: { create: Record<string, unknown>[] } };
+    };
+    expect(created.data.userId).toBe("u1");
+    expect(created.data.ruleId).toBeNull();
+    expect(created.data.changes.create).toEqual([
+      {
+        transactionId: "t1",
+        hadDescription: true,
+        prevDescription: "COSTCO WHSE #1",
+        hadCategory: true,
+        prevCategoryId: null,
+        hadTransfer: false,
+        prevIsTransfer: null,
+        prevTransferPeerId: null,
+        createdSplits: false,
+        addedTagIds: [],
+      },
+    ]);
+  });
+
+  it("scopes the run to a single rule when one was applied", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: null, isTransfer: false, transferPeerId: null, splits: [], tags: [] },
+    ] as never);
+    evaluateRulesMock.mockReturnValue({ categoryId: "cat1" });
+
+    await applyRulesAction("r1");
+    const created = ruleRun.create.mock.calls[0][0] as never as { data: { ruleId: string | null } };
+    expect(created.data.ruleId).toBe("r1");
+  });
+
+  it("records the peer link and transfer flag so undo can restore both", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Payment", amount: "100", accountId: "a1", type: "EXPENSE", categoryId: "cat1", isTransfer: false, transferPeerId: null, splits: [], tags: [] },
+    ] as never);
+    evaluateRulesMock.mockReturnValue({ markTransfer: true });
+
+    await applyRulesAction();
+    const change = (ruleRun.create.mock.calls[0][0] as never as {
+      data: { changes: { create: Record<string, unknown>[] } };
+    }).data.changes.create[0];
+    expect(change).toMatchObject({ hadTransfer: true, prevIsTransfer: false, prevTransferPeerId: null });
+  });
+
+  it("flags a split it created so undo removes those split rows", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: "cat-old", isTransfer: false, transferPeerId: null, splits: [], tags: [] },
+    ] as never);
+    evaluateRulesMock.mockReturnValue({ splits: [{ categoryId: "cat1", ratio: 1 }] });
+    splitByRatioMock.mockReturnValue([{ categoryId: "cat1", amountCents: 5000 }]);
+
+    await applyRulesAction();
+    const change = (ruleRun.create.mock.calls[0][0] as never as {
+      data: { changes: { create: Record<string, unknown>[] } };
+    }).data.changes.create[0];
+    expect(change).toMatchObject({ createdSplits: true, hadCategory: true, prevCategoryId: "cat-old" });
+  });
+
+  it("records no run and returns no runId when nothing matched", async () => {
+    rule.findMany.mockResolvedValue([{ id: "r1", priority: 0, enabled: true, conditions: [], actions: [] }] as never);
+    txn.findMany.mockResolvedValue([
+      { id: "t1", description: "Costco", amount: "50", accountId: "a1", type: "EXPENSE", categoryId: "cat1", isTransfer: false, transferPeerId: null, splits: [], tags: [] },
+    ] as never);
+    evaluateRulesMock.mockReturnValue({});
+
+    const result = await applyRulesAction();
+    expect(result).toMatchObject({ ok: true, runId: undefined });
+    expect(ruleRun.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("undoRuleRunAction", () => {
+  const runWith = (changes: Record<string, unknown>[], undoneAt: Date | null = null) => ({
+    id: "run1",
+    userId: "u1",
+    ruleId: null,
+    undoneAt,
+    changes: changes.map((c, i) => ({
+      id: `c${i}`,
+      runId: "run1",
+      hadDescription: false,
+      prevDescription: null,
+      hadCategory: false,
+      prevCategoryId: null,
+      hadTransfer: false,
+      prevIsTransfer: null,
+      prevTransferPeerId: null,
+      createdSplits: false,
+      addedTagIds: [],
+      ...c,
+    })),
+  });
+
+  it("is blocked in demo mode", async () => {
+    demoMode.value = true;
+    expect(await undoRuleRunAction("run1")).toEqual({
+      ok: false,
+      error: "This is a read-only demo. Changes are disabled.",
+    });
+    expect(ruleRun.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses a run that belongs to somebody else", async () => {
+    ruleRun.findFirst.mockResolvedValue(null as never);
+    expect(await undoRuleRunAction("run1")).toEqual({ ok: false, error: "That run is no longer available." });
+    // Scoped by userId, so another user's run simply doesn't come back.
+    expect(ruleRun.findFirst).toHaveBeenCalledWith({
+      where: { id: "run1", userId: "u1" },
+      include: { changes: true },
+    });
+  });
+
+  it("refuses a run that was already undone", async () => {
+    ruleRun.findFirst.mockResolvedValue(runWith([], new Date()) as never);
+    expect(await undoRuleRunAction("run1")).toEqual({ ok: false, error: "That run was already undone." });
+    expect(txn.update).not.toHaveBeenCalled();
+  });
+
+  it("restores the prior description and category", async () => {
+    ruleRun.findFirst.mockResolvedValue(
+      runWith([
+        {
+          transactionId: "t1",
+          hadDescription: true,
+          prevDescription: "COSTCO WHSE #1",
+          hadCategory: true,
+          prevCategoryId: null,
+        },
+      ]) as never,
+    );
+    txn.findFirst.mockResolvedValue({ id: "t1" } as never);
+
+    expect(await undoRuleRunAction("run1")).toEqual({ ok: true });
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { description: "COSTCO WHSE #1", categoryId: null },
+    });
+    expect(ruleRun.update).toHaveBeenCalledWith({
+      where: { id: "run1" },
+      data: { undoneAt: expect.any(Date) },
+    });
+  });
+
+  it("clears the transfer flag and the peer link the run caused", async () => {
+    ruleRun.findFirst.mockResolvedValue(
+      runWith([
+        { transactionId: "t1", hadTransfer: true, prevIsTransfer: false, prevTransferPeerId: null },
+      ]) as never,
+    );
+    txn.findFirst.mockResolvedValue({ id: "t1" } as never);
+
+    await undoRuleRunAction("run1");
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { isTransfer: false, transferPeerId: null },
+    });
+  });
+
+  it("disconnects only the tags the run added", async () => {
+    ruleRun.findFirst.mockResolvedValue(
+      runWith([{ transactionId: "t1", addedTagIds: ["tag-new"] }]) as never,
+    );
+    txn.findFirst.mockResolvedValue({ id: "t1" } as never);
+
+    await undoRuleRunAction("run1");
+    expect(txn.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { tags: { disconnect: [{ id: "tag-new" }] } },
+    });
+  });
+
+  it("deletes the splits the run created and restores the category it cleared", async () => {
+    ruleRun.findFirst.mockResolvedValue(
+      runWith([
+        { transactionId: "t1", createdSplits: true, hadCategory: true, prevCategoryId: "cat-old" },
+      ]) as never,
+    );
+    txn.findFirst.mockResolvedValue({ id: "t1" } as never);
+
+    await undoRuleRunAction("run1");
+    expect(txnSplit.deleteMany).toHaveBeenCalledWith({ where: { transactionId: "t1" } });
+    expect(txn.update).toHaveBeenCalledWith({ where: { id: "t1" }, data: { categoryId: "cat-old" } });
+  });
+
+  it("skips a transaction that is no longer the user's", async () => {
+    ruleRun.findFirst.mockResolvedValue(
+      runWith([{ transactionId: "t1", hadCategory: true, prevCategoryId: null }]) as never,
+    );
+    txn.findFirst.mockResolvedValue(null as never);
+
+    expect(await undoRuleRunAction("run1")).toEqual({ ok: true });
+    expect(txn.update).not.toHaveBeenCalled();
+    // The run is still marked undone - there is nothing left to roll back.
+    expect(ruleRun.update).toHaveBeenCalled();
   });
 });

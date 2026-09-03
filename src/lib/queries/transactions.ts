@@ -189,6 +189,25 @@ export async function getTransactionsBetween(
   return rows.map(toTransactionDTO);
 }
 
+/**
+ * Ids of every row matching the range and filters, with no rows loaded. Backs
+ * "select all matching" on the list: the client needs the full id set to run a
+ * bulk action over rows it never rendered, and nothing else about them.
+ */
+export async function getMatchingTransactionIds(
+  userId: string,
+  startISO: string,
+  endISO: string,
+  filters: TransactionFilters = EMPTY_TRANSACTION_FILTERS,
+): Promise<string[]> {
+  const rows = await prisma.transaction.findMany({
+    where: transactionWhere(userId, startISO, endISO, filters),
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 export interface TransactionsPageDTO {
   items: TransactionDTO[];
   /** Rows matching the filters across all pages. */

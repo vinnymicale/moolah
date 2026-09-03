@@ -53,6 +53,7 @@ model User {
   savingsGoals          SavingsGoal[]
   plaidItems            PlaidItem[]
   rules                 Rule[]
+  ruleRuns              RuleRun[]
   backupConfig          BackupConfig?
   notificationChannels  NotificationChannel[]
   notificationRules     NotificationRule[]
@@ -253,6 +254,52 @@ model Rule {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// One "Apply to existing" run, kept so it can be undone. Each change row holds
+// the transaction's prior values for exactly the fields that run touched, so an
+// undo restores the before-state rather than guessing at an inverse.
+model RuleRun {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Null when the run covered every enabled rule; set when it was one row.
+  ruleId String?
+
+  createdAt DateTime  @default(now())
+  undoneAt  DateTime?
+
+  changes RuleRunChange[]
+
+  @@index([userId, createdAt])
+}
+
+model RuleRunChange {
+  id    String  @id @default(cuid())
+  runId String
+  run   RuleRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  transactionId String
+
+  // Prior values. Only the fields the run actually changed are non-null in the
+  // corresponding `had*` flag; the flags exist because null is a legitimate
+  // prior value for categoryId, description is never null, and so on.
+  hadDescription    Boolean @default(false)
+  prevDescription   String?
+  hadCategory       Boolean @default(false)
+  prevCategoryId    String?
+  hadTransfer       Boolean @default(false)
+  prevIsTransfer    Boolean?
+  prevTransferPeerId String?
+  // Splits the run created (undo deletes them). Prior splits are never
+  // overwritten - a split only applies to a transaction that had none.
+  createdSplits     Boolean @default(false)
+  // Tag ids the run connected, so undo disconnects exactly those.
+  addedTagIds       String[]
+
+  @@index([runId])
+  @@index([transactionId])
 }
 
 model Transaction {

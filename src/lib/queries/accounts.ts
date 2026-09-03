@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
 import { isoDay } from "@/lib/dates";
 import type { AccountType } from "@/generated/prisma/enums";
+import type { OnboardingInput } from "@/lib/onboarding";
 
 export interface AccountDTO {
   id: string;
@@ -98,4 +99,19 @@ export async function getSnapshots(userId: string): Promise<SnapshotDTO[]> {
     balance: toNumber(s.balance),
     note: s.note,
   }));
+}
+
+/**
+ * Counts behind the first-run checklist. Four counts rather than four list
+ * queries: the dashboard only needs to know whether each thing exists yet, and
+ * this runs on every dashboard load.
+ */
+export async function getOnboardingCounts(userId: string): Promise<OnboardingInput> {
+  const [accountCount, transactionCount, budgetCount, recurringCount] = await Promise.all([
+    prisma.financialAccount.count({ where: { userId } }),
+    prisma.transaction.count({ where: { userId, deletedAt: null } }),
+    prisma.budget.count({ where: { userId } }),
+    prisma.recurringRule.count({ where: { userId } }),
+  ]);
+  return { accountCount, transactionCount, budgetCount, recurringCount };
 }

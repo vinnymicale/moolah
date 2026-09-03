@@ -5,6 +5,7 @@ import {
   parseDateCell,
   guessCategoryName,
   splitCsv,
+  MAX_ROWS,
 } from "./csv-import";
 
 const DISCOVER = `Transaction Date,Transaction Description,Transaction Type,Debit,Credit
@@ -132,7 +133,7 @@ describe("parseBankCsv - single debit/credit column", () => {
 
 describe("parseBankCsv - error handling", () => {
   it("reports an empty file", () => {
-    expect(parseBankCsv("")).toEqual({ rows: [], skipped: [], format: "Empty file" });
+    expect(parseBankCsv("")).toEqual({ rows: [], skipped: [], format: "Empty file", truncated: false });
   });
 
 
@@ -149,6 +150,18 @@ not-a-date,Bad row,$5.00 ,0
     const result = parseBankCsv("foo,bar\n1,2");
     expect(result.format).toBe("Unrecognised");
     expect(result.rows).toHaveLength(0);
+  });
+
+  it("stops at MAX_ROWS and flags the result as truncated", () => {
+    const lines = ["Date,Description,Amount"];
+    for (let i = 0; i < MAX_ROWS + 50; i++) lines.push(`5/1/2026,Row ${i},-1.00`);
+    const result = parseBankCsv(lines.join("\n"));
+    expect(result.rows).toHaveLength(MAX_ROWS);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("does not flag a file that fits under the cap", () => {
+    expect(parseBankCsv(DISCOVER).truncated).toBe(false);
   });
 });
 
