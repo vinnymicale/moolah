@@ -13,6 +13,34 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 **[Try the live demo →](https://moolah-five.vercel.app)** - no sign-up; it serves a seeded sample
 dataset, and anything you change stays in your browser only.
 
+## Screenshots
+
+All screenshots below are captured from the seeded demo dataset - no real account data.
+
+| Dashboard | Calendar |
+| --- | --- |
+| [![Dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png) | [![Calendar](docs/screenshots/calendar.png)](docs/screenshots/calendar.png) |
+
+| Transactions | Recurring |
+| --- | --- |
+| [![Transactions](docs/screenshots/transactions.png)](docs/screenshots/transactions.png) | [![Recurring](docs/screenshots/recurring.png)](docs/screenshots/recurring.png) |
+
+| Budgets | Goals |
+| --- | --- |
+| [![Budgets](docs/screenshots/budgets.png)](docs/screenshots/budgets.png) | [![Goals](docs/screenshots/goals.png)](docs/screenshots/goals.png) |
+
+| Debt payoff | Accounts |
+| --- | --- |
+| [![Debt payoff](docs/screenshots/debt.png)](docs/screenshots/debt.png) | [![Accounts](docs/screenshots/accounts.png)](docs/screenshots/accounts.png) |
+
+| Net worth | Trends |
+| --- | --- |
+| [![Net worth](docs/screenshots/networth.png)](docs/screenshots/networth.png) | [![Trends](docs/screenshots/trends.png)](docs/screenshots/trends.png) |
+
+| Categories & rules | Dashboard (dark) |
+| --- | --- |
+| [![Categories and rules](docs/screenshots/categories.png)](docs/screenshots/categories.png) | [![Dashboard in dark mode](docs/screenshots/dashboard-dark.png)](docs/screenshots/dashboard-dark.png) |
+
 > **AI disclaimer:** Moolah was built with help from AI (Anthropic's Claude). Treat it
 > accordingly - review the code yourself before trusting it with sensitive financial data, and note
 > that it comes with no warranty (see [Disclaimer](#disclaimer)).

@@ -67,9 +67,6 @@ moolah-backup-*.json
 docs/superpowers/
 .superpowers/
 
-# screenshots - never commit these, they are captured from a real account
-docs/screenshots/
-
 # feature design docs stay local
 **/*-design.md
 docs/design/

@@ -1,8 +1,11 @@
 // Recapture the README screenshots against the demo build.
 //
-// Run a demo-mode server first (DEMO_MODE=true AUTH_BYPASS=true npm start) with
-// the demo data seeded, then: `tsx scripts/screenshots.ts`. Writes PNGs into
-// docs/screenshots/ using the same names the README references.
+// Committed screenshots must come from demo data only, never a real account.
+// Run a demo-mode server first (DEMO_MODE=true AUTH_BYPASS=false npm start)
+// against a database seeded with the demo user, then: `tsx scripts/screenshots.ts`.
+// Writes PNGs into docs/screenshots/ using the same names the README references.
+// Pages that render a read-only demo placeholder (e.g. /settings) get dropped
+// from the set rather than captured another way.
 
 import { chromium, type Page } from "playwright";
 import path from "node:path";
