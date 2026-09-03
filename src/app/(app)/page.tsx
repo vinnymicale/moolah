@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSpendingAnomalies, getTopMerchants } from "@/lib/queries";
+import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSpendingAnomalies, getTopMerchants, getOnboardingCounts } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
 import { getDemoUserId } from "@/lib/demo-session";
 import {
@@ -22,6 +22,8 @@ import { summarizeDashboard } from "@/lib/dashboard";
 import { DashboardSections, type DashboardSection } from "./DashboardSections";
 import { SpendingAlertsCard } from "./SpendingAlertsCard";
 import { MilestonesBanner } from "./MilestonesBanner";
+import { OnboardingChecklist } from "./OnboardingChecklist";
+import { computeOnboardingSteps, onboardingComplete } from "@/lib/onboarding";
 import { userTodayISO } from "@/lib/user-tz";
 
 export default async function DashboardPage() {
@@ -67,6 +69,11 @@ export default async function DashboardPage() {
 
   const catById = new Map(categories.map((c) => [c.id, c]));
   const milestones = computeMilestones({ netWorth: netWorth.net, goals, savingsRate, net });
+
+  // Demo mode ships with a full dataset and its own welcome modal, so there is
+  // nothing to set up there.
+  const onboarding = DEMO_MODE ? null : computeOnboardingSteps(await getOnboardingCounts(userId));
+  const showOnboarding = onboarding != null && !onboardingComplete(onboarding);
 
   const sections: DashboardSection[] = [
     {
@@ -320,6 +327,8 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Dashboard" subtitle="Your finances at a glance." />
+
+      {showOnboarding && <OnboardingChecklist steps={onboarding} />}
 
       <MilestonesBanner milestones={milestones} />
 

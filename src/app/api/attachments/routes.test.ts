@@ -32,7 +32,9 @@ function uploadReq(fields: { transactionId?: string; file?: File }): NextRequest
   return new NextRequest("http://localhost/api/attachments", { method: "POST", body: form });
 }
 
-const jpeg = new File([new Uint8Array([1, 2, 3])], "receipt.jpg", { type: "image/jpeg" });
+// Real leading bytes matter: the route derives the stored type from the content.
+const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+const jpeg = new File([JPEG_BYTES], "receipt.jpg", { type: "image/jpeg" });
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
@@ -68,14 +70,36 @@ describe("POST /api/attachments", () => {
 
   it("creates and returns metadata", async () => {
     txnFind.mockResolvedValue({ id: "t1", _count: { attachments: 0 } } as never);
-    attCreate.mockResolvedValue({ id: "a1", filename: "receipt.jpg", mimeType: "image/jpeg", size: 3 } as never);
+    attCreate.mockResolvedValue({ id: "a1", filename: "receipt.jpg", mimeType: "image/jpeg", size: 4 } as never);
     const res = await POST(uploadReq({ transactionId: "t1", file: jpeg }));
     expect(res.status).toBe(201);
-    expect(await res.json()).toEqual({ id: "a1", filename: "receipt.jpg", mimeType: "image/jpeg", size: 3 });
+    expect(await res.json()).toEqual({ id: "a1", filename: "receipt.jpg", mimeType: "image/jpeg", size: 4 });
     expect(attCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ userId: "u1", transactionId: "t1", mimeType: "image/jpeg" }),
       }),
+    );
+  });
+
+  it("rejects a file whose bytes don't match any accepted format", async () => {
+    txnFind.mockResolvedValue({ id: "t1", _count: { attachments: 0 } } as never);
+    const spoofed = new File([new TextEncoder().encode("<script>alert(1)</script>")], "receipt.png", {
+      type: "image/png",
+    });
+    const res = await POST(uploadReq({ transactionId: "t1", file: spoofed }));
+    expect(res.status).toBe(400);
+    expect(attCreate).not.toHaveBeenCalled();
+  });
+
+  it("stores the sniffed type, not the one the client declared", async () => {
+    txnFind.mockResolvedValue({ id: "t1", _count: { attachments: 0 } } as never);
+    attCreate.mockResolvedValue({ id: "a1", filename: "receipt.pdf", mimeType: "application/pdf", size: 4 } as never);
+    // Declared as a PNG, actually a PDF.
+    const mislabelled = new File([new TextEncoder().encode("%PDF")], "receipt.pdf", { type: "image/png" });
+    const res = await POST(uploadReq({ transactionId: "t1", file: mislabelled }));
+    expect(res.status).toBe(201);
+    expect(attCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ mimeType: "application/pdf" }) }),
     );
   });
 

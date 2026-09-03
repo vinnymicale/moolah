@@ -1,21 +1,16 @@
-// Focused tests for normalizeSplits - the action-layer guard that validates
-// split parts and confirms every split category belongs to the user and matches
-// the transaction kind. The cross-user / wrong-kind rejection is a security
-// boundary (a malicious payload could otherwise attribute spend to a category
-// the user doesn't own), so it's worth covering directly.
+// Focused tests for normalizeSplits - the guard that validates split parts and
+// confirms every split category belongs to the user and matches the transaction
+// kind. The cross-user / wrong-kind rejection is a security boundary (a
+// malicious payload could otherwise attribute spend to a category the user
+// doesn't own), so it's worth covering directly.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// The module is a "use server" file; stub its side-effecting imports so it loads
-// in a plain test context. Only prisma.category.count is exercised here.
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
-vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => false }));
 vi.mock("@/lib/prisma", () => ({
   prisma: { category: { count: vi.fn() } },
 }));
 
-import { normalizeSplits } from "./transactions";
+import { normalizeSplits } from "@/lib/normalize-splits";
 import { prisma } from "@/lib/prisma";
 
 const count = vi.mocked(prisma.category.count);

@@ -34,7 +34,9 @@ test.describe("retirement page", () => {
 
   test("shows the verdict header", async ({ page }) => {
     await page.goto("/retirement");
-    await expect(page.getByText(/on track|behind by/i)).toBeVisible();
+    // The verdict is a single paragraph; the bare text matcher also picks up the
+    // assumptions copy further down the page and trips strict mode.
+    await expect(page.locator("main p", { hasText: /on track|behind by/i }).first()).toBeVisible();
   });
 
   test("shows all four stat cards", async ({ page }) => {

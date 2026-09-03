@@ -19,6 +19,7 @@ import { Modal } from "@/components/Modal";
 import {
   bulkSetCategoryAction, bulkSetAccountAction, bulkSetClearedAction, bulkDeleteTransactionsAction,
   pairTransfersAction, unpairTransferAction, bulkAddTagAction, bulkRemoveTagAction,
+  matchingTransactionIdsAction,
 } from "@/actions/transactions";
 import { createTagAction } from "@/actions/tags";
 import type { AccountDTO, CategoryDTO, TagDTO, TransactionDTO, TransactionsPageDTO } from "@/lib/queries";
@@ -132,6 +133,10 @@ export function TransactionsList({
   const [trashOpen, setTrashOpen] = useState(false);
   const [dedupOpen, setDedupOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Set once the selection has been escalated past the loaded page, so the
+  // bar can say so and the escalation prompt can stand down.
+  const [selectedAllMatching, setSelectedAllMatching] = useState(false);
+  const [selectAllPending, setSelectAllPending] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -334,7 +339,10 @@ export function TransactionsList({
   };
 
   const allSelected = items.length > 0 && items.every((t) => selected.has(t.id));
-  const toggle = (id: string) => setSelected((prev) => toggleInSet(prev, id));
+  const toggle = (id: string) => {
+    setSelectedAllMatching(false);
+    setSelected((prev) => toggleInSet(prev, id));
+  };
   // Shift-click selects the whole span between the last-toggled row and this
   // one, matching the click target's new state (Gmail-style).
   const lastToggledId = useRef<string | null>(null);
@@ -348,6 +356,7 @@ export function TransactionsList({
       if (from >= 0 && to >= 0) {
         const [lo, hi] = from < to ? [from, to] : [to, from];
         const adding = !selected.has(id);
+        setSelectedAllMatching(false);
         setSelected((prev) => {
           const next = new Set(prev);
           for (const spanId of ids.slice(lo, hi + 1)) {
@@ -361,9 +370,34 @@ export function TransactionsList({
     }
     toggle(id);
   };
-  const toggleAll = () =>
+  const toggleAll = () => {
+    setSelectedAllMatching(false);
     setSelected(allSelected ? new Set() : new Set(items.map((t) => t.id)));
-  const clearSelection = () => setSelected(new Set());
+  };
+  const clearSelection = () => {
+    setSelectedAllMatching(false);
+    setSelected(new Set());
+  };
+
+  // Escalate from the loaded page to every row the current range and filters
+  // match. The ids are resolved server-side from the same params the page was
+  // rendered with, so the selection covers rows that were never fetched.
+  const selectAllMatching = async () => {
+    setSelectAllPending(true);
+    setBulkError(null);
+    try {
+      const res = await matchingTransactionIdsAction(currentParams());
+      setSelected(new Set(res.ids));
+      setSelectedAllMatching(true);
+      if (res.truncated) {
+        setBulkError(`Selected the first ${res.ids.length} of ${res.total} matches. Narrow the filters to reach the rest.`);
+      }
+    } catch {
+      setBulkError("Couldn't select every match. Try again.");
+    } finally {
+      setSelectAllPending(false);
+    }
+  };
 
   const runBulk = (fn: (ids: string[]) => Promise<{ ok: boolean; error?: string }>) =>
     start(async () => {
@@ -548,7 +582,9 @@ export function TransactionsList({
         {/* Bulk action bar (replaces the totals row while selecting) */}
         {selected.size > 0 ? (
           <div className="sticky top-[61px] z-20 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand/40 bg-[color-mix(in_srgb,var(--brand)_5%,var(--surface))] px-3 py-2 shadow-rest md:top-0">
-            <span className="text-sm font-medium">{selected.size} selected</span>
+            <span className="text-sm font-medium">
+              {selected.size} selected{selectedAllMatching ? " (all matches)" : ""}
+            </span>
 
             <select
               className="input h-8 w-auto text-xs"
@@ -681,10 +717,20 @@ export function TransactionsList({
 
         {/* Select-all header (only while selecting) */}
         {selected.size > 0 && items.length > 0 && (
-          <button onClick={toggleAll} className="mb-2 flex items-center gap-1.5 px-1 text-xs text-muted hover:text-text">
-            {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-            {allSelected ? "Deselect all" : `Select all ${items.length} on this page`}
-          </button>
+          <div className="mb-2 flex flex-wrap items-center gap-3 px-1 text-xs">
+            <button onClick={toggleAll} className="flex items-center gap-1.5 text-muted hover:text-text">
+              {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+              {allSelected ? "Deselect all" : `Select all ${items.length} on this page`}
+            </button>
+            {allSelected && !selectedAllMatching && txnPage.total > items.length && (
+              <button onClick={selectAllMatching} disabled={selectAllPending} className="text-brand underline underline-offset-2 hover:no-underline disabled:opacity-50">
+                {selectAllPending ? "Selecting…" : `Select all ${txnPage.total} matching these filters`}
+              </button>
+            )}
+            {selectedAllMatching && (
+              <span className="text-muted">All {selected.size} matching rows are selected.</span>
+            )}
+          </div>
         )}
 
         {/* List */}

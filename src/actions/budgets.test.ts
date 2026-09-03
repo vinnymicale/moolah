@@ -113,6 +113,58 @@ describe("setBudgetAction", () => {
   });
 });
 
+describe("setBudgetAction with scope: forward", () => {
+  beforeEach(() => {
+    category.findFirst.mockResolvedValue({ id: "c1" } as never);
+  });
+
+  it("upserts the limit across the whole forward window", async () => {
+    const result = await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 600, scope: "forward" });
+    expect(result).toEqual({ ok: true });
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(budget.upsert).toHaveBeenCalledTimes(24);
+    const months = budget.upsert.mock.calls.map(([args]) =>
+      (args.where.userId_categoryId_month!.month as Date).toISOString().slice(0, 10),
+    );
+    expect(months[0]).toBe("2026-06-01");
+    expect(months[1]).toBe("2026-07-01");
+    // The window crosses a year boundary rather than wrapping inside 2026.
+    expect(months[7]).toBe("2027-01-01");
+    expect(months[23]).toBe("2028-05-01");
+  });
+
+  it("writes only the limit, leaving rollover alone", async () => {
+    await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 600, scope: "forward" });
+    for (const [args] of budget.upsert.mock.calls) {
+      expect(args.update).toEqual({ limit: 600 });
+      expect(args.create).not.toHaveProperty("rollover");
+    }
+  });
+
+  it("clears the whole span when the limit is zero", async () => {
+    await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 0, scope: "forward" });
+    expect(budget.upsert).not.toHaveBeenCalled();
+    const where = budget.deleteMany.mock.calls[0][0]!.where!;
+    expect(where.userId).toBe("u1");
+    expect(where.categoryId).toBe("c1");
+    expect((where.month as { in: Date[] }).in).toHaveLength(24);
+  });
+
+  it("defaults to the viewed month only when no scope is given", async () => {
+    await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 600 });
+    expect(budget.upsert).toHaveBeenCalledOnce();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("still checks category ownership before writing forward", async () => {
+    category.findFirst.mockResolvedValue(null);
+    const result = await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 600, scope: "forward" });
+    expect(result).toEqual({ ok: false, error: "Category not found" });
+    expect(budget.upsert).not.toHaveBeenCalled();
+    expect(budget.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
 describe("copyBudgetsAction", () => {
   it("errors when the source month has no budgets", async () => {
     budget.findMany.mockResolvedValue([]);

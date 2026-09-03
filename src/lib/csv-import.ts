@@ -33,7 +33,18 @@ export interface ParseResult {
   skipped: SkippedRow[];
   /** Human-readable note on how the columns were interpreted. */
   format: string;
+  /** True when the file held more rows than MAX_ROWS and parsing stopped early. */
+  truncated: boolean;
 }
+
+/**
+ * Ceiling on rows taken from one file. Matches the cap the import server
+ * actions enforce, so an oversized file is reported here as a clear "first
+ * 5,000 rows" message instead of parsing in full and then failing schema
+ * validation on the server. It also keeps a pathological file from locking up
+ * the tab, since parsing runs in the browser.
+ */
+export const MAX_ROWS = 5000;
 
 // ---------------------------------------------------------------------------
 // Low-level CSV tokenising (RFC-4180-ish: quoted fields, "" escapes, embedded
@@ -206,7 +217,7 @@ function detectColumns(headers: string[]): ColumnMap | null {
 export function parseBankCsv(text: string): ParseResult {
   const grid = splitCsv(text);
   if (grid.length === 0) {
-    return { rows: [], skipped: [], format: "Empty file" };
+    return { rows: [], skipped: [], format: "Empty file", truncated: false };
   }
 
   const headers = grid[0];
@@ -216,13 +227,20 @@ export function parseBankCsv(text: string): ParseResult {
       rows: [],
       skipped: [{ line: headers.join(","), reason: "Couldn't find a date and amount column in the header." }],
       format: "Unrecognised",
+      truncated: false,
     };
   }
 
   const rows: ParsedRow[] = [];
   const skipped: SkippedRow[] = [];
 
+  let truncated = false;
+
   for (let i = 1; i < grid.length; i++) {
+    if (rows.length >= MAX_ROWS) {
+      truncated = true;
+      break;
+    }
     const cells = grid[i];
     const line = cells.join(",");
 
@@ -243,7 +261,7 @@ export function parseBankCsv(text: string): ParseResult {
     rows.push({ date, description, amount: resolved.amount, type: resolved.type });
   }
 
-  return { rows, skipped, format: cols.format };
+  return { rows, skipped, format: cols.format, truncated };
 }
 
 function resolveAmount(cells: string[], cols: ColumnMap): { amount: number; type: ImportType } | null {

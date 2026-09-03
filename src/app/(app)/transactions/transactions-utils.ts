@@ -7,6 +7,11 @@ export type StatusOpt = "CLEARED" | "PENDING";
 // Prisma, and this module is shared with client components).
 export const PAGE_SIZE = 100;
 
+// Ceiling on a single bulk action's id list, and so on how many rows "select
+// all matching" can hand it. Lives here rather than in the actions module
+// because "use server" files can only export async functions.
+export const BULK_ID_LIMIT = 1000;
+
 const TXN_TYPES = new Set<string>(["INCOME", "EXPENSE"]);
 const STATUSES = new Set<string>(["CLEARED", "PENDING"]);
 

@@ -40,3 +40,35 @@ export function validateAttachmentUpload(input: {
   }
   return null;
 }
+
+/**
+ * Identify a file from its leading bytes. The browser-supplied `file.type` is
+ * just a claim - a caller posting the form directly can put any string there -
+ * so the stored mimeType is derived from the content instead. Returns null when
+ * the bytes don't match a format we accept.
+ *
+ * HEIC/HEIF are ISO base-media containers: bytes 4-8 are "ftyp" and the brand
+ * that follows says which flavour.
+ */
+export function sniffAttachmentType(bytes: Uint8Array): string | null {
+  const startsWith = (...sig: number[]) =>
+    sig.length <= bytes.length && sig.every((b, i) => bytes[i] === b);
+
+  if (startsWith(0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+  if (startsWith(0x25, 0x50, 0x44, 0x46)) return "application/pdf"; // %PDF
+
+  const ascii = (start: number, len: number) =>
+    String.fromCharCode(...bytes.subarray(start, start + len));
+
+  // RIFF....WEBP
+  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP") return "image/webp";
+
+  if (bytes.length >= 12 && ascii(4, 4) === "ftyp") {
+    const brand = ascii(8, 4);
+    if (brand === "heic" || brand === "heix" || brand === "hevc" || brand === "hevx") return "image/heic";
+    if (brand === "mif1" || brand === "msf1" || brand === "heim" || brand === "heis") return "image/heif";
+  }
+
+  return null;
+}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/session";
 import { isDemoMode } from "@/lib/demo-guard";
 import { prisma } from "@/lib/prisma";
-import { validateAttachmentUpload } from "@/lib/attachments";
+import { validateAttachmentUpload, sniffAttachmentType } from "@/lib/attachments";
 
 // POST /api/attachments - multipart form { transactionId, file }.
 // A route handler rather than a server action: uploads can exceed the 1MB
@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
   });
   if (!txn) return NextResponse.json({ error: "Transaction not found." }, { status: 404 });
 
+  // Check the declared type and size first so an oversized or obviously wrong
+  // file is rejected before its bytes are buffered.
   const invalid = validateAttachmentUpload({
     mimeType: file.type,
     size: file.size,
@@ -42,13 +44,23 @@ export async function POST(req: NextRequest) {
   });
   if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
 
+  // The declared type is only a claim. Store what the bytes actually are, so a
+  // script can't be filed away under an image content type.
   const bytes = Buffer.from(await file.arrayBuffer());
+  const sniffed = sniffAttachmentType(bytes);
+  if (!sniffed) {
+    return NextResponse.json(
+      { error: "That file's contents aren't a JPEG, PNG, WebP, HEIC, or PDF." },
+      { status: 400 },
+    );
+  }
+
   const created = await prisma.attachment.create({
     data: {
       userId,
       transactionId,
       filename: file.name || "attachment",
-      mimeType: file.type,
+      mimeType: sniffed,
       size: bytes.length,
       data: bytes,
     },

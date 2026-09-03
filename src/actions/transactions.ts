@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getDeletedTransactions, type DeletedTransactionDTO } from "@/lib/queries";
+import { getDeletedTransactions, getMatchingTransactionIds, type DeletedTransactionDTO } from "@/lib/queries";
+import { userTodayISO } from "@/lib/user-tz";
+import { resolveTransactionsRange } from "@/app/(app)/transactions/resolve-range";
+import { BULK_ID_LIMIT, parseTransactionFilters } from "@/app/(app)/transactions/transactions-utils";
 import {
   scanDuplicateTransactions,
   removeDuplicateTransactions,
@@ -15,7 +18,7 @@ import { flattenAsOf, versionsInclude } from "@/lib/recurring-versions";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
-import { validateSplits } from "@/lib/splits";
+import { normalizeSplits } from "@/lib/normalize-splits";
 import { resolveTagIds } from "@/lib/tags";
 import { TxnType, Frequency } from "@/generated/prisma/enums";
 
@@ -70,36 +73,6 @@ async function assertOwnership(
     });
     if (!c) throw new UserError("Category not found");
   }
-}
-
-interface NormalizedSplit {
-  categoryId: string | null;
-  amount: number;
-}
-
-/**
- * Validate split parts against the transaction total and confirm every split
- * category belongs to the user and matches the transaction's kind (an EXPENSE
- * can only split across expense categories, etc. - mirroring what the form
- * offers). Returns the cleaned splits, or [] when no real split was provided
- * (a single part or none means "not split").
- */
-export async function normalizeSplits(
-  userId: string,
-  type: TxnType,
-  total: number,
-  splits?: { categoryId?: string | null; amount: number }[] | null,
-): Promise<NormalizedSplit[]> {
-  if (!splits || splits.length < 2) return [];
-  const cleaned: NormalizedSplit[] = splits.map((s) => ({ categoryId: s.categoryId || null, amount: s.amount }));
-  const err = validateSplits(total, cleaned);
-  if (err) throw new UserError(err);
-  const catIds = [...new Set(cleaned.map((s) => s.categoryId).filter((id): id is string => !!id))];
-  if (catIds.length > 0) {
-    const found = await prisma.category.count({ where: { id: { in: catIds }, userId, kind: type } });
-    if (found !== catIds.length) throw new UserError("Split category not found");
-  }
-  return cleaned;
 }
 
 export async function createTransactionAction(
@@ -301,7 +274,7 @@ export async function setClearedAction(id: string, cleared: boolean): Promise<Ac
 // data.
 // ---------------------------------------------------------------------------
 
-const idsSchema = z.array(z.string().min(1)).min(1, "Select at least one transaction").max(1000);
+const idsSchema = z.array(z.string().min(1)).min(1, "Select at least one transaction").max(BULK_ID_LIMIT);
 
 export async function bulkSetCategoryAction(ids: string[], categoryId: string | null): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
@@ -602,4 +575,49 @@ function revalidateAll() {
   revalidatePath("/calendar");
   revalidatePath("/transactions");
   revalidatePath("/trends");
+}
+
+// ---------------------------------------------------------------------------
+// Select all matching
+// ---------------------------------------------------------------------------
+
+/** Mirrors the URL params the transactions page and CSV export both read. */
+const scopeSchema = z.object({
+  m: z.string().optional(),
+  range: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  q: z.string().optional(),
+  type: z.string().optional(),
+  status: z.string().optional(),
+  category: z.string().optional(),
+  account: z.string().optional(),
+  tag: z.string().optional(),
+  recurring: z.string().optional(),
+  amin: z.string().optional(),
+  amax: z.string().optional(),
+});
+
+export type SelectionScope = z.input<typeof scopeSchema>;
+
+export interface MatchingIdsResult {
+  ids: string[];
+  /** How many rows matched, which exceeds ids.length when the cap kicked in. */
+  total: number;
+  /** True when only the first BULK_ID_LIMIT of the matches came back. */
+  truncated: boolean;
+}
+
+/**
+ * Every transaction id matching the list's current range and filters, so the
+ * user can bulk-edit rows past the loaded page. Resolving the scope here rather
+ * than trusting a client-sent id list keeps the selection userId-scoped, and
+ * re-uses the same range and filter parsing the page itself ran.
+ */
+export async function matchingTransactionIdsAction(scope: SelectionScope): Promise<MatchingIdsResult> {
+  const { userId } = await requireUser();
+  const params = scopeSchema.parse(scope);
+  const { startISO, endISO } = resolveTransactionsRange(params, await userTodayISO());
+  const ids = await getMatchingTransactionIds(userId, startISO, endISO, parseTransactionFilters(params));
+  return { ids: ids.slice(0, BULK_ID_LIMIT), total: ids.length, truncated: ids.length > BULK_ID_LIMIT };
 }

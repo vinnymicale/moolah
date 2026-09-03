@@ -8,7 +8,11 @@ export default defineConfig({
     },
   },
   test: {
+    // Node by default: nearly every suite here tests server code, and jsdom
+    // costs real startup time. Component tests opt in with a
+    // `@vitest-environment jsdom` docblock.
     environment: "node",
+    setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     coverage: {
       provider: "v8",

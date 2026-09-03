@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { X, Send, Bot, Loader2, TriangleAlert, RotateCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, Send, Bot, Loader2, TriangleAlert, RotateCcw, Check, Ban } from "lucide-react";
 import type { ChatMessage } from "@/app/api/chat/route";
+import type { StagedWrite } from "@/lib/chat-writes";
+
+// A staged write and what has happened to it. Staged writes live only here: if
+// the panel unmounts they are dropped rather than saved later behind the user's
+// back.
+type WriteState =
+  | { status: "pending" }
+  | { status: "saving" }
+  | { status: "saved"; message: string }
+  | { status: "cancelled" }
+  | { status: "failed"; message: string };
 
 const WELCOME = `Hi! I'm your finance assistant. I can answer questions about your spending, balances, and budgets — or help you log transactions and set up recurring rules.
 
@@ -13,7 +25,12 @@ Try asking things like:
 - "Set a $500 budget for groceries this month"`;
 
 export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Staged writes keyed by the index of the assistant message that produced
+  // them, so each confirm card renders under its own reply.
+  const [staged, setStaged] = useState<Record<number, StagedWrite[]>>({});
+  const [writeStates, setWriteStates] = useState<Record<string, WriteState>>({});
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,12 +77,25 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
         body: JSON.stringify({ messages: nextMessages }),
       });
 
-      const data = (await res.json()) as { reply?: string; error?: string };
+      const data = (await res.json()) as {
+        reply?: string;
+        staged?: StagedWrite[];
+        error?: string;
+      };
 
       if (!res.ok || data.error) {
         setError(data.error ?? "Something went wrong.");
       } else if (data.reply) {
         setMessages([...nextMessages, { role: "assistant", content: data.reply }]);
+        if (data.staged?.length) {
+          const at = nextMessages.length;
+          setStaged((prev) => ({ ...prev, [at]: data.staged! }));
+          setWriteStates((prev) => {
+            const next = { ...prev };
+            for (const w of data.staged!) next[w.id] = { status: "pending" };
+            return next;
+          });
+        }
       }
     } catch {
       setError("Network error. Please try again.");
@@ -73,6 +103,39 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
       setLoading(false);
     }
   };
+
+  const confirmWrite = async (write: StagedWrite) => {
+    setWriteStates((prev) => ({ ...prev, [write.id]: { status: "saving" } }));
+    try {
+      const res = await fetch("/api/chat/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staged: write }),
+      });
+      const data = (await res.json()) as { message?: string; error?: string };
+      if (!res.ok || data.error) {
+        setWriteStates((prev) => ({
+          ...prev,
+          [write.id]: { status: "failed", message: data.error ?? "Couldn't save that change." },
+        }));
+        return;
+      }
+      setWriteStates((prev) => ({
+        ...prev,
+        [write.id]: { status: "saved", message: data.message ?? "Saved." },
+      }));
+      // The change landed in the database, so any page behind the panel is stale.
+      router.refresh();
+    } catch {
+      setWriteStates((prev) => ({
+        ...prev,
+        [write.id]: { status: "failed", message: "Network error. Please try again." },
+      }));
+    }
+  };
+
+  const cancelWrite = (write: StagedWrite) =>
+    setWriteStates((prev) => ({ ...prev, [write.id]: { status: "cancelled" } }));
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -106,7 +169,7 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
           <div className="flex items-center gap-1">
             {messages.length > 0 && (
               <button
-                onClick={() => { setMessages([]); setError(null); }}
+                onClick={() => { setMessages([]); setStaged({}); setWriteStates({}); setError(null); }}
                 className="btn-ghost h-8 w-8 p-0!"
                 title="Clear conversation"
               >
@@ -129,8 +192,8 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
           )}
 
           {messages.map((msg, i) => (
+            <div key={i} className="space-y-2">
             <div
-              key={i}
               className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
             >
               {msg.role === "assistant" && (
@@ -147,6 +210,16 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
               >
                 <MessageContent content={msg.content} />
               </div>
+            </div>
+            {staged[i]?.map((w) => (
+              <ConfirmCard
+                key={w.id}
+                write={w}
+                state={writeStates[w.id] ?? { status: "pending" }}
+                onConfirm={() => void confirmWrite(w)}
+                onCancel={() => cancelWrite(w)}
+              />
+            ))}
             </div>
           ))}
 
@@ -233,4 +306,80 @@ function formatLine(line: string): ReactNode[] {
     }
     return part;
   });
+}
+
+// The confirm step for a write the assistant prepared. Nothing has been saved
+// at this point - the card is the only thing standing between the model's
+// suggestion and the database.
+function ConfirmCard({
+  write,
+  state,
+  onConfirm,
+  onCancel,
+}: {
+  write: StagedWrite;
+  state: WriteState;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (state.status === "saved") {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-line bg-surface2 px-3.5 py-2.5 text-sm text-muted">
+        <Check size={14} className="mt-0.5 shrink-0" />
+        <span>{state.message}</span>
+      </div>
+    );
+  }
+
+  if (state.status === "cancelled") {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-line bg-surface2 px-3.5 py-2.5 text-sm text-muted">
+        <Ban size={14} className="mt-0.5 shrink-0" />
+        <span>Discarded. Nothing was saved.</span>
+      </div>
+    );
+  }
+
+  const saving = state.status === "saving";
+
+  return (
+    <div className="rounded-xl border border-line bg-surface px-3.5 py-3">
+      <p className="text-sm font-medium text-text">{write.summary}</p>
+
+      <dl className="mt-2 space-y-1">
+        {write.fields.map((f) => (
+          <div key={f.label} className="flex justify-between gap-3 text-xs">
+            <dt className="text-muted">{f.label}</dt>
+            <dd className="text-right text-text">{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {state.status === "failed" && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-expense">
+          <TriangleAlert size={12} className="mt-0.5 shrink-0" />
+          <span>{state.message}</span>
+        </p>
+      )}
+
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={onConfirm}
+          disabled={saving}
+          className="btn-primary h-7 flex-1 gap-1.5 text-xs disabled:opacity-40"
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+          {saving ? "Saving…" : state.status === "failed" ? "Try again" : "Confirm"}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="btn-ghost h-7 flex-1 gap-1.5 text-xs disabled:opacity-40"
+        >
+          <Ban size={12} />
+          Discard
+        </button>
+      </div>
+    </div>
+  );
 }

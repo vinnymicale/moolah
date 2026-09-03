@@ -177,6 +177,9 @@ export async function reorderRulesAction(ids: string[]): Promise<ActionResult> {
 // the backfill on large histories.
 const LOOKBACK_DAYS = 365;
 
+// How many changed rows the preview lists in full. The rest are counted.
+const SAMPLE_LIMIT = 8;
+
 async function loadRules(userId: string, ruleId?: string): Promise<RuleLike[]> {
   const rows = await prisma.rule.findMany({
     where: { userId, ...(ruleId ? { id: ruleId } : {}) },
@@ -201,6 +204,21 @@ async function loadRulesForRun(userId: string, ruleId?: string): Promise<RuleLik
   return rules;
 }
 
+/** One field a rule would change on a sample row, with both sides shown. */
+export interface PreviewChange {
+  field: string;
+  /** Current value, or null where the row has nothing there yet. */
+  before: string | null;
+  after: string;
+}
+
+export interface PreviewSample {
+  description: string;
+  date: string;
+  amount: number;
+  changes: PreviewChange[];
+}
+
 export interface RulePreview {
   ok: true;
   wouldCategorize: number;
@@ -209,7 +227,23 @@ export interface RulePreview {
   wouldSplit: number;
   wouldTag: number;
   // A few example rows for the user to sanity-check.
-  samples: { description: string; effect: string }[];
+  samples: PreviewSample[];
+  /** Rows that would change beyond the ones listed in `samples`. */
+  moreSamples: number;
+}
+
+/**
+ * "Groceries 60% / Household 40%". Ratios are relative rather than normalized,
+ * so they get divided by their own total before being shown as percentages.
+ */
+function splitLabel(parts: { categoryId: string; ratio: number }[], names: Map<string, string>): string {
+  const total = parts.reduce((sum, p) => sum + p.ratio, 0);
+  return parts
+    .map((p) => {
+      const pct = total > 0 ? Math.round((p.ratio / total) * 100) : 0;
+      return `${names.get(p.categoryId) ?? "Unknown"} ${pct}%`;
+    })
+    .join(" / ");
 }
 
 /**
@@ -218,13 +252,13 @@ export interface RulePreview {
  */
 export async function previewRulesAction(ruleId?: string): Promise<RulePreview | { ok: false; error: string }> {
   if (isDemoMode()) {
-    return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [] };
+    return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [], moreSamples: 0 };
   }
   try {
     const { userId } = await requireUser();
     const rules = await loadRulesForRun(userId, ruleId);
     if (rules.length === 0) {
-      return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [] };
+      return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [], moreSamples: 0 };
     }
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
@@ -232,25 +266,34 @@ export async function previewRulesAction(ruleId?: string): Promise<RulePreview |
       where: { userId, deletedAt: null, date: { gte: since } },
       select: {
         description: true,
+        date: true,
         amount: true,
         accountId: true,
         type: true,
         categoryId: true,
-        tags: { select: { id: true } },
+        isTransfer: true,
+        category: { select: { name: true } },
+        tags: { select: { id: true, name: true } },
       },
       orderBy: { date: "desc" },
     });
 
-    const liveTagIds = new Set(
-      (await prisma.tag.findMany({ where: { userId }, select: { id: true } })).map((t) => t.id),
-    );
+    // Names, not just ids: the preview shows what a change reads as, and a rule
+    // can point at a category or tag that no longer exists.
+    const [liveTags, liveCategories] = await Promise.all([
+      prisma.tag.findMany({ where: { userId }, select: { id: true, name: true } }),
+      prisma.category.findMany({ where: { userId }, select: { id: true, name: true } }),
+    ]);
+    const tagNames = new Map(liveTags.map((t) => [t.id, t.name]));
+    const categoryNames = new Map(liveCategories.map((c) => [c.id, c.name]));
 
     let wouldCategorize = 0;
     let wouldRename = 0;
     let wouldMarkTransfer = 0;
     let wouldSplit = 0;
     let wouldTag = 0;
-    const samples: { description: string; effect: string }[] = [];
+    const samples: PreviewSample[] = [];
+    let changedRows = 0;
 
     for (const t of txns) {
       const facts: TxnFacts = {
@@ -260,44 +303,73 @@ export async function previewRulesAction(ruleId?: string): Promise<RulePreview |
         type: t.type,
       };
       const effect = evaluateRules(facts, rules);
-      const labels: string[] = [];
+      const changes: PreviewChange[] = [];
       // Categorize only counts where we'd actually fill an empty category.
       if (effect.categoryId && t.categoryId == null) {
         wouldCategorize++;
-        labels.push("categorize");
+        changes.push({
+          field: "Category",
+          before: t.category?.name ?? null,
+          after: categoryNames.get(effect.categoryId) ?? "Unknown category",
+        });
       }
       if (effect.description && effect.description !== t.description) {
         wouldRename++;
-        labels.push(`rename → "${effect.description}"`);
+        changes.push({ field: "Description", before: t.description, after: effect.description });
       }
-      if (effect.markTransfer) {
+      if (effect.markTransfer && !t.isTransfer) {
         wouldMarkTransfer++;
-        labels.push("mark transfer");
+        changes.push({ field: "Transfer", before: "No", after: "Yes" });
       }
       if (effect.splits) {
         wouldSplit++;
-        labels.push("split");
+        changes.push({
+          field: "Split",
+          before: t.category?.name ?? null,
+          after: splitLabel(effect.splits, categoryNames),
+        });
       }
       const newTagIds = (effect.addTagIds ?? []).filter(
-        (id) => liveTagIds.has(id) && !t.tags.some((x) => x.id === id),
+        (id) => tagNames.has(id) && !t.tags.some((x) => x.id === id),
       );
       if (newTagIds.length > 0) {
         wouldTag++;
-        labels.push("tag");
+        const added = newTagIds.map((id) => tagNames.get(id)!);
+        changes.push({
+          field: "Tags",
+          before: t.tags.length > 0 ? t.tags.map((x) => x.name).join(", ") : null,
+          after: [...t.tags.map((x) => x.name), ...added].join(", "),
+        });
       }
-      if (labels.length > 0 && samples.length < 8) {
-        samples.push({ description: t.description, effect: labels.join(", ") });
+      if (changes.length > 0) {
+        changedRows++;
+        if (samples.length < SAMPLE_LIMIT) {
+          samples.push({
+            description: t.description,
+            date: t.date.toISOString().slice(0, 10),
+            amount: Number(t.amount),
+            changes,
+          });
+        }
       }
     }
 
-    return { ok: true, wouldCategorize, wouldRename, wouldMarkTransfer, wouldSplit, wouldTag, samples };
+    return {
+      ok: true,
+      wouldCategorize,
+      wouldRename,
+      wouldMarkTransfer,
+      wouldSplit,
+      wouldTag,
+      samples,
+      moreSamples: Math.max(0, changedRows - samples.length),
+    };
   } catch (e) {
     if (e instanceof UserError) return { ok: false, error: e.message };
     console.error("previewRules failed:", e);
     return { ok: false, error: "Could not preview rules. Please try again." };
   }
 }
-
 export interface ApplyResult {
   ok: true;
   categorized: number;
@@ -305,20 +377,47 @@ export interface ApplyResult {
   transfersMarked: number;
   split: number;
   tagged: number;
+  /** Set when the run changed something, so the UI can offer an undo. */
+  runId?: string;
 }
+
+const EMPTY_APPLY: ApplyResult = {
+  ok: true,
+  categorized: 0,
+  renamed: 0,
+  transfersMarked: 0,
+  split: 0,
+  tagged: 0,
+};
+
+// The prior state of one transaction, captured before the run writes over it.
+// Only the fields this run is about to change are recorded, so undo restores
+// exactly what it took and leaves everything else alone.
+type PriorState = {
+  transactionId: string;
+  hadDescription: boolean;
+  prevDescription: string | null;
+  hadCategory: boolean;
+  prevCategoryId: string | null;
+  hadTransfer: boolean;
+  prevIsTransfer: boolean | null;
+  prevTransferPeerId: string | null;
+  createdSplits: boolean;
+  addedTagIds: string[];
+};
 
 /**
  * Run enabled rules over existing transactions - all of them, or just `ruleId`
  * when the user applies a single row. Never overwrites a category the user set
  * by hand (only fills empty categories). Marked transfers are then paired via
- * matchTransfers. Returns per-effect counts.
+ * matchTransfers. Returns per-effect counts plus a run id to undo with.
  */
 export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | { ok: false; error: string }> {
-  if (isDemoMode()) return { ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0, tagged: 0 };
+  if (isDemoMode()) return EMPTY_APPLY;
   try {
     const { userId } = await requireUser();
     const rules = await loadRulesForRun(userId, ruleId);
-    if (rules.length === 0) return { ok: true, categorized: 0, renamed: 0, transfersMarked: 0, split: 0, tagged: 0 };
+    if (rules.length === 0) return EMPTY_APPLY;
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
     const txns = await prisma.transaction.findMany({
@@ -331,6 +430,7 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
         type: true,
         categoryId: true,
         isTransfer: true,
+        transferPeerId: true,
         splits: { select: { id: true } },
         tags: { select: { id: true } },
       },
@@ -345,6 +445,7 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
     let transfersMarked = 0;
     let split = 0;
     let tagged = 0;
+    const priors: PriorState[] = [];
 
     for (const t of txns) {
       const facts: TxnFacts = {
@@ -356,13 +457,30 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
       const effect = evaluateRules(facts, rules);
 
       const data: Prisma.TransactionUncheckedUpdateInput = {};
+      const prior: PriorState = {
+        transactionId: t.id,
+        hadDescription: false,
+        prevDescription: null,
+        hadCategory: false,
+        prevCategoryId: null,
+        hadTransfer: false,
+        prevIsTransfer: null,
+        prevTransferPeerId: null,
+        createdSplits: false,
+        addedTagIds: [],
+      };
 
       if (effect.description && effect.description !== t.description) {
         data.description = effect.description;
+        prior.hadDescription = true;
+        prior.prevDescription = t.description;
         renamed++;
       }
       if (effect.markTransfer && !t.isTransfer) {
         data.isTransfer = true;
+        prior.hadTransfer = true;
+        prior.prevIsTransfer = t.isTransfer;
+        prior.prevTransferPeerId = t.transferPeerId;
         transfersMarked++;
       }
 
@@ -381,14 +499,19 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
               data: parts.map((p) => ({ transactionId: t.id, categoryId: p.categoryId, amount: p.amountCents / 100 })),
             }),
           ]);
+          prior.createdSplits = true;
+          prior.hadCategory = true;
+          prior.prevCategoryId = t.categoryId;
           split++;
           if (newTagIds.length > 0) {
             await prisma.transaction.update({
               where: { id: t.id },
               data: { tags: { connect: newTagIds.map((id) => ({ id })) } },
             });
+            prior.addedTagIds = newTagIds;
             tagged++;
           }
+          priors.push(prior);
           continue;
         }
       }
@@ -396,6 +519,8 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
       // Fill an empty category only — never clobber a hand-set one.
       if (effect.categoryId && t.categoryId == null) {
         data.categoryId = effect.categoryId;
+        prior.hadCategory = true;
+        prior.prevCategoryId = null;
         categorized++;
       }
 
@@ -403,19 +528,94 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
 
       if (Object.keys(data).length > 0) {
         await prisma.transaction.update({ where: { id: t.id }, data });
-        if (newTagIds.length > 0) tagged++;
+        if (newTagIds.length > 0) {
+          prior.addedTagIds = newTagIds;
+          tagged++;
+        }
+        priors.push(prior);
       }
     }
 
-    if (transfersMarked > 0) await matchTransfers(userId);
+    if (transfersMarked > 0) {
+      // Pairing writes transferPeerId on the rows it links. The before-value
+      // is already captured in prevTransferPeerId, so undo restores it.
+      await matchTransfers(userId);
+    }
+
+    let runId: string | undefined;
+    if (priors.length > 0) {
+      const run = await prisma.ruleRun.create({
+        data: {
+          userId,
+          ruleId: ruleId ?? null,
+          changes: { create: priors.map(({ transactionId, ...rest }) => ({ transactionId, ...rest })) },
+        },
+        select: { id: true },
+      });
+      runId = run.id;
+    }
 
     revalidatePath("/categories");
     revalidatePath("/transactions");
     revalidatePath("/");
-    return { ok: true, categorized, renamed, transfersMarked, split, tagged };
+    return { ok: true, categorized, renamed, transfersMarked, split, tagged, runId };
   } catch (e) {
     if (e instanceof UserError) return { ok: false, error: e.message };
     console.error("applyRules failed:", e);
     return { ok: false, error: "Could not apply rules. Please try again." };
   }
+}
+
+/**
+ * Restore every transaction a run changed to the state it had before. Fields
+ * the run never touched are left alone, so an edit made since the run to an
+ * untouched field survives. Undoing is itself recorded (undoneAt) so the same
+ * run can't be replayed backwards twice.
+ */
+export async function undoRuleRunAction(runId: string): Promise<ActionResult> {
+  return run(async () => {
+    if (isDemoMode()) throw new UserError("This is a read-only demo. Changes are disabled.");
+    const { userId } = await requireUser();
+
+    const ruleRun = await prisma.ruleRun.findFirst({
+      where: { id: runId, userId },
+      include: { changes: true },
+    });
+    if (!ruleRun) throw new UserError("That run is no longer available.");
+    if (ruleRun.undoneAt) throw new UserError("That run was already undone.");
+
+    for (const c of ruleRun.changes) {
+      const data: Prisma.TransactionUncheckedUpdateInput = {};
+      if (c.hadDescription && c.prevDescription !== null) data.description = c.prevDescription;
+      if (c.hadCategory) data.categoryId = c.prevCategoryId;
+      if (c.hadTransfer) {
+        data.isTransfer = c.prevIsTransfer ?? false;
+        data.transferPeerId = c.prevTransferPeerId;
+      }
+      if (c.addedTagIds.length > 0) {
+        data.tags = { disconnect: c.addedTagIds.map((id) => ({ id })) };
+      }
+
+      // Ownership is checked up front so every write below can address the row
+      // by id: a tampered runId can't reach another user's transactions.
+      const owned = await prisma.transaction.findFirst({
+        where: { id: c.transactionId, userId },
+        select: { id: true },
+      });
+      if (!owned) continue;
+
+      if (c.createdSplits) {
+        await prisma.transactionSplit.deleteMany({ where: { transactionId: c.transactionId } });
+      }
+      if (Object.keys(data).length > 0) {
+        await prisma.transaction.update({ where: { id: c.transactionId }, data });
+      }
+    }
+
+    await prisma.ruleRun.update({ where: { id: ruleRun.id }, data: { undoneAt: new Date() } });
+
+    revalidatePath("/categories");
+    revalidatePath("/transactions");
+    revalidatePath("/");
+  });
 }

@@ -8,12 +8,14 @@ export function RestoreData() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "importing" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const pick = (f: File | null) => {
     setError(null);
     setConfirming(false);
+    setPassword("");
     setFile(f);
   };
 
@@ -21,11 +23,19 @@ export function RestoreData() {
     if (!file) return;
     setStatus("importing");
     setError(null);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      setError("That file isn't valid JSON.");
+      setStatus("idle");
+      return;
+    }
     try {
       const res = await fetch("/api/backup/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: await file.text(),
+        body: JSON.stringify({ password, payload }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -84,8 +94,26 @@ export function RestoreData() {
             including its login and Plaid keys. The current account and its data will be wiped. This
             can&apos;t be undone.
           </p>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Confirm with your password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && password) run();
+              }}
+              disabled={status === "importing"}
+              className="input w-full max-w-xs"
+            />
+          </label>
           <div className="flex items-center gap-2">
-            <button onClick={run} disabled={status === "importing"} className="btn-primary">
+            <button
+              onClick={run}
+              disabled={status === "importing" || !password}
+              className="btn-primary"
+            >
               {status === "importing" ? "Restoring…" : "Yes, replace everything"}
             </button>
             <button
