@@ -71,5 +71,6 @@ docs/superpowers/
 docs/screenshots/
 
 # feature design docs stay local
-docs/*-design.md
+**/*-design.md
 docs/design/
+docs/specs/
