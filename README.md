@@ -40,6 +40,11 @@ Planned improvements, roughly in priority order:
 
 ### Recently shipped
 
+- **Versioned recurring rules** - editing a recurring bill's amount keeps the old amount attached
+  to past occurrences instead of rewriting history.
+- **Background Plaid sync** - a cron sweep (default every 30 minutes) refreshes bank data on
+  self-hosted deployments even with no browser open, so notifications still fire.
+- **First-run setup checklist** on the dashboard for brand-new accounts.
 - **Retirement planning** - a dedicated page for 401(k), IRA, and brokerage accounts: a projection
   to your retirement age with a Coast FIRE comparison, a savings target, required-monthly-savings
   gap, IRS contribution limits, and growth split into contributions vs. market return.
@@ -79,7 +84,10 @@ Have a request? Open an issue on GitHub.
   warnings. Days with many events expand into a full day view.
 - **Recurring transactions** - paychecks, rent, subscriptions; projected onto future days and
   "marked paid" when they actually happen. Plaid sync smart-matches real charges to recurring
-  rules so projections don't double-count.
+  rules so projections don't double-count. Editing the amount (a raise, a rent increase, a
+  subscription price change) keeps the old amount in effect for past and already-generated
+  occurrences and only applies the new one going forward, so history and projections both stay
+  accurate.
 - **Plaid bank integration** - securely link checking, savings, and credit-card accounts; balances
   and posted transactions sync automatically and are auto-categorised using the bank's own
   category data (with a one-click "fix categories" re-run). If a bank connection breaks, a
@@ -93,6 +101,9 @@ Have a request? Open an issue on GitHub.
 - **Transfer matching** - credit-card payments are detected automatically (the checking debit and
   the card credit are linked as a pair) and excluded from income/spending totals, so paying your
   card never counts as "spending" twice. Pairs can also be linked/unlinked by hand.
+- **Bulk actions** - select a page of transactions (or "select all matching filters") to
+  recategorize, reassign to an account, add/remove a tag, mark cleared/pending, pair a transfer, or
+  delete them all in one go.
 - **Split transactions** - attribute one charge to multiple categories (a Costco run that's part
   groceries, part household). Budgets, trends, and spending alerts count each split part under its
   own category, while the charge still totals once.
@@ -149,7 +160,9 @@ Have a request? Open an issue on GitHub.
   and a category month-over-month comparison table.
 - **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
   spending alerts (categories trending over their 3-month average), top payees, and net-worth
-  milestone celebrations. Cards are drag-to-reorder.
+  milestone celebrations. Cards are drag-to-reorder. New accounts see a **setup checklist**
+  instead (add an account, log a transaction, set a budget, add a recurring bill) that tracks
+  itself off as you go and disappears for good once you dismiss it or finish every step.
 - **Notification center** - rule-based notifications (connection health, budgets, bills,
   transactions, scheduled digest) with an in-app inbox and optional Discord webhook delivery
   with custom message templates. Notifications live at **Notifications** in the sidebar (not
@@ -162,7 +175,9 @@ Have a request? Open an issue on GitHub.
 - **AI assistant (optional)** - bring your own Anthropic, OpenAI, or Gemini API key (Settings) and
   chat with your finances: "how much did I spend on dining out last month?", "add a $15.99/month
   Netflix expense", "set a $500 grocery budget". The key is encrypted at rest and never sent to
-  the browser.
+  the browser. Anything that would write data (adding a transaction, a recurring bill, or a
+  budget) is staged and shown as a plain-English confirmation card first - nothing is saved until
+  you approve it.
 
 ### Finding & exporting
 - **Command bar (⌘K)** - a command palette that searches your entire transaction history (by name,
@@ -184,10 +199,12 @@ Have a request? Open an issue on GitHub.
 
 ### Polished
 - **Extras** - dark mode, a mobile bottom-tab layout, **installable as a PWA** (web manifest and
-  icons), keyboard shortcuts, an email allow-list, and dates that follow **your timezone** (not the
+  icons), an email allow-list, and dates that follow **your timezone** (not the
   server's). The interface uses a grouped sidebar (Track / Plan / Insights) you can drag to reorder,
   a display typeface for headings, tabular-mono digits for currency, and light entrance motion that
-  respects "reduce motion". Recurrence / projection / debt-payoff / matching math is unit-tested,
+  respects "reduce motion". **Keyboard shortcuts** - `⌘K` search, `n` new transaction, `c` open
+  chat, `i` import CSV, `/` focus the page's search box, and `?` for a cheat sheet - are ignored
+  while typing in a field. Recurrence / projection / debt-payoff / matching math is unit-tested,
   with a Playwright e2e suite and CI on every push and PR.
 
 ---
