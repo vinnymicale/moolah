@@ -13,33 +13,7 @@ Built with **Next.js 16 (App Router) · TypeScript · Prisma 7 · PostgreSQL · 
 **[Try the live demo →](https://moolah-five.vercel.app)** - no sign-up; it serves a seeded sample
 dataset, and anything you change stays in your browser only.
 
-## Screenshots
-
-All screenshots below are captured from the seeded demo dataset - no real account data.
-
-| Dashboard | Calendar |
-| --- | --- |
-| [![Dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png) | [![Calendar](docs/screenshots/calendar.png)](docs/screenshots/calendar.png) |
-
-| Transactions | Recurring |
-| --- | --- |
-| [![Transactions](docs/screenshots/transactions.png)](docs/screenshots/transactions.png) | [![Recurring](docs/screenshots/recurring.png)](docs/screenshots/recurring.png) |
-
-| Budgets | Goals |
-| --- | --- |
-| [![Budgets](docs/screenshots/budgets.png)](docs/screenshots/budgets.png) | [![Goals](docs/screenshots/goals.png)](docs/screenshots/goals.png) |
-
-| Debt payoff | Accounts |
-| --- | --- |
-| [![Debt payoff](docs/screenshots/debt.png)](docs/screenshots/debt.png) | [![Accounts](docs/screenshots/accounts.png)](docs/screenshots/accounts.png) |
-
-| Net worth | Trends |
-| --- | --- |
-| [![Net worth](docs/screenshots/networth.png)](docs/screenshots/networth.png) | [![Trends](docs/screenshots/trends.png)](docs/screenshots/trends.png) |
-
-| Categories & rules | Dashboard (dark) |
-| --- | --- |
-| [![Categories and rules](docs/screenshots/categories.png)](docs/screenshots/categories.png) | [![Dashboard in dark mode](docs/screenshots/dashboard-dark.png)](docs/screenshots/dashboard-dark.png) |
+[![The Moolah dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
 
 > **AI disclaimer:** Moolah was built with help from AI (Anthropic's Claude). Treat it
 > accordingly - review the code yourself before trusting it with sensitive financial data, and note
@@ -103,12 +77,18 @@ Have a request? Open an issue on GitHub.
 - **Monthly calendar** - each day shows its income/expense events and a projected end-of-day
   cash balance that accounts for upcoming/expected and recurring transactions, with low-balance
   warnings. Days with many events expand into a full day view.
+
+[![Monthly calendar with projected balances](docs/screenshots/calendar.png)](docs/screenshots/calendar.png)
+
 - **Recurring transactions** - paychecks, rent, subscriptions; projected onto future days and
   "marked paid" when they actually happen. Plaid sync smart-matches real charges to recurring
   rules so projections don't double-count. Editing the amount (a raise, a rent increase, a
   subscription price change) keeps the old amount in effect for past and already-generated
   occurrences and only applies the new one going forward, so history and projections both stay
   accurate.
+
+[![Recurring transaction rules](docs/screenshots/recurring.png)](docs/screenshots/recurring.png)
+
 - **Plaid bank integration** - securely link checking, savings, and credit-card accounts; balances
   and posted transactions sync automatically and are auto-categorised using the bank's own
   category data (with a one-click "fix categories" re-run). If a bank connection breaks, a
@@ -125,6 +105,9 @@ Have a request? Open an issue on GitHub.
 - **Bulk actions** - select a page of transactions (or "select all matching filters") to
   recategorize, reassign to an account, add/remove a tag, mark cleared/pending, pair a transfer, or
   delete them all in one go.
+
+[![Transactions list with filters](docs/screenshots/transactions.png)](docs/screenshots/transactions.png)
+
 - **Split transactions** - attribute one charge to multiple categories (a Costco run that's part
   groceries, part household). Budgets, trends, and spending alerts count each split part under its
   own category, while the charge still totals once.
@@ -144,11 +127,20 @@ Have a request? Open an issue on GitHub.
   tweaks are remembered per month. **Rollover** carries a category's leftover forward into the next
   month, **copy previous month** clones last month's limits, and **clear month** wipes them all in
   two clicks.
+
+[![Monthly budgets by category](docs/screenshots/budgets.png)](docs/screenshots/budgets.png)
+
 - **Savings goals** - track progress toward targets (emergency fund, vacation, down payment) with
   contributions and target dates.
+
+[![Savings goals and progress](docs/screenshots/goals.png)](docs/screenshots/goals.png)
+
 - **Debt payoff planner** - model **avalanche** (highest APR first) or **snowball** (smallest
   balance first) strategies, add an extra monthly payment, and see your debt-free date, total
   interest, interest saved vs. minimums, a balance-over-time chart, and per-debt payoff order.
+
+[![Debt payoff planner](docs/screenshots/debt.png)](docs/screenshots/debt.png)
+
 - **Retirement** - retirement and investment accounts get their own page, on top of showing up in
   Accounts as usual. Set your birth year, target age, expected return, inflation, income
   replacement, and safe withdrawal rate once, and the page projects your balance to retirement
@@ -170,6 +162,9 @@ Have a request? Open an issue on GitHub.
 ### Accounts & insight
 - **Accounts & net worth** - assets vs. liabilities with a live net-worth total. Any account can
   be **excluded from net worth** while still being tracked (e.g. student loans).
+
+[![Accounts and balances](docs/screenshots/accounts.png)](docs/screenshots/accounts.png)
+
 - **Net Worth page** - a dedicated history chart of assets, liabilities, and net worth over time
   (3M / 1Y / All), with a year-to-date change callout. Balances are snapshotted automatically on
   every account sync and carried forward across gap days, so the line reflects real changes
@@ -177,8 +172,14 @@ Have a request? Open an issue on GitHub.
   net worth forward from your recurring income and expenses, and a banner warns when the
   trajectory dips negative or drops sharply. Manual **Update balance** snapshots still feed the
   same history (great for retirement, vehicle, or property values).
+
+[![Net worth history and forecast](docs/screenshots/networth.png)](docs/screenshots/networth.png)
+
 - **Trends** - net worth over time, income vs. expenses, spending by category, budget vs. actual,
   and a category month-over-month comparison table.
+
+[![Spending and income trends](docs/screenshots/trends.png)](docs/screenshots/trends.png)
+
 - **Dashboard** - net worth, monthly income/spend, savings rate, upcoming bills, recent activity,
   spending alerts (categories trending over their 3-month average), top payees, and net-worth
   milestone celebrations. Cards are drag-to-reorder. New accounts see a **setup checklist**
@@ -199,6 +200,8 @@ Have a request? Open an issue on GitHub.
   the browser. Anything that would write data (adding a transaction, a recurring bill, or a
   budget) is staged and shown as a plain-English confirmation card first - nothing is saved until
   you approve it.
+
+[![Categories and automation rules](docs/screenshots/categories.png)](docs/screenshots/categories.png)
 
 ### Finding & exporting
 - **Command bar (⌘K)** - a command palette that searches your entire transaction history (by name,
@@ -227,6 +230,8 @@ Have a request? Open an issue on GitHub.
   chat, `i` import CSV, `/` focus the page's search box, and `?` for a cheat sheet - are ignored
   while typing in a field. Recurrence / projection / debt-payoff / matching math is unit-tested,
   with a Playwright e2e suite and CI on every push and PR.
+
+[![The dashboard in dark mode](docs/screenshots/dashboard-dark.png)](docs/screenshots/dashboard-dark.png)
 
 ---
 
