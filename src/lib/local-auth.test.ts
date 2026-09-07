@@ -38,6 +38,7 @@ function userRow(passwordHash: string | null) {
     emailVerified: null,
     createdAt: new Date(),
     aiProvider: null,
+    aiModel: null,
     aiApiKey: null,
     plaidClientId: null,
     plaidSecret: null,

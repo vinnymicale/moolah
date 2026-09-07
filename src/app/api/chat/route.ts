@@ -18,6 +18,7 @@ import {
 } from "@/lib/queries";
 import { isoDay } from "@/lib/dates";
 import { isWriteTool, stageWrite, type StagedWrite } from "@/lib/chat-writes";
+import { isAiProvider, resolveModel } from "@/lib/ai-models";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -360,6 +361,7 @@ const TOOL_LOOP_EXHAUSTED =
 
 async function callAnthropic(
   apiKey: string,
+  model: string,
   systemPrompt: string,
   messages: ChatMessage[],
   userId: string,
@@ -395,7 +397,7 @@ async function callAnthropic(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-8",
+        model,
         max_tokens: 4096,
         system: systemPrompt,
         tools: anthropicTools,
@@ -452,6 +454,7 @@ async function callAnthropic(
 
 async function callOpenAI(
   apiKey: string,
+  model: string,
   systemPrompt: string,
   messages: ChatMessage[],
   userId: string,
@@ -481,7 +484,7 @@ async function callOpenAI(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model,
         messages: convMessages,
         tools: openaiTools,
         tool_choice: "auto",
@@ -550,6 +553,7 @@ async function callOpenAI(
 
 async function callGemini(
   apiKey: string,
+  model: string,
   systemPrompt: string,
   messages: ChatMessage[],
   userId: string,
@@ -579,7 +583,7 @@ async function callGemini(
 
   for (let i = 0; i < MAX_TOOL_ROUNDS; i++) {
     const res = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: "POST",
         // Key travels in a header, not the query string, so it can't land in
@@ -654,7 +658,7 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, aiProvider: true, aiApiKey: true },
+    select: { id: true, name: true, aiProvider: true, aiApiKey: true, aiModel: true },
   });
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -665,6 +669,11 @@ export async function POST(request: Request) {
       { error: "AI assistant not configured. Add your API key in Settings." },
       { status: 422 },
     );
+  }
+
+  const provider = user.aiProvider;
+  if (!isAiProvider(provider)) {
+    return NextResponse.json({ error: "Unknown AI provider" }, { status: 422 });
   }
 
   const bodySchema = z.object({
@@ -697,19 +706,18 @@ Guidelines:
     const userId = user.id;
     const apiKey = decryptSecret(user.aiApiKey);
     const staged: StagedWrite[] = [];
+    const model = resolveModel(provider, user.aiModel);
 
-    switch (user.aiProvider) {
+    switch (provider) {
       case "anthropic":
-        reply = await callAnthropic(apiKey, systemPrompt, body.messages, userId, staged);
+        reply = await callAnthropic(apiKey, model, systemPrompt, body.messages, userId, staged);
         break;
       case "openai":
-        reply = await callOpenAI(apiKey, systemPrompt, body.messages, userId, staged);
+        reply = await callOpenAI(apiKey, model, systemPrompt, body.messages, userId, staged);
         break;
       case "gemini":
-        reply = await callGemini(apiKey, systemPrompt, body.messages, userId, staged);
+        reply = await callGemini(apiKey, model, systemPrompt, body.messages, userId, staged);
         break;
-      default:
-        return NextResponse.json({ error: "Unknown AI provider" }, { status: 422 });
     }
 
     return NextResponse.json({ reply, staged });

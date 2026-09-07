@@ -26,6 +26,7 @@ model User {
   // AI assistant configuration — user-supplied key, never sent to the browser.
   aiProvider String? // "anthropic" | "openai" | "gemini"
   aiApiKey   String?
+  aiModel    String? // Overrides the provider's default model when set.
 
   // Plaid credentials — per-user so each account links banks against their own
   // Plaid developer account. Secret is encrypted at rest; falls back to the
