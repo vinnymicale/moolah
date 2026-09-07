@@ -99,7 +99,7 @@ describe("updateAiConfigAction", () => {
     expect(result).toEqual({ ok: true });
     expect(user.update).toHaveBeenCalledWith({
       where: { id: "u1" },
-      data: { aiProvider: "anthropic", aiApiKey: "enc(sk-123)" },
+      data: { aiProvider: "anthropic", aiApiKey: "enc(sk-123)", aiModel: null },
     });
     expect(revalidatePath).toHaveBeenCalledWith("/settings");
   });
@@ -108,7 +108,23 @@ describe("updateAiConfigAction", () => {
     await updateAiConfigAction("openai", "   ");
     expect(user.update).toHaveBeenCalledWith({
       where: { id: "u1" },
-      data: { aiProvider: "openai" },
+      data: { aiProvider: "openai", aiModel: null },
+    });
+  });
+
+  it("stores a model override when one is given", async () => {
+    await updateAiConfigAction("gemini", "", " gemini-2.5-pro ");
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { aiProvider: "gemini", aiModel: "gemini-2.5-pro" },
+    });
+  });
+
+  it("clears the model override when the field is blank", async () => {
+    await updateAiConfigAction("gemini", "", "   ");
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { aiProvider: "gemini", aiModel: null },
     });
   });
 
@@ -159,7 +175,7 @@ describe("clear actions", () => {
     expect(result).toEqual({ ok: true });
     expect(user.update).toHaveBeenCalledWith({
       where: { id: "u1" },
-      data: { aiProvider: null, aiApiKey: null },
+      data: { aiProvider: null, aiApiKey: null, aiModel: null },
     });
   });
 });

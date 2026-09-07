@@ -38,6 +38,7 @@ export default async function SettingsPage() {
       select: {
         id: true,
         aiProvider: true,
+        aiModel: true,
         // Avoid leaking the actual keys to the browser; just signal whether they're set.
         aiApiKey: true,
         plaidClientId: true,
@@ -138,6 +139,7 @@ export default async function SettingsPage() {
         </p>
         <AiConfigForm
           currentProvider={user.aiProvider}
+          currentModel={user.aiModel}
           hasKey={!!user.aiApiKey}
         />
       </section>

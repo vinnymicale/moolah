@@ -6,19 +6,22 @@ import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/demo-guard";
 import { encryptSecret } from "@/lib/crypto";
 import { generateApiToken, parseApiToken, hashApiTokenVerifier } from "@/lib/api-auth";
+import { isAiProvider } from "@/lib/ai-models";
 
-export async function updateAiConfigAction(provider: string, apiKey: string) {
+export async function updateAiConfigAction(provider: string, apiKey: string, model?: string) {
   if (isDemoMode()) return { ok: true as const };
   const session = await auth();
   if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
-  const validProviders = ["anthropic", "openai", "gemini"];
-  if (!validProviders.includes(provider)) return { ok: false as const, error: "Invalid provider." };
+  if (!isAiProvider(provider)) return { ok: false as const, error: "Invalid provider." };
   await prisma.user.update({
     where: { id: session.user.id },
     data: {
       aiProvider: provider,
       // Only update the key if a non-empty value was supplied (allow updating provider without clearing key).
       ...(apiKey.trim() ? { aiApiKey: encryptSecret(apiKey.trim()) } : {}),
+      // Empty means "use the provider default", so it is stored as null rather
+      // than pinning whatever the box happened to show.
+      aiModel: model?.trim() || null,
     },
   });
   revalidatePath("/settings");
@@ -61,7 +64,7 @@ export async function clearAiConfigAction() {
   if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { aiProvider: null, aiApiKey: null },
+    data: { aiProvider: null, aiApiKey: null, aiModel: null },
   });
   revalidatePath("/settings");
   return { ok: true as const };
