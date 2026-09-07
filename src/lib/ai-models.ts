@@ -7,6 +7,12 @@
  * and the env override lets a self-hosted instance move off a dead model
  * without waiting on a release.
  *
+ * Retirement is not always all-at-once: Google closed the gemini-2.5 family to
+ * new API keys months before its published shutdown date, so the same model ID
+ * kept working for existing projects while 404ing for anyone who had just
+ * signed up. The docs still list those models as stable, so a default that
+ * looks fine is worth re-checking against a fresh key.
+ *
  * Precedence: user setting > env override > default below.
  */
 
@@ -21,7 +27,7 @@ export function isAiProvider(value: string): value is AiProvider {
 const DEFAULT_MODELS: Record<AiProvider, string> = {
   anthropic: "claude-haiku-4-5-20251001",
   openai: "gpt-4o-mini",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3.8-flash",
 };
 
 const ENV_OVERRIDES: Record<AiProvider, string> = {
@@ -45,9 +51,9 @@ export const MODEL_SUGGESTIONS: Record<AiProvider, { value: string; label: strin
     { value: "gpt-4o", label: "GPT-4o — balanced" },
   ],
   gemini: [
-    { value: "gemini-2.5-flash", label: "2.5 Flash — free tier" },
-    { value: "gemini-2.5-flash-lite", label: "2.5 Flash-Lite — free tier, fastest" },
-    { value: "gemini-2.5-pro", label: "2.5 Pro — most capable" },
+    { value: "gemini-3.8-flash", label: "3.8 Flash — current generation" },
+    { value: "gemini-3.5-flash-lite", label: "3.5 Flash-Lite — fastest" },
+    { value: "gemini-3.6-flash", label: "3.6 Flash — previous generation" },
   ],
 };
 
