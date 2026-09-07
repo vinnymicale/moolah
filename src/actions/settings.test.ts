@@ -113,10 +113,10 @@ describe("updateAiConfigAction", () => {
   });
 
   it("stores a model override when one is given", async () => {
-    await updateAiConfigAction("gemini", "", " gemini-2.5-pro ");
+    await updateAiConfigAction("gemini", "", " gemini-3.5-flash-lite ");
     expect(user.update).toHaveBeenCalledWith({
       where: { id: "u1" },
-      data: { aiProvider: "gemini", aiModel: "gemini-2.5-pro" },
+      data: { aiProvider: "gemini", aiModel: "gemini-3.5-flash-lite" },
     });
   });
 
