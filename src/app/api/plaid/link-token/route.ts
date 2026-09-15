@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Optional: reconnect an existing item in Plaid update mode.
-  const body = await req.json().catch(() => ({})) as { itemId?: string };
+  const body = await req.json().catch(() => ({})) as { itemId?: string; accountSelection?: boolean };
 
   try {
     const plaidClient = await getPlaidClient(session.user.id);
@@ -28,6 +28,11 @@ export async function POST(req: NextRequest) {
         country_codes: PLAID_COUNTRY_CODES,
         language: "en",
         access_token: decryptSecret(item.accessToken),
+        // Account Select re-opens the institution's account picker with the
+        // current selections checked, which is the only way to authorize an
+        // account that was left out when the bank was first linked. Most OAuth
+        // institutions force it on regardless; the flag covers the rest.
+        ...(body.accountSelection ? { update: { account_selection_enabled: true } } : {}),
       };
     } else {
       // Fresh link - connect a new bank.

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2, DownloadCloud, Copy } from "lucide-react";
+import { Link2, Loader2, AlertTriangle, RefreshCw, Trash2, Building2, DownloadCloud, Copy, ListPlus } from "lucide-react";
 import { formatUSD } from "@/lib/money";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/components/Toast";
@@ -169,6 +169,88 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
   );
 }
 
+// ── Add/remove accounts (update mode with Account Select) ─────────────
+
+// Plain update mode only re-checks credentials - it never re-opens the account
+// picker, so an account left out at first link stays invisible no matter how
+// many times you reconnect. Account Select is the flow that can authorize it.
+function ManageAccountsButton({
+  itemId,
+  disabled,
+  onDone,
+}: {
+  itemId: string;
+  disabled: boolean;
+  onDone: (msg: string) => void;
+}) {
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  const fetchLinkToken = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/plaid/link-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, accountSelection: true }),
+      });
+      const json = await res.json() as { link_token?: string; error?: string };
+      if (!res.ok || !json.link_token) throw new Error(json.error ?? "Failed to create link token");
+      setLinkToken(json.link_token);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to initialise Plaid");
+    } finally {
+      setLoading(false);
+    }
+  }, [itemId]);
+
+  // Account Select leaves the existing access token valid, so there is nothing
+  // to exchange - we just re-read the Item's account list and pick up whatever
+  // was newly authorized.
+  const onSuccess: PlaidLinkOnSuccess = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/plaid/refresh-accounts/${itemId}`, { method: "POST" });
+      const json = await res.json() as { ok?: boolean; error?: string; added?: number };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed to refresh accounts");
+      const added = json.added ?? 0;
+      onDone(
+        added > 0
+          ? `Added ${added} new account${added === 1 ? "" : "s"}.`
+          : "No new accounts were authorized at your bank.",
+      );
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to refresh accounts");
+    } finally {
+      setLoading(false);
+      setLinkToken(null);
+    }
+  }, [router, itemId, onDone]);
+
+  const onExit = useCallback(() => setLinkToken(null), []);
+
+  return (
+    <div>
+      {linkToken && <ActivePlaidLink token={linkToken} onSuccess={onSuccess} onExit={onExit} />}
+      <button
+        onClick={fetchLinkToken}
+        disabled={disabled || loading}
+        className="btn-ghost h-8 text-xs"
+        title="Choose which accounts at this bank are shared with Moolah"
+      >
+        {loading ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />}
+        Add accounts
+      </button>
+      {error && <p role="alert" className="mt-1 text-xs text-expense">{error}</p>}
+    </div>
+  );
+}
+
 // ── Connected banks list ─────────────────────────────────────────────────────
 
 export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
@@ -288,6 +370,11 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <ManageAccountsButton
+                  itemId={item.id}
+                  disabled={syncing === item.id || disconnecting === item.id}
+                  onDone={(message) => toast({ message })}
+                />
                 <ReconnectButton itemId={item.id} disabled={syncing === item.id || disconnecting === item.id} />
                 <button
                   onClick={() => void sync(item.id)}
