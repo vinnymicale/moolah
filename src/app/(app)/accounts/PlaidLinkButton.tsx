@@ -210,18 +210,33 @@ function ManageAccountsButton({
   // Account Select leaves the existing access token valid, so there is nothing
   // to exchange - we just re-read the Item's account list and pick up whatever
   // was newly authorized.
-  const onSuccess: PlaidLinkOnSuccess = useCallback(async () => {
+  //
+  // Link hands us the accounts the user ticked. /accounts/get can lag a moment
+  // behind that selection, so we send the ids along and let the server wait for
+  // them rather than trusting whatever the first read happens to return.
+  const onSuccess: PlaidLinkOnSuccess = useCallback(async (_publicToken, metadata) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/plaid/refresh-accounts/${itemId}`, { method: "POST" });
-      const json = await res.json() as { ok?: boolean; error?: string; added?: number };
+      const res = await fetch(`/api/plaid/refresh-accounts/${itemId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedAccountIds: metadata.accounts.map((a) => a.id) }),
+      });
+      const json = await res.json() as {
+        ok?: boolean; error?: string; added?: number; missing?: number;
+      };
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed to refresh accounts");
       const added = json.added ?? 0;
+      const missing = json.missing ?? 0;
       onDone(
         added > 0
           ? `Added ${added} new account${added === 1 ? "" : "s"}.`
-          : "No new accounts were authorized at your bank.",
+          : missing > 0
+            // Plaid said these were selected but never served them to us. Say so
+            // plainly instead of blaming the bank for authorizing nothing.
+            ? `Your bank is still preparing ${missing} account${missing === 1 ? "" : "s"}. Hit Sync in a minute to finish adding ${missing === 1 ? "it" : "them"}.`
+            : "No new accounts were authorized at your bank.",
       );
       router.refresh();
     } catch (e) {
