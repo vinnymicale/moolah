@@ -11,13 +11,28 @@ export function AccountsManager({ accounts, snapshots }: { accounts: AccountDTO[
   const [editing, setEditing] = useState<AccountDTO | null>(null);
   const [adding, setAdding] = useState(false);
   const [snapshotFor, setSnapshotFor] = useState<AccountDTO | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
-  const assets = accounts.filter((a) => a.isAsset);
-  const liabilities = accounts.filter((a) => !a.isAsset);
+  // Archiving used to be a one-way door: the list hid archived accounts and the
+  // only unarchive control lives inside the form you open from that list.
+  const archivedCount = accounts.filter((a) => a.archived).length;
+  const visible = showArchived ? accounts : accounts.filter((a) => !a.archived);
+  const assets = visible.filter((a) => a.isAsset);
+  const liabilities = visible.filter((a) => !a.isAsset);
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex items-center justify-end gap-3">
+        {archivedCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            <span>Show archived ({archivedCount})</span>
+          </label>
+        )}
         <button onClick={() => setAdding(true)} className="btn-primary">
           <Plus size={16} /> Add account
         </button>

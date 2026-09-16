@@ -186,6 +186,19 @@ describe("getNetWorth", () => {
     expect(nw.accounts).toHaveLength(2);
   });
 
+  // The accounts page asks for archived accounts so it can offer to unarchive
+  // them, but they are closed accounts - they must not move the totals.
+  it("lists archived accounts without counting them toward the totals", async () => {
+    db.financialAccount.findMany.mockResolvedValue([
+      account({ id: "a1", currentBalance: 1000, isAsset: true }),
+      account({ id: "a2", currentBalance: 500, isAsset: true, archived: true }),
+    ] as never);
+    const nw = await getNetWorth("u1", true);
+    expect(nw.assets).toBe(1000);
+    expect(nw.net).toBe(1000);
+    expect(nw.accounts).toHaveLength(2);
+  });
+
   it("goes negative when the debts outweigh the assets", async () => {
     db.financialAccount.findMany.mockResolvedValue([
       account({ id: "a1", currentBalance: 100, isAsset: true }),

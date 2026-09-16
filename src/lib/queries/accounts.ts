@@ -67,12 +67,12 @@ export interface NetWorth {
   accounts: AccountDTO[];
 }
 
-export async function getNetWorth(userId: string): Promise<NetWorth> {
-  const accounts = await getAccounts(userId);
+export async function getNetWorth(userId: string, includeArchived = false): Promise<NetWorth> {
+  const accounts = await getAccounts(userId, includeArchived);
   let assets = 0;
   let liabilities = 0;
   for (const a of accounts) {
-    if (!a.includeInNetWorth) continue;
+    if (a.archived || !a.includeInNetWorth) continue;
     if (a.isAsset) assets += a.currentBalance;
     else liabilities += a.currentBalance;
   }

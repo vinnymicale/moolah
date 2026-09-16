@@ -67,7 +67,7 @@ export async function syncPlaidAccounts(args: {
     // Check whether this Plaid account was previously linked.
     const existing = await prisma.plaidLinkedAccount.findUnique({
       where: { plaidAccountId: acct.account_id },
-      select: { financialAccountId: true },
+      select: { financialAccountId: true, financialAccount: { select: { archived: true } } },
     });
 
     let financialAccountId: string;
@@ -75,11 +75,17 @@ export async function syncPlaidAccounts(args: {
     if (existing?.financialAccountId) {
       // Reuse the existing FinancialAccount so historical data is preserved.
       financialAccountId = existing.financialAccountId;
+      // An archived account is hidden from the accounts page, so re-authorizing
+      // it at the bank has to bring it back - otherwise the user re-adds it in
+      // Plaid, we quietly update a row they cannot see, and nothing appears.
+      const wasArchived = existing.financialAccount?.archived ?? false;
       await prisma.financialAccount.update({
         where: { id: financialAccountId },
-        data: { currentBalance: balance, institution: institutionName },
+        data: { currentBalance: balance, institution: institutionName, archived: false },
       });
-      updated++;
+      // Coming back from archived is an add from the user's point of view.
+      if (wasArchived) added++;
+      else updated++;
     } else {
       const finAcct = await prisma.financialAccount.create({
         data: {

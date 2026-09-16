@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { syncPlaidItem } from "@/lib/plaid-sync";
+import { syncPlaidAccounts } from "@/lib/plaid-accounts";
+import { getPlaidClient } from "@/lib/plaid";
+import { decryptSecret } from "@/lib/crypto";
 
 export async function POST(
   _req: NextRequest,
@@ -17,8 +20,19 @@ export async function POST(
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   try {
+    // Reconcile the account list first. syncPlaidItem only ever updates accounts
+    // it already knows about, so on its own a reconnect can never surface an
+    // account the user just authorized at the bank.
+    const accounts = await syncPlaidAccounts({
+      plaidClient: await getPlaidClient(session.user.id),
+      accessToken: decryptSecret(item.accessToken),
+      plaidItemRowId: item.id,
+      userId: session.user.id,
+      institutionName: item.institutionName,
+    });
+
     const result = await syncPlaidItem(itemId, session.user.id);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, ...result, accounts });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Sync failed";
     console.error("Plaid sync error:", e);

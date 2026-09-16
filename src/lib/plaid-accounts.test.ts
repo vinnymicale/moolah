@@ -106,7 +106,29 @@ describe("syncPlaidAccounts", () => {
     expect(prisma.financialAccount.create).not.toHaveBeenCalled();
     expect(prisma.financialAccount.update).toHaveBeenCalledWith({
       where: { id: "fin_existing" },
-      data: { currentBalance: 100, institution: "Some Bank" },
+      data: { currentBalance: 100, institution: "Some Bank", archived: false },
+    });
+  });
+
+  // Archiving hid the account from the accounts page, so re-authorizing it at
+  // the bank has to unarchive it - otherwise we silently update a row the user
+  // cannot see and tell them nothing was added.
+  it("unarchives an account the user re-authorizes and counts it as added", async () => {
+    vi.mocked(prisma.plaidLinkedAccount.findUnique).mockResolvedValue(
+      { financialAccountId: "fin_archived", financialAccount: { archived: true } } as never,
+    );
+
+    const result = await syncPlaidAccounts({
+      ...ARGS,
+      plaidClient: clientReturning([plaidAccount()]),
+      accessToken: "tok",
+    });
+
+    expect(result).toEqual({ added: 1, updated: 0 });
+    expect(prisma.financialAccount.create).not.toHaveBeenCalled();
+    expect(prisma.financialAccount.update).toHaveBeenCalledWith({
+      where: { id: "fin_archived" },
+      data: { currentBalance: 100, institution: "Some Bank", archived: false },
     });
   });
 

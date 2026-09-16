@@ -46,6 +46,11 @@ export function AccountGroup({
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {a.name}
+                      {a.archived && (
+                        <span className="ml-2 align-middle text-[11px] font-semibold text-muted">
+                          archived
+                        </span>
+                      )}
                       {a.isOverdue && (
                         <span className="ml-2 inline-flex items-center gap-0.5 align-middle text-[11px] font-semibold text-expense">
                           <AlertTriangle size={11} /> overdue

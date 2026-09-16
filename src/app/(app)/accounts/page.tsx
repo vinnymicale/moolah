@@ -29,7 +29,7 @@ export default async function AccountsPage() {
 
   const { userId } = await requireUser();
   const [netWorth, snapshots, plaidItems, hasPlaid] = await Promise.all([
-    getNetWorth(userId),
+    getNetWorth(userId, true),
     getSnapshots(userId),
     getPlaidItems(userId),
     hasPlaidConfig(userId),
