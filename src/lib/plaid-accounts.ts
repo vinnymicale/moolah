@@ -55,6 +55,15 @@ export async function syncPlaidAccounts(args: {
 
   const accountsRes = await plaidClient.accountsGet({ access_token: accessToken });
 
+  // An account authorized at the bank that never reaches us is indistinguishable
+  // from one we fetched and dropped, so log what the Item actually returned.
+  console.log(
+    `[plaid-accounts] ${institutionName ?? "bank"} item=${plaidItemRowId} returned ${accountsRes.data.accounts.length} account(s):`,
+    accountsRes.data.accounts
+      .map((a) => `${a.name}/${a.mask ?? "----"} (${a.type}/${a.subtype ?? "-"})`)
+      .join(", "),
+  );
+
   let added = 0;
   let updated = 0;
 
