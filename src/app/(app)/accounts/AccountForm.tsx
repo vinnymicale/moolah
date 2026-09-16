@@ -187,7 +187,7 @@ export function AccountForm({ account, onClose }: { account: AccountDTO | null; 
           {editing ? (
             <div className="flex gap-2">
               <button onClick={() => removeOrArchive(() => archiveAccountAction(account!.id, !account!.archived))} className="btn-ghost" disabled={pending}>
-                <Archive size={14} /> Archive
+                <Archive size={14} /> {account!.archived ? "Unarchive" : "Archive"}
               </button>
               <button onClick={() => removeOrArchive(() => deleteAccountAction(account!.id))} className="btn-danger" disabled={pending}>
                 <Trash2 size={14} />

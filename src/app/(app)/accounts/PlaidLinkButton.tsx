@@ -106,7 +106,7 @@ export function PlaidConnectButton() {
 
 // ── Reconnect button (update mode for an existing item) ──────────────────────
 
-function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boolean }) {
+function ReconnectButton({ itemId, disabled, onDone }: { itemId: string; disabled: boolean; onDone: (msg: string) => void }) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,8 +139,12 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
     setError(null);
     try {
       const res = await fetch(`/api/plaid/sync/${itemId}`, { method: "POST" });
-      const json = await res.json() as { ok?: boolean; error?: string };
+      const json = await res.json() as {
+        ok?: boolean; error?: string; accounts?: { added?: number };
+      };
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Sync after reconnect failed");
+      const added = json.accounts?.added ?? 0;
+      if (added > 0) onDone(`Added ${added} new account${added === 1 ? "" : "s"}.`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reconnect failed");
@@ -148,7 +152,7 @@ function ReconnectButton({ itemId, disabled }: { itemId: string; disabled: boole
       setLoading(false);
       setLinkToken(null);
     }
-  }, [router, itemId]);
+  }, [router, itemId, onDone]);
 
   const onExit = useCallback(() => setLinkToken(null), []);
 
@@ -390,7 +394,11 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                   disabled={syncing === item.id || disconnecting === item.id}
                   onDone={(message) => toast({ message })}
                 />
-                <ReconnectButton itemId={item.id} disabled={syncing === item.id || disconnecting === item.id} />
+                <ReconnectButton
+                  itemId={item.id}
+                  disabled={syncing === item.id || disconnecting === item.id}
+                  onDone={(message) => toast({ message })}
+                />
                 <button
                   onClick={() => void sync(item.id)}
                   disabled={syncing === item.id}
