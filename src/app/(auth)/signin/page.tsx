@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { isOpenSignupAllowed } from "@/lib/local-auth";
 import { SignInForm } from "./SignInForm";
 
 export default async function SignInPage() {
@@ -9,10 +9,7 @@ export default async function SignInPage() {
   const session = await auth();
   if (session?.user) redirect("/");
 
-  const anyUser = await prisma.user.findFirst({
-    where: { passwordHash: { not: null } },
-    select: { id: true },
-  });
-
-  return <SignInForm passwordSet={!!anyUser} />;
+  // Sign-up is only ever offered to the first person here; everyone after them
+  // gets an account from an admin.
+  return <SignInForm passwordSet={!(await isOpenSignupAllowed())} />;
 }

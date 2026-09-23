@@ -7,6 +7,7 @@ import { ensureDefaultCategories } from "@/lib/user-setup";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/lib/user-setup", async (importOriginal) => {
   return { ...actual, ensureDefaultCategories: vi.fn() };
 });
 
+const findFirst = vi.mocked(prisma.user.findFirst);
 const findUnique = vi.mocked(prisma.user.findUnique);
 const create = vi.mocked(prisma.user.create);
 const update = vi.mocked(prisma.user.update);
@@ -45,6 +47,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.AUTH_BYPASS;
   delete process.env.LOCAL_USER_NAME;
+  // No founder yet, so sign-up is open. The closed case is asserted below.
+  findFirst.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -118,6 +122,16 @@ describe("authorizeLocalUser - sign up", () => {
     expect(result).toEqual(vinny);
     expect(update).toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a second sign-up once an account exists", async () => {
+    // The founder's account closes open sign-up: after that, membership is
+    // handed out by an admin, not claimed from the sign-in page.
+    findFirst.mockResolvedValue({ id: "founder" } as never);
+    findUnique.mockResolvedValue(null);
+    expect(await authorizeLocalUser("Sam", "secret123", true)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("derives the same identity for differently-cased names", async () => {

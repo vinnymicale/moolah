@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 import { getHouseholdContext } from "@/lib/household";
 import { redirect } from "next/navigation";
 import { getAccounts, getCategories } from "@/lib/queries";
@@ -45,7 +46,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUser();
   // The chrome needs both ids: accounts and categories come from the shared
   // household ledger, while the notification count is the user's own.
-  const household = await getHouseholdContext(user.userId);
+  const [household, account] = await Promise.all([
+    getHouseholdContext(user.userId),
+    prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { mustChangePassword: true },
+    }),
+  ]);
+  // An admin-created account keeps the password its admin chose until it picks
+  // its own, so nothing in the app is reachable on a shared secret.
+  if (account?.mustChangePassword) redirect("/change-password");
   if (!household) redirect("/no-household");
   const [accounts, categories, unreadCount] = await Promise.all([
     getAccounts(household.householdId),
