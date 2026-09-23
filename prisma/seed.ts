@@ -10,13 +10,21 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { DEFAULT_CATEGORIES } from "../src/lib/default-categories";
+import { hash } from "bcryptjs";
+import { nameToEmail } from "../src/lib/user-setup";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 // Always use a fixed throwaway email for the demo account so that running
 // db:seed never touches a real user's data.
-const DEMO_EMAIL = "demo@example.com";
+const DEMO_NAME = "Demo User";
+// Sign-in looks the account up by the email derived from the typed name, so the
+// seeded row has to carry that address rather than a decorative one, or a real
+// (non-bypass) sign-in finds nothing. The password is a fixed throwaway for
+// local review and the E2E suite; a real deployment never runs this seed.
+const DEMO_EMAIL = nameToEmail(DEMO_NAME);
+const DEMO_PASSWORD = "demodemo123";
 
 // Work relative to a fixed "today" derived from the system clock.
 const today = new Date();
@@ -28,10 +36,11 @@ async function main() {
   console.log(`Seeding demo user (login email: ${DEMO_EMAIL}) …`);
 
   // ── Demo user ────────────────────────────────────────────────────────────
+  const passwordHash = await hash(DEMO_PASSWORD, 12);
   const demoUser = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { name: "Demo User" },
-    create: { email: DEMO_EMAIL, name: "Demo User" },
+    update: { name: DEMO_NAME, passwordHash, mustChangePassword: false },
+    create: { email: DEMO_EMAIL, name: DEMO_NAME, passwordHash, mustChangePassword: false },
   });
 
   // ── Demo household ───────────────────────────────────────────────────────
