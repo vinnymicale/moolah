@@ -1,5 +1,6 @@
 import { PrismaClientKnownRequestError } from "@/generated/prisma/internal/prismaNamespace";
 import { ZodError } from "zod";
+import { ForbiddenError } from "@/lib/forbidden";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -30,7 +31,9 @@ export async function run(fn: () => Promise<void>): Promise<ActionResult> {
     if (e instanceof ZodError) {
       return { ok: false, error: e.issues[0]?.message ?? "Invalid input." };
     }
-    if (e instanceof UserError) {
+    // Both carry a message written for the user: UserError by construction,
+    // ForbiddenError because it names the capability the account lacks.
+    if (e instanceof UserError || e instanceof ForbiddenError) {
       return { ok: false, error: e.message };
     }
     if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {

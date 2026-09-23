@@ -88,7 +88,7 @@ describe("notifications stay per-user", () => {
 });
 
 describe("admin-only actions require an admin", () => {
-  for (const file of ["settings.ts", "backup.ts"]) {
+  for (const file of ["settings.ts", "backup.ts", "household.ts"]) {
     const source = read(file);
     for (const { name, body } of exportedActions(source)) {
       it(`${file} ${name} checks admin`, () => {

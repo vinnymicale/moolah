@@ -1,22 +1,16 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession, requireUser } from "@/lib/session";
+import { ForbiddenError } from "@/lib/forbidden";
 import {
   resolveCapabilities,
   type Capability,
   type HouseholdRoleName,
 } from "@/lib/capabilities";
 
-/**
- * A signed-in user asked for something their membership doesn't allow. Server
- * actions surface this as an error message; pages catch it and redirect.
- */
-export class ForbiddenError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ForbiddenError";
-  }
-}
+// Re-exported so callers keep importing it from the household module, where
+// the checks that throw it live.
+export { ForbiddenError } from "@/lib/forbidden";
 
 export interface HouseholdContext {
   /** Who is asking. Notification rows and channels belong to this user. */

@@ -9,6 +9,9 @@ import { AiConfigForm } from "./sections/AiConfigForm";
 import { PlaidConfigForm } from "./sections/PlaidConfigForm";
 import { ApiTokenForm } from "./sections/ApiTokenForm";
 import { ScheduledBackupForm } from "./sections/ScheduledBackupForm";
+import { HouseholdMembers, type MemberRow } from "./sections/HouseholdMembers";
+import { AuditLogView } from "./sections/AuditLogView";
+import type { HouseholdRoleName } from "@/lib/capabilities";
 import { scheduleFromCron } from "@/lib/backup/schedule";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -35,7 +38,7 @@ export default async function SettingsPage() {
 
   // Credentials live on the household and are admin-only, so a member without
   // admin gets the same "not configured" view rather than a peek at the keys.
-  const [household, accounts, categories] = await Promise.all([
+  const [household, accounts, categories, memberRows] = await Promise.all([
     ctx.isAdmin
       ? prisma.household.findUnique({
           where: { id: householdId },
@@ -54,7 +57,22 @@ export default async function SettingsPage() {
       : null,
     getAccounts(householdId),
     getCategories(householdId),
+    prisma.householdMember.findMany({
+      where: { householdId },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { joinedAt: "asc" },
+    }),
   ]);
+
+  const members: MemberRow[] = memberRows.map((m) => ({
+    id: m.id,
+    userId: m.userId,
+    name: m.user.name ?? "Unnamed",
+    role: m.role as HouseholdRoleName,
+    capabilities: m.capabilities,
+    deniedCapabilities: m.deniedCapabilities,
+    isOwner: m.role === "OWNER",
+  }));
 
   const backupConfig = await prisma.backupConfig.findUnique({ where: { householdId } });
   const backupProps = {
@@ -74,6 +92,16 @@ export default async function SettingsPage() {
   return (
     <div className="stagger mx-auto max-w-2xl space-y-5">
       <PageHeader title="Settings" subtitle="Manage your data, exports, and integrations." />
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Household members</h2>
+        <p className="mb-3 text-sm text-muted">
+          Everyone here shares one ledger. Roles set what a person can reach by default, and the
+          permissions editor overrides that per person. Settings, bank credentials and membership
+          stay with admins.
+        </p>
+        <HouseholdMembers members={members} viewerIsOwner={ctx.role === "OWNER"} />
+      </section>
 
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Plaid bank sync</h2>
@@ -157,6 +185,15 @@ export default async function SettingsPage() {
           hasToken={!!household?.apiTokenSelector}
           createdAt={household?.apiTokenCreatedAt ? household.apiTokenCreatedAt.toISOString() : null}
         />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Activity</h2>
+        <p className="mb-3 text-sm text-muted">
+          The last 50 changes anyone in the household made. Credential entries name the setting, never
+          the value.
+        </p>
+        <AuditLogView householdId={householdId} />
       </section>
     </div>
   );
