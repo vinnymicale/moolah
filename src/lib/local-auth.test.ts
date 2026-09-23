@@ -37,6 +37,7 @@ function userRow(passwordHash: string | null) {
     passwordHash,
     emailVerified: null,
     createdAt: new Date(),
+    mustChangePassword: false,
     aiProvider: null,
     aiModel: null,
     aiApiKey: null,

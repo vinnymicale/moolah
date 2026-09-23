@@ -23,6 +23,10 @@ model User {
   passwordHash  String?
   createdAt     DateTime  @default(now())
 
+  // Set when an admin creates the account with a temporary password, or resets
+  // one. The app layout forces a change before any page renders.
+  mustChangePassword Boolean @default(false)
+
   // AI assistant configuration — user-supplied key, never sent to the browser.
   aiProvider String? // "anthropic" | "openai" | "gemini"
   aiApiKey   String?
@@ -66,6 +70,95 @@ model User {
   contributionSchedules ContributionSchedule[]
   employerMatches       EmployerMatch[]
   ytdContributions      YtdContribution[]
+  ownedHouseholds       Household[]            @relation("HouseholdOwner")
+  membership            HouseholdMember?
+  auditEntries          AuditLog[]
+}
+
+// ---------------------------------------------------------------------------
+// Households
+// ---------------------------------------------------------------------------
+
+enum HouseholdRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+/// A household owns all financial data. Every member sees the same ledger,
+/// filtered only by the capabilities their admin gave them. Credentials live
+/// here rather than on User so one bank link and one AI key serve everyone.
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+
+  // AI assistant configuration — admin-supplied key, never sent to the browser.
+  aiProvider String? // "anthropic" | "openai" | "gemini"
+  aiApiKey   String?
+  aiModel    String? // Overrides the provider's default model when set.
+
+  // Plaid credentials. Secret is encrypted at rest; falls back to the PLAID_*
+  // env vars when unset.
+  plaidClientId String?
+  plaidSecret   String?
+  plaidEnv      String? // "sandbox" | "production"
+
+  // Read-only data API token, stored as a selector/verifier pair. See the
+  // matching comment that used to sit on User for why it is split in two.
+  apiTokenSelector     String?   @unique
+  apiTokenVerifierHash String?
+  apiTokenCreatedAt    DateTime?
+
+  owner   User              @relation("HouseholdOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members HouseholdMember[]
+  audit   AuditLog[]
+
+  @@index([ownerId])
+}
+
+/// One membership per user. The unique on userId is what keeps a user in
+/// exactly one household, which is why no household picker exists in the UI.
+model HouseholdMember {
+  id          String        @id @default(cuid())
+  householdId String
+  userId      String
+  role        HouseholdRole @default(MEMBER)
+
+  // Capability overrides on top of the role's defaults. Deny wins; see
+  // resolveCapabilities in src/lib/capabilities.ts.
+  capabilities       String[] @default([])
+  deniedCapabilities String[] @default([])
+
+  joinedAt DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+  @@unique([householdId, userId])
+  @@index([householdId])
+}
+
+/// Who changed what. actorId is nullable so the scheduled Plaid sweep can write
+/// entries with no human behind them, and so removing a member keeps their
+/// history rather than cascading it away.
+model AuditLog {
+  id          String   @id @default(cuid())
+  householdId String
+  actorId     String?
+  action      String
+  entityType  String
+  entityId    String?
+  summary     String?
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, createdAt])
 }
 
 // Auth.js OAuth account link
