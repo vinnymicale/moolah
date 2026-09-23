@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
 
@@ -8,12 +8,8 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 // GET /api/export/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD&account=ID&category=ID
 // Streams the full (filtered) transaction history as a CSV download.
 export async function GET(req: NextRequest) {
-  let userId: string;
-  try {
-    ({ userId } = await requireUser());
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
 
   const sp = req.nextUrl.searchParams;
   const from = sp.get("from");
@@ -21,7 +17,7 @@ export async function GET(req: NextRequest) {
   const account = sp.get("account");
   const category = sp.get("category");
 
-  const where: Record<string, unknown> = { userId, deletedAt: null };
+  const where: Record<string, unknown> = { householdId: ctx.householdId, deletedAt: null };
   if (ISO_DAY.test(from ?? "") || ISO_DAY.test(to ?? "")) {
     const dateFilter: Record<string, Date> = {};
     if (ISO_DAY.test(from ?? "")) dateFilter.gte = new Date(`${from}T00:00:00.000Z`);
@@ -37,8 +33,8 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { date: "desc" },
     }),
-    prisma.financialAccount.findMany({ where: { userId }, select: { id: true, name: true } }),
-    prisma.category.findMany({ where: { userId }, select: { id: true, name: true } }),
+    prisma.financialAccount.findMany({ where: { householdId: ctx.householdId }, select: { id: true, name: true } }),
+    prisma.category.findMany({ where: { householdId: ctx.householdId }, select: { id: true, name: true } }),
   ]);
 
   const acctName = new Map(accounts.map((a) => [a.id, a.name]));

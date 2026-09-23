@@ -1,20 +1,34 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getHouseholdContext } from "@/lib/household";
+import { requireUser } from "@/lib/session";
 import { isDemoMode } from "@/lib/demo-guard";
 import { encryptSecret } from "@/lib/crypto";
 import { generateApiToken, parseApiToken, hashApiTokenVerifier } from "@/lib/api-auth";
 import { isAiProvider } from "@/lib/ai-models";
 
+/**
+ * Credentials (Plaid, AI, API token) belong to the household, so only an admin
+ * may read or change them. Returns the household id, or an error result the
+ * action can hand straight back to the form.
+ */
+async function requireCredentialAdmin() {
+  const { userId } = await requireUser();
+  const ctx = await getHouseholdContext(userId);
+  if (!ctx) return { ok: false as const, error: "You don't belong to a household." };
+  if (!ctx.isAdmin) return { ok: false as const, error: "Only a household admin can change this." };
+  return { householdId: ctx.householdId };
+}
+
 export async function updateAiConfigAction(provider: string, apiKey: string, model?: string) {
   if (isDemoMode()) return { ok: true as const };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  const admin = await requireCredentialAdmin();
+  if ("error" in admin) return admin;
   if (!isAiProvider(provider)) return { ok: false as const, error: "Invalid provider." };
-  await prisma.user.update({
-    where: { id: session.user.id },
+  await prisma.household.update({
+    where: { id: admin.householdId },
     data: {
       aiProvider: provider,
       // Only update the key if a non-empty value was supplied (allow updating provider without clearing key).
@@ -30,11 +44,11 @@ export async function updateAiConfigAction(provider: string, apiKey: string, mod
 
 export async function updatePlaidConfigAction(clientId: string, secret: string, env: string) {
   if (isDemoMode()) return { ok: true as const };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  const admin = await requireCredentialAdmin();
+  if ("error" in admin) return admin;
   if (!["sandbox", "production"].includes(env)) return { ok: false as const, error: "Invalid environment." };
-  await prisma.user.update({
-    where: { id: session.user.id },
+  await prisma.household.update({
+    where: { id: admin.householdId },
     data: {
       plaidEnv: env,
       ...(clientId.trim() ? { plaidClientId: clientId.trim() } : {}),
@@ -48,10 +62,10 @@ export async function updatePlaidConfigAction(clientId: string, secret: string, 
 
 export async function clearPlaidConfigAction() {
   if (isDemoMode()) return { ok: true as const };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
-  await prisma.user.update({
-    where: { id: session.user.id },
+  const admin = await requireCredentialAdmin();
+  if ("error" in admin) return admin;
+  await prisma.household.update({
+    where: { id: admin.householdId },
     data: { plaidClientId: null, plaidSecret: null, plaidEnv: null },
   });
   revalidatePath("/settings");
@@ -60,10 +74,10 @@ export async function clearPlaidConfigAction() {
 
 export async function clearAiConfigAction() {
   if (isDemoMode()) return { ok: true as const };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
-  await prisma.user.update({
-    where: { id: session.user.id },
+  const admin = await requireCredentialAdmin();
+  if ("error" in admin) return admin;
+  await prisma.household.update({
+    where: { id: admin.householdId },
     data: { aiProvider: null, aiApiKey: null, aiModel: null },
   });
   revalidatePath("/settings");
@@ -77,13 +91,13 @@ export async function clearAiConfigAction() {
  */
 export async function generateApiTokenAction() {
   if (isDemoMode()) return { ok: false as const, error: "Not available in demo mode." };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  const admin = await requireCredentialAdmin();
+  if ("error" in admin) return admin;
   const token = generateApiToken();
   const parsed = parseApiToken(token);
   if (!parsed) return { ok: false as const, error: "Failed to generate token." };
-  await prisma.user.update({
-    where: { id: session.user.id },
+  await prisma.household.update({
+    where: { id: admin.householdId },
     data: {
       apiTokenSelector: parsed.selector,
       apiTokenVerifierHash: hashApiTokenVerifier(parsed.verifier),
@@ -96,10 +110,10 @@ export async function generateApiTokenAction() {
 
 export async function revokeApiTokenAction() {
   if (isDemoMode()) return { ok: true as const };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
-  await prisma.user.update({
-    where: { id: session.user.id },
+  const admin = await requireCredentialAdmin();
+  if ("error" in admin) return admin;
+  await prisma.household.update({
+    where: { id: admin.householdId },
     data: { apiTokenSelector: null, apiTokenVerifierHash: null, apiTokenCreatedAt: null },
   });
   revalidatePath("/settings");

@@ -56,20 +56,20 @@ export interface ReportInput {
   budgets: ReportBudget[];
 }
 
-export async function computeReports(userId: string, todayISO: string): Promise<Reports> {
+export async function computeReports(householdId: string, todayISO: string): Promise<Reports> {
   const today = parseISODay(todayISO);
   const monthStart = startOfUTCMonth(today);
   const sixMonthsAgo = startOfUTCMonth(addUTCMonths(monthStart, -5));
 
   const [accounts, snapshots, categories, txnRows, budgetRows] = await Promise.all([
-    getAccounts(userId),
-    getSnapshots(userId),
-    prisma.category.findMany({ where: { userId } }),
+    getAccounts(householdId),
+    getSnapshots(householdId),
+    prisma.category.findMany({ where: { householdId } }),
     prisma.transaction.findMany({
-      where: { userId, deletedAt: null, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
+      where: { householdId, deletedAt: null, isTransfer: false, date: { gte: sixMonthsAgo, lte: endOfUTCMonth(monthStart) } },
       select: { type: true, amount: true, date: true, categoryId: true, account: { select: { type: true } }, splits: { select: { categoryId: true, amount: true } } },
     }),
-    prisma.budget.findMany({ where: { userId, month: monthStart } }),
+    prisma.budget.findMany({ where: { householdId, month: monthStart } }),
   ]);
 
   return aggregateReports({

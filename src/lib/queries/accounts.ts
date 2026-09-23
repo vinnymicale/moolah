@@ -29,9 +29,9 @@ export interface AccountDTO {
   isOverdue: boolean | null;
 }
 
-export async function getAccounts(userId: string, includeArchived = false): Promise<AccountDTO[]> {
+export async function getAccounts(householdId: string, includeArchived = false): Promise<AccountDTO[]> {
   const rows = await prisma.financialAccount.findMany({
-    where: { userId, ...(includeArchived ? {} : { archived: false }) },
+    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
     orderBy: [{ isAsset: "desc" }, { createdAt: "asc" }],
   });
   return rows.map((a) => ({
@@ -67,8 +67,8 @@ export interface NetWorth {
   accounts: AccountDTO[];
 }
 
-export async function getNetWorth(userId: string, includeArchived = false): Promise<NetWorth> {
-  const accounts = await getAccounts(userId, includeArchived);
+export async function getNetWorth(householdId: string, includeArchived = false): Promise<NetWorth> {
+  const accounts = await getAccounts(householdId, includeArchived);
   let assets = 0;
   let liabilities = 0;
   for (const a of accounts) {
@@ -87,9 +87,9 @@ export interface SnapshotDTO {
   note: string | null;
 }
 
-export async function getSnapshots(userId: string): Promise<SnapshotDTO[]> {
+export async function getSnapshots(householdId: string): Promise<SnapshotDTO[]> {
   const rows = await prisma.accountSnapshot.findMany({
-    where: { account: { userId } },
+    where: { account: { householdId } },
     orderBy: { date: "asc" },
   });
   return rows.map((s) => ({
@@ -106,12 +106,12 @@ export async function getSnapshots(userId: string): Promise<SnapshotDTO[]> {
  * queries: the dashboard only needs to know whether each thing exists yet, and
  * this runs on every dashboard load.
  */
-export async function getOnboardingCounts(userId: string): Promise<OnboardingInput> {
+export async function getOnboardingCounts(householdId: string): Promise<OnboardingInput> {
   const [accountCount, transactionCount, budgetCount, recurringCount] = await Promise.all([
-    prisma.financialAccount.count({ where: { userId } }),
-    prisma.transaction.count({ where: { userId, deletedAt: null } }),
-    prisma.budget.count({ where: { userId } }),
-    prisma.recurringRule.count({ where: { userId } }),
+    prisma.financialAccount.count({ where: { householdId } }),
+    prisma.transaction.count({ where: { householdId, deletedAt: null } }),
+    prisma.budget.count({ where: { householdId } }),
+    prisma.recurringRule.count({ where: { householdId } }),
   ]);
   return { accountCount, transactionCount, budgetCount, recurringCount };
 }

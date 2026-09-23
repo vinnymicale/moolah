@@ -5,7 +5,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+const household = vi.fn();
+vi.mock("@/lib/household", () => ({ householdForRoute: () => household() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     plaidItem: { findFirst: vi.fn() },
@@ -17,14 +18,12 @@ vi.mock("@/lib/plaid-accounts", () => ({ syncPlaidAccounts: vi.fn() }));
 vi.mock("@/lib/plaid-sync", () => ({ syncPlaidItem: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ decryptSecret: vi.fn(() => "access-token") }));
 
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
 import { syncPlaidAccounts } from "@/lib/plaid-accounts";
 import { syncPlaidItem } from "@/lib/plaid-sync";
 import { POST } from "./route";
 
-const authMock = vi.mocked(auth);
 const findItem = vi.mocked(prisma.plaidItem.findFirst);
 const findLinked = vi.mocked(prisma.plaidLinkedAccount.findMany);
 const syncAccounts = vi.mocked(syncPlaidAccounts);
@@ -42,10 +41,10 @@ const params = Promise.resolve({ itemId: "item-1" });
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
-  authMock.mockResolvedValue({ user: { id: "u1" } } as never);
+  household.mockResolvedValue({ ctx: { userId: "u1", householdId: "h1" } });
   findItem.mockResolvedValue({
     id: "item-1",
-    userId: "u1",
+    householdId: "h1",
     accessToken: "enc",
     institutionName: "Test Bank",
   } as never);
@@ -64,12 +63,12 @@ async function run(body: unknown) {
 
 describe("POST /api/plaid/refresh-accounts/[itemId]", () => {
   it("rejects an unauthenticated caller", async () => {
-    authMock.mockResolvedValue(null as never);
+    household.mockResolvedValue({ response: Response.json({ error: "Unauthorized" }, { status: 401 }) });
     const res = await run({});
     expect(res.status).toBe(401);
   });
 
-  it("404s on an item belonging to someone else", async () => {
+  it("404s on an item belonging to another household", async () => {
     findItem.mockResolvedValue(null as never);
     const res = await run({});
     expect(res.status).toBe(404);

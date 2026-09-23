@@ -24,6 +24,7 @@ vi.mock("@/lib/notifications/engine", () => ({
 vi.mock("./prisma", () => ({
   prisma: {
     plaidItem: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
+    household: { findUnique: vi.fn(async () => ({ ownerId: "u1" })) },
     plaidLinkedAccount: { update: vi.fn() },
     financialAccount: { findMany: vi.fn(), update: vi.fn() },
     category: { findMany: vi.fn() },
@@ -60,7 +61,7 @@ const snapshot = vi.mocked(captureNetWorthSnapshot);
 
 const baseItem = {
   id: "item1",
-  userId: "u1",
+  householdId: "h1",
   accessToken: "access-token",
   cursor: "cur0",
   linkedAccounts: [
@@ -118,13 +119,13 @@ describe("syncPlaidItem - added transactions", () => {
   it("creates an expense with the Plaid category mapped to a local category", async () => {
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
 
-    const result = await syncPlaidItem("item1", "u1");
+    const result = await syncPlaidItem("item1", "h1");
 
     expect(result.added).toBe(1);
     const args = txn.upsert.mock.calls[0][0];
     expect(args.where).toEqual({ plaidTransactionId: "ptx1" });
     expect(args.create).toMatchObject({
-      userId: "u1",
+      householdId: "h1",
       accountId: "fa1",
       type: "EXPENSE",
       amount: 42.5,
@@ -139,9 +140,9 @@ describe("syncPlaidItem - added transactions", () => {
   });
 
   it("scopes the item lookup to the calling user", async () => {
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
     expect(item.findUniqueOrThrow).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "item1", userId: "u1" } }),
+      expect.objectContaining({ where: { id: "item1", householdId: "h1" } }),
     );
   });
 
@@ -150,7 +151,7 @@ describe("syncPlaidItem - added transactions", () => {
       syncPage({ added: [plaidTxn({ amount: -1500, personal_finance_category: null })] }),
     );
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.upsert.mock.calls[0][0].create).toMatchObject({
       type: "INCOME",
@@ -164,7 +165,7 @@ describe("syncPlaidItem - added transactions", () => {
       syncPage({ added: [plaidTxn({ account_id: "pa-unbound" }), plaidTxn({ account_id: "pa-unknown" })] }),
     );
 
-    const result = await syncPlaidItem("item1", "u1");
+    const result = await syncPlaidItem("item1", "h1");
 
     expect(result.added).toBe(0);
     expect(txn.upsert).not.toHaveBeenCalled();
@@ -175,7 +176,7 @@ describe("syncPlaidItem - added transactions", () => {
       syncPage({ added: [plaidTxn({ authorized_date: "2026-07-08" })] }),
     );
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(isoDay(txn.upsert.mock.calls[0][0].create.date as Date)).toBe("2026-07-08");
   });
@@ -185,7 +186,7 @@ describe("syncPlaidItem - added transactions", () => {
       syncPage({ added: [plaidTxn({ pending: true })] }),
     );
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.upsert.mock.calls[0][0].create.cleared).toBe(false);
   });
@@ -206,7 +207,7 @@ describe("syncPlaidItem - added transactions", () => {
     ] as never);
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.upsert.mock.calls[0][0].create).toMatchObject({
       description: "Wegmans (cleaned)",
@@ -220,10 +221,10 @@ describe("syncPlaidItem - added transactions", () => {
       syncPage({ added: [plaidTxn({ pending_transaction_id: "pend-1" })] }),
     );
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.deleteMany).toHaveBeenCalledWith({
-      where: { plaidTransactionId: "pend-1", userId: "u1" },
+      where: { plaidTransactionId: "pend-1", householdId: "h1" },
     });
   });
 
@@ -240,7 +241,7 @@ describe("syncPlaidItem - added transactions", () => {
     tag.findMany.mockResolvedValue([{ id: "tag-groceries" }] as never);
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.update).toHaveBeenCalledWith({
       where: { id: "t-new" },
@@ -261,7 +262,7 @@ describe("syncPlaidItem - added transactions", () => {
     tag.findMany.mockResolvedValue([] as never); // tag-deleted is no longer live
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.update).not.toHaveBeenCalled();
   });
@@ -273,11 +274,11 @@ describe("syncPlaidItem - modified and removed", () => {
       syncPage({ modified: [plaidTxn({ amount: 55 })] }),
     );
 
-    const result = await syncPlaidItem("item1", "u1");
+    const result = await syncPlaidItem("item1", "h1");
 
     expect(result.modified).toBe(1);
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { plaidTransactionId: "ptx1", userId: "u1" },
+      where: { plaidTransactionId: "ptx1", householdId: "h1" },
       data: expect.objectContaining({ amount: 55, type: "EXPENSE", categoryId: "cat-groceries" }),
     });
   });
@@ -287,11 +288,11 @@ describe("syncPlaidItem - modified and removed", () => {
       syncPage({ removed: [{ transaction_id: "ptx-gone" }] }),
     );
 
-    const result = await syncPlaidItem("item1", "u1");
+    const result = await syncPlaidItem("item1", "h1");
 
     expect(result.removed).toBe(1);
     expect(txn.deleteMany).toHaveBeenCalledWith({
-      where: { plaidTransactionId: "ptx-gone", userId: "u1" },
+      where: { plaidTransactionId: "ptx-gone", householdId: "h1" },
     });
   });
 
@@ -309,7 +310,7 @@ describe("syncPlaidItem - modified and removed", () => {
     txn.findFirst.mockResolvedValue({ id: "t-mod", tags: [] } as never);
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ modified: [plaidTxn()] }));
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(txn.update).toHaveBeenCalledWith({
       where: { id: "t-mod" },
@@ -324,7 +325,7 @@ describe("syncPlaidItem - pagination and cursor", () => {
       .mockResolvedValueOnce(syncPage({ has_more: true, next_cursor: "cur1" }))
       .mockResolvedValueOnce(syncPage({ has_more: false, next_cursor: "cur2" }));
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     expect(plaidClient.transactionsSync).toHaveBeenCalledTimes(2);
     expect(plaidClient.transactionsSync.mock.calls[0][0].cursor).toBe("cur0");
@@ -338,9 +339,9 @@ describe("syncPlaidItem - pagination and cursor", () => {
   it("notifies the engine with the ids of newly synced transactions", async () => {
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
-    expect(runRulesMock).toHaveBeenCalledWith("u1", {
+    expect(runRulesMock).toHaveBeenCalledWith("u1", "h1", {
       mode: "event",
       event: { kind: "plaid-sync", plaidItemId: "item1", newTransactionIds: ["t-new"] },
     });
@@ -351,7 +352,7 @@ describe("syncPlaidItem - pagination and cursor", () => {
     runRulesMock.mockRejectedValue(new Error("notify boom"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(syncPlaidItem("item1", "u1")).resolves.toMatchObject({ added: 0 });
+    await expect(syncPlaidItem("item1", "h1")).resolves.toMatchObject({ added: 0 });
     expect(item.update).toHaveBeenCalled(); // cursor still persisted
 
     errSpy.mockRestore();
@@ -369,7 +370,7 @@ describe("syncPlaidItem - balances and liabilities", () => {
       },
     });
 
-    const result = await syncPlaidItem("item1", "u1");
+    const result = await syncPlaidItem("item1", "h1");
 
     expect(result.balancesUpdated).toBe(1);
     expect(linkedAccount.update).toHaveBeenCalledTimes(1);
@@ -388,7 +389,7 @@ describe("syncPlaidItem - balances and liabilities", () => {
       data: { accounts: [{ account_id: "pa1", balances: { current: null, available: null, limit: null } }] },
     });
 
-    const result = await syncPlaidItem("item1", "u1");
+    const result = await syncPlaidItem("item1", "h1");
 
     expect(result.balancesUpdated).toBe(0);
     expect(linkedAccount.update).toHaveBeenCalledTimes(1);
@@ -415,7 +416,7 @@ describe("syncPlaidItem - balances and liabilities", () => {
       },
     });
 
-    await syncPlaidItem("item1", "u1");
+    await syncPlaidItem("item1", "h1");
 
     const call = account.update.mock.calls.find((c) => c[0].data.lastStatementBalance !== undefined);
     expect(call).toBeDefined();
@@ -432,7 +433,7 @@ describe("syncPlaidItem - balances and liabilities", () => {
 
   it("treats a liabilities failure as non-fatal", async () => {
     plaidClient.liabilitiesGet.mockRejectedValue(new Error("PRODUCT_NOT_READY"));
-    await expect(syncPlaidItem("item1", "u1")).resolves.toBeDefined();
+    await expect(syncPlaidItem("item1", "h1")).resolves.toBeDefined();
   });
 });
 
@@ -443,7 +444,7 @@ describe("syncPlaidItem - recategorizeOnly", () => {
   });
 
   it("re-pulls from the start of history and never advances the real cursor", async () => {
-    await syncPlaidItem("item1", "u1", { recategorizeOnly: true });
+    await syncPlaidItem("item1", "h1", { recategorizeOnly: true });
 
     expect(plaidClient.transactionsSync.mock.calls[0][0].cursor).toBeUndefined();
     expect(item.update).not.toHaveBeenCalled();
@@ -454,7 +455,7 @@ describe("syncPlaidItem - recategorizeOnly", () => {
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
     txn.findFirst.mockResolvedValue({ id: "twin1" } as never);
 
-    await syncPlaidItem("item1", "u1", { recategorizeOnly: true });
+    await syncPlaidItem("item1", "h1", { recategorizeOnly: true });
 
     expect(txn.update).toHaveBeenCalledWith({
       where: { id: "twin1" },
@@ -465,7 +466,7 @@ describe("syncPlaidItem - recategorizeOnly", () => {
   it("does not overwrite user-set categories, only fills empty ones", async () => {
     plaidClient.transactionsSync.mockResolvedValue(syncPage({ added: [plaidTxn()] }));
 
-    await syncPlaidItem("item1", "u1", { recategorizeOnly: true });
+    await syncPlaidItem("item1", "h1", { recategorizeOnly: true });
 
     // The upsert's update branch must not touch categoryId or isTransfer...
     const upsertUpdate = txn.upsert.mock.calls[0][0].update;
@@ -492,7 +493,7 @@ describe("matchTransfers", () => {
       { id: "tx-inc", type: "INCOME", amount: 250, date: new Date(`${today}T00:00:00Z`), accountId: "fa-cc", isTransfer: false, transferPeerId: null },
     ] as never);
 
-    const count = await matchTransfers("u1");
+    const count = await matchTransfers("h1");
 
     expect(count).toBe(1);
     expect(txn.update).toHaveBeenCalledWith({
@@ -516,7 +517,7 @@ describe("matchTransfers", () => {
       { id: "tx-inc", type: "INCOME", amount: 99, date: new Date(`${today}T00:00:00Z`), accountId: "fa-cc", isTransfer: false, transferPeerId: null },
     ] as never);
 
-    const count = await matchTransfers("u1");
+    const count = await matchTransfers("h1");
 
     expect(count).toBe(0);
     expect(prisma.$transaction).not.toHaveBeenCalled();

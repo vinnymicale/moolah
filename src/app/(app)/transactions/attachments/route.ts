@@ -4,7 +4,7 @@
 
 import type { NextRequest } from "next/server";
 import { Zip, ZipPassThrough } from "fflate";
-import { requireUser } from "@/lib/session";
+import { requireHousehold } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories, getTransactionsBetween, type TransactionDTO } from "@/lib/queries";
 import { userTodayISO } from "@/lib/user-tz";
@@ -37,20 +37,20 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const params = Object.fromEntries(req.nextUrl.searchParams) as Record<string, string>;
-  const userId = (await requireUser()).userId;
+  const householdId = (await requireHousehold()).householdId;
   const todayISO = await userTodayISO();
   const { startISO, endISO, slug } = resolveTransactionsRange(params, todayISO);
   const filters = parseTransactionFilters(params);
 
   const [accounts, categories] = await Promise.all([
-    getAccounts(userId),
-    getCategories(userId),
+    getAccounts(householdId),
+    getCategories(householdId),
   ]);
   const acctById = new Map(accounts.map((a) => [a.id, a.name]));
   const catById = new Map(categories.map((c) => [c.id, c.name]));
 
   const transactions: TransactionDTO[] = await getTransactionsBetween(
-    userId,
+    householdId,
     startISO,
     endISO,
     filters,
@@ -118,7 +118,7 @@ export async function GET(req: NextRequest): Promise<Response> {
           // the whole selection in memory at once.
           for (let i = 0; i < entries.length; i++) {
             const row = await prisma.attachment.findFirst({
-              where: { id: entries[i].att.id, userId },
+              where: { id: entries[i].att.id, householdId },
               select: { data: true },
             });
             const file = new ZipPassThrough(names[i]);

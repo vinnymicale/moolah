@@ -10,9 +10,9 @@ export interface RuleDTO {
   actions: RuleAction[];
 }
 
-export async function getRules(userId: string): Promise<RuleDTO[]> {
+export async function getRules(householdId: string): Promise<RuleDTO[]> {
   const rows = await prisma.rule.findMany({
-    where: { userId },
+    where: { householdId },
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
   });
   return rows.map((r) => ({

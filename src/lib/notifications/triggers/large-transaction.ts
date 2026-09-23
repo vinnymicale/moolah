@@ -35,7 +35,7 @@ export const largeTransaction: TriggerDef = {
     const txns = await prisma.transaction.findMany({
       where: {
         id: { in: ctx.event.newTransactionIds },
-        userId: ctx.userId,
+        householdId: ctx.householdId,
         deletedAt: null,
         isTransfer: false,
         type: "EXPENSE",

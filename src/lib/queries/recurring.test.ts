@@ -52,10 +52,10 @@ beforeEach(() => {
 describe("getRecurringRules", () => {
   it("hides archived rules unless asked for them", async () => {
     await getRecurringRules("u1");
-    expect(db.recurringRule.findMany.mock.calls[0][0].where).toEqual({ userId: "u1", archived: false });
+    expect(db.recurringRule.findMany.mock.calls[0][0].where).toEqual({ householdId: "u1", archived: false });
 
     await getRecurringRules("u1", true);
-    expect(db.recurringRule.findMany.mock.calls[1][0].where).toEqual({ userId: "u1" });
+    expect(db.recurringRule.findMany.mock.calls[1][0].where).toEqual({ householdId: "u1" });
   });
 
   it("flattens to the version in force on the given day", async () => {
@@ -128,7 +128,7 @@ describe("getRecurringSuggestions", () => {
     await getRecurringSuggestions("u1", "2026-09-03");
 
     const where = db.transaction.findMany.mock.calls[0][0].where;
-    expect(where.userId).toBe("u1");
+    expect(where.householdId).toBe("u1");
     expect(where.deletedAt).toBeNull();
     expect((where.date.gte as Date).toISOString()).toBe("2026-01-01T00:00:00.000Z");
   });

@@ -9,9 +9,9 @@ export interface TagDTO {
   totalAmount: number;
 }
 
-export async function getTags(userId: string): Promise<TagDTO[]> {
+export async function getTags(householdId: string): Promise<TagDTO[]> {
   const rows = await prisma.tag.findMany({
-    where: { userId },
+    where: { householdId },
     orderBy: { name: "asc" },
     include: { transactions: { where: { deletedAt: null }, select: { amount: true } } },
   });

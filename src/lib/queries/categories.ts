@@ -10,9 +10,9 @@ export interface CategoryDTO {
   parentId: string | null;
 }
 
-export async function getCategories(userId: string): Promise<CategoryDTO[]> {
+export async function getCategories(householdId: string): Promise<CategoryDTO[]> {
   const rows = await prisma.category.findMany({
-    where: { userId },
+    where: { householdId },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
   });
   return rows.map((c) => ({

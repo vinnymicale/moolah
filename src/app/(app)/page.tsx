@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CalendarClock, Clock, PiggyBank, Repeat, Target, TrendingDown, TrendingUp } from "lucide-react";
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getNetWorth, getCategories, getTransactionsBetween, getBudgetMonth, getSavingsGoals, getSpendingAnomalies, getTopMerchants, getOnboardingCounts } from "@/lib/queries";
 import { getCalendarMonth, getUpcoming } from "@/lib/calendar";
-import { getDemoUserId } from "@/lib/demo-session";
+import { getDemoHouseholdId } from "@/lib/demo-session";
 import {
   DEMO_TRANSACTIONS, DEMO_BUDGETS, DEMO_GOALS,
 } from "@/lib/demo-data";
@@ -32,25 +32,25 @@ export default async function DashboardPage() {
   const monthISO = isoDay(monthFirst);
   const lastMonthFirst = addUTCMonths(monthFirst, -1);
 
-  const userId = DEMO_MODE
-    ? (await getDemoUserId() ?? "")
-    : (await requireUser()).userId;
+  const householdId = DEMO_MODE
+    ? (await getDemoHouseholdId() ?? "")
+    : (await requirePageCapability("VIEW_DASHBOARD")).householdId;
 
   const [netWorth, calendar, upcoming, categories, monthTxns, budgetLines, lastMonthTxns, goals, anomalies, topMerchants] = await Promise.all([
-    getNetWorth(userId),
-    getCalendarMonth(userId, monthISO, todayISO),
-    getUpcoming(userId, todayISO, 14),
-    getCategories(userId),
+    getNetWorth(householdId),
+    getCalendarMonth(householdId, monthISO, todayISO),
+    getUpcoming(householdId, todayISO, 14),
+    getCategories(householdId),
     DEMO_MODE
       ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= monthISO && t.date <= isoDay(endOfUTCMonth(monthFirst))))
-      : getTransactionsBetween(userId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
-    DEMO_MODE ? Promise.resolve(DEMO_BUDGETS) : getBudgetMonth(userId, monthISO),
+      : getTransactionsBetween(householdId, monthISO, isoDay(endOfUTCMonth(monthFirst))),
+    DEMO_MODE ? Promise.resolve(DEMO_BUDGETS) : getBudgetMonth(householdId, monthISO),
     DEMO_MODE
       ? Promise.resolve(DEMO_TRANSACTIONS.filter((t) => t.date >= isoDay(lastMonthFirst) && t.date <= isoDay(endOfUTCMonth(lastMonthFirst))))
-      : getTransactionsBetween(userId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
-    DEMO_MODE ? Promise.resolve(DEMO_GOALS) : getSavingsGoals(userId),
-    getSpendingAnomalies(userId, monthISO),
-    getTopMerchants(userId, monthISO),
+      : getTransactionsBetween(householdId, isoDay(lastMonthFirst), isoDay(endOfUTCMonth(lastMonthFirst))),
+    DEMO_MODE ? Promise.resolve(DEMO_GOALS) : getSavingsGoals(householdId),
+    getSpendingAnomalies(householdId, monthISO),
+    getTopMerchants(householdId, monthISO),
   ]);
 
   const {
@@ -72,7 +72,7 @@ export default async function DashboardPage() {
 
   // Demo mode ships with a full dataset and its own welcome modal, so there is
   // nothing to set up there.
-  const onboarding = DEMO_MODE ? null : computeOnboardingSteps(await getOnboardingCounts(userId));
+  const onboarding = DEMO_MODE ? null : computeOnboardingSteps(await getOnboardingCounts(householdId));
   const showOnboarding = onboarding != null && !onboardingComplete(onboarding);
 
   const sections: DashboardSection[] = [

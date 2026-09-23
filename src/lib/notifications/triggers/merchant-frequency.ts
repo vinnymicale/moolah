@@ -29,7 +29,7 @@ export const merchantFrequency: TriggerDef = {
     const rows = await prisma.transaction.groupBy({
       by: ["description"],
       where: {
-        userId: ctx.userId, deletedAt: null, isTransfer: false, type: "EXPENSE",
+        householdId: ctx.householdId, deletedAt: null, isTransfer: false, type: "EXPENSE",
         date: { gte: weekStart },
       },
       _count: { _all: true },

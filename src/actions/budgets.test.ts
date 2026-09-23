@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -24,16 +24,16 @@ vi.mock("@/lib/prisma", () => ({
 
 import { setBudgetAction, copyBudgetsAction, clearMonthBudgetsAction } from "./budgets";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const requireCapabilityMock = vi.mocked(requireCapability);
 const category = vi.mocked(prisma.category);
 const budget = vi.mocked(prisma.budget);
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  requireCapabilityMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
 });
 
 describe("demo-mode guard", () => {
@@ -43,7 +43,7 @@ describe("demo-mode guard", () => {
 
   it("setBudgetAction is a no-op success in demo mode", async () => {
     expect(await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 100 })).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(requireCapabilityMock).not.toHaveBeenCalled();
     expect(budget.upsert).not.toHaveBeenCalled();
   });
 
@@ -64,7 +64,7 @@ describe("clearMonthBudgetsAction", () => {
     const result = await clearMonthBudgetsAction({ month: "2026-06-01" });
     expect(result).toEqual({ ok: true });
     expect(budget.deleteMany).toHaveBeenCalledWith({
-      where: { userId: "u1", month: expect.any(Date) },
+      where: { householdId: "h1", month: expect.any(Date) },
     });
   });
 
@@ -89,9 +89,9 @@ describe("setBudgetAction", () => {
     expect(result).toEqual({ ok: true });
     expect(budget.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId_categoryId_month: { userId: "u1", categoryId: "c1", month: expect.any(Date) } },
+        where: { householdId_categoryId_month: { householdId: "h1", categoryId: "c1", month: expect.any(Date) } },
         update: { limit: 250 },
-        create: expect.objectContaining({ userId: "u1", categoryId: "c1", limit: 250 }),
+        create: expect.objectContaining({ householdId: "h1", categoryId: "c1", limit: 250 }),
       }),
     );
     expect(budget.deleteMany).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe("setBudgetAction", () => {
     category.findFirst.mockResolvedValue({ id: "c1" } as never);
     await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 0 });
     expect(budget.deleteMany).toHaveBeenCalledWith({
-      where: { userId: "u1", categoryId: "c1", month: expect.any(Date) },
+      where: { householdId: "h1", categoryId: "c1", month: expect.any(Date) },
     });
     expect(budget.upsert).not.toHaveBeenCalled();
   });
@@ -124,7 +124,7 @@ describe("setBudgetAction with scope: forward", () => {
     expect(prisma.$transaction).toHaveBeenCalledOnce();
     expect(budget.upsert).toHaveBeenCalledTimes(24);
     const months = budget.upsert.mock.calls.map(([args]) =>
-      (args.where.userId_categoryId_month!.month as Date).toISOString().slice(0, 10),
+      (args.where.householdId_categoryId_month!.month as Date).toISOString().slice(0, 10),
     );
     expect(months[0]).toBe("2026-06-01");
     expect(months[1]).toBe("2026-07-01");
@@ -145,7 +145,7 @@ describe("setBudgetAction with scope: forward", () => {
     await setBudgetAction({ categoryId: "c1", month: "2026-06-01", limit: 0, scope: "forward" });
     expect(budget.upsert).not.toHaveBeenCalled();
     const where = budget.deleteMany.mock.calls[0][0]!.where!;
-    expect(where.userId).toBe("u1");
+    expect(where.householdId).toBe("h1");
     expect(where.categoryId).toBe("c1");
     expect((where.month as { in: Date[] }).in).toHaveLength(24);
   });
@@ -184,7 +184,7 @@ describe("copyBudgetsAction", () => {
     expect(budget.upsert).toHaveBeenCalledTimes(2);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const copiedCategories = budget.upsert.mock.calls.map(
-      (c) => c[0].where.userId_categoryId_month?.categoryId,
+      (c) => c[0].where.householdId_categoryId_month?.categoryId,
     );
     expect(copiedCategories).toEqual(["c1", "c2"]);
   });

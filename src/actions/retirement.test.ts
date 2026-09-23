@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -35,9 +35,9 @@ import {
   clearYtdContributionsAction,
 } from "./retirement";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const plan = vi.mocked(prisma.retirementPlan);
 const account = vi.mocked(prisma.financialAccount);
 const contribution = vi.mocked(prisma.contribution);
@@ -67,8 +67,8 @@ const validContribution = {
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
-  account.findFirst.mockResolvedValue({ id: "a1", userId: "u1" } as never);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
+  account.findFirst.mockResolvedValue({ id: "a1", householdId: "h1" } as never);
 });
 
 describe("demo-mode guard", () => {
@@ -92,7 +92,7 @@ describe("saveRetirementPlanAction", () => {
     const r = await saveRetirementPlanAction(validPlan);
     expect(r).toEqual({ ok: true });
     expect(plan.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: "u1" } }),
+      expect.objectContaining({ where: { householdId: "h1" } }),
     );
   });
 
@@ -144,7 +144,7 @@ describe("createContributionAction", () => {
   it("scopes the ownership check to the account id and the current user", async () => {
     await createContributionAction(validContribution);
     expect(account.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "a1", userId: "u1" } }),
+      expect.objectContaining({ where: { id: "a1", householdId: "h1" } }),
     );
   });
 
@@ -204,16 +204,16 @@ describe("deleteContributionAction", () => {
   });
 
   it("deletes an owned contribution", async () => {
-    contribution.findFirst.mockResolvedValue({ id: "c1", userId: "u1" } as never);
+    contribution.findFirst.mockResolvedValue({ id: "c1", householdId: "h1" } as never);
     const r = await deleteContributionAction("c1");
     expect(r).toEqual({ ok: true });
     expect(contribution.delete).toHaveBeenCalledWith({ where: { id: "c1" } });
   });
 
   it("scopes the ownership check to the contribution id and the current user", async () => {
-    contribution.findFirst.mockResolvedValue({ id: "c1", userId: "u1" } as never);
+    contribution.findFirst.mockResolvedValue({ id: "c1", householdId: "h1" } as never);
     await deleteContributionAction("c1");
-    expect(contribution.findFirst).toHaveBeenCalledWith({ where: { id: "c1", userId: "u1" } });
+    expect(contribution.findFirst).toHaveBeenCalledWith({ where: { id: "c1", householdId: "h1" } });
   });
 });
 
@@ -258,7 +258,7 @@ describe("updateScheduleAction", () => {
   };
 
   beforeEach(() => {
-    schedule.findFirst.mockResolvedValue({ id: "s1", userId: "u1" } as never);
+    schedule.findFirst.mockResolvedValue({ id: "s1", householdId: "h1" } as never);
   });
 
   it("refuses to edit another user's schedule", async () => {
@@ -316,7 +316,7 @@ describe("deleteScheduleAction", () => {
   });
 
   it("archives an owned schedule", async () => {
-    schedule.findFirst.mockResolvedValue({ id: "s1", userId: "u1" } as never);
+    schedule.findFirst.mockResolvedValue({ id: "s1", householdId: "h1" } as never);
     const r = await deleteScheduleAction("s1");
     expect(r).toEqual({ ok: true });
     expect(schedule.update).toHaveBeenCalledWith({
@@ -326,9 +326,9 @@ describe("deleteScheduleAction", () => {
   });
 
   it("scopes the ownership check to the schedule id and the current user", async () => {
-    schedule.findFirst.mockResolvedValue({ id: "s1", userId: "u1" } as never);
+    schedule.findFirst.mockResolvedValue({ id: "s1", householdId: "h1" } as never);
     await deleteScheduleAction("s1");
-    expect(schedule.findFirst).toHaveBeenCalledWith({ where: { id: "s1", userId: "u1" } });
+    expect(schedule.findFirst).toHaveBeenCalledWith({ where: { id: "s1", householdId: "h1" } });
   });
 });
 
@@ -367,8 +367,8 @@ describe("saveYtdContributionsAction", () => {
     expect(ytd.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          userId_year_financialAccountId_source: {
-            userId: "u1",
+          householdId_year_financialAccountId_source: {
+            householdId: "h1",
             year: 2026,
             financialAccountId: "a1",
             source: "EMPLOYEE_PRETAX",
@@ -386,7 +386,7 @@ describe("saveYtdContributionsAction", () => {
     expect(r).toEqual({ ok: true });
     expect(ytd.upsert).not.toHaveBeenCalled();
     expect(ytd.deleteMany).toHaveBeenCalledWith({
-      where: { userId: "u1", year: 2026, financialAccountId: "a1", source: "EMPLOYEE_ROTH" },
+      where: { householdId: "h1", year: 2026, financialAccountId: "a1", source: "EMPLOYEE_ROTH" },
     });
   });
 
@@ -417,7 +417,7 @@ describe("clearYtdContributionsAction", () => {
   it("deletes every total for the year, scoped to the current user", async () => {
     const r = await clearYtdContributionsAction(2026);
     expect(r).toEqual({ ok: true });
-    expect(ytd.deleteMany).toHaveBeenCalledWith({ where: { userId: "u1", year: 2026 } });
+    expect(ytd.deleteMany).toHaveBeenCalledWith({ where: { householdId: "h1", year: 2026 } });
   });
 
   it("short-circuits in demo mode", async () => {

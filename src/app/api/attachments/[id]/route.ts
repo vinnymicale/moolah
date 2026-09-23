@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { householdForRoute } from "@/lib/household";
 import { isDemoMode } from "@/lib/demo-guard";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/attachments/:id - stream the file inline, scoped to the session user.
+// GET /api/attachments/:id - stream the file inline, scoped to the household.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  let userId: string;
-  try {
-    ({ userId } = await requireUser());
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
   const { id } = await params;
-  const att = await prisma.attachment.findFirst({ where: { id, userId } });
+  const att = await prisma.attachment.findFirst({ where: { id, householdId: ctx.householdId } });
   if (!att) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   // filename lands inside a quoted header value; strip quotes/backslashes so
@@ -33,17 +29,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
 }
 
-// DELETE /api/attachments/:id - remove one attachment, scoped to the session user.
+// DELETE /api/attachments/:id - remove one attachment, scoped to the household.
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  let userId: string;
-  try {
-    ({ userId } = await requireUser());
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
   if (isDemoMode()) return NextResponse.json({ ok: true });
   const { id } = await params;
-  const { count } = await prisma.attachment.deleteMany({ where: { id, userId } });
+  const { count } = await prisma.attachment.deleteMany({ where: { id, householdId: ctx.householdId } });
   if (count === 0) return NextResponse.json({ error: "Not found." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

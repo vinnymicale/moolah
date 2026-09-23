@@ -27,7 +27,7 @@ function isUniqueViolation(err: unknown): boolean {
 /** Evaluate matching rules, insert inbox rows, and deliver to channels.
  *  Per-rule error isolation, dedupe skip on P2002, and delivery failures that
  *  never block the inbox row. */
-export async function runRules(userId: string, opts: RunOptions): Promise<RunSummary> {
+export async function runRules(userId: string, householdId: string, opts: RunOptions): Promise<RunSummary> {
   const rules = await prisma.notificationRule.findMany({
     where: opts.ruleId ? { id: opts.ruleId, userId } : { userId, enabled: true },
     include: { channel: true },
@@ -45,7 +45,7 @@ export async function runRules(userId: string, opts: RunOptions): Promise<RunSum
     let events: TriggerEvent[];
     try {
       const params = def.paramsSchema.parse(JSON.parse(rule.params)) as Record<string, unknown>;
-      events = await def.evaluate({ userId, params, todayISO, now, event: opts.event });
+      events = await def.evaluate({ userId, householdId, params, todayISO, now, event: opts.event });
     } catch (err) {
       console.error(`notification rule ${rule.id} (${rule.trigger}) failed to evaluate:`, err);
       continue;

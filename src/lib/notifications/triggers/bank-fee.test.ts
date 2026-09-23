@@ -8,7 +8,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const ctx = (over: Partial<TriggerContext> = {}): TriggerContext => ({
-  userId: "u1", params: { keywords: "atm fee,overdraft,interest" }, todayISO: "2026-07-09",
+  userId: "u1", householdId: "h1", params: { keywords: "atm fee,overdraft,interest" }, todayISO: "2026-07-09",
   now: new Date("2026-07-09T12:00:00Z"), ...over,
 });
 const syncEvent = (ids: string[]) => ({ kind: "plaid-sync" as const, newTransactionIds: ids });

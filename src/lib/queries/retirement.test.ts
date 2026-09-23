@@ -33,7 +33,7 @@ const TODAY = "2026-01-01";
 
 const planRow = {
   id: "p1",
-  userId: "u1",
+  householdId: "u1",
   birthYear: 1990,
   targetRetirementAge: 65,
   expectedReturn: "7",
@@ -189,7 +189,7 @@ describe("getRetirementPageData", () => {
       ] as never);
       match.findFirst.mockResolvedValue({
         id: "m1",
-        userId: "u1",
+        householdId: "u1",
         financialAccountId: "a1",
         tiers: [{ matchPercent: 100, upToPercentOfSalary: 6 }],
         annualCap: null,
@@ -320,7 +320,7 @@ describe("getRetirementPageData", () => {
     ] as never);
     match.findFirst.mockResolvedValue({
       id: "m1",
-      userId: "u1",
+      householdId: "u1",
       financialAccountId: "a1",
       tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
       annualCap: null,
@@ -365,7 +365,7 @@ describe("getRetirementPageData", () => {
     ] as never);
     match.findFirst.mockResolvedValue({
       id: "m1",
-      userId: "u1",
+      householdId: "u1",
       financialAccountId: "a1",
       tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
       annualCap: null,
@@ -402,7 +402,7 @@ describe("getRetirementPageData", () => {
     ] as never);
     match.findFirst.mockResolvedValue({
       id: "m1",
-      userId: "u1",
+      householdId: "u1",
       financialAccountId: "a1",
       tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }],
       annualCap: null,

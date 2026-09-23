@@ -57,7 +57,7 @@ function plaidAccount(over: Record<string, unknown> = {}) {
 
 const ARGS = {
   plaidItemRowId: "item_row_1",
-  userId: "u1",
+  householdId: "h1",
   institutionName: "Some Bank",
 };
 
@@ -82,7 +82,7 @@ describe("syncPlaidAccounts", () => {
     expect(prisma.financialAccount.create).toHaveBeenCalledTimes(1);
     const created = vi.mocked(prisma.financialAccount.create).mock.calls[0][0].data;
     expect(created).toMatchObject({
-      userId: "u1",
+      householdId: "h1",
       name: "Everyday Checking",
       type: "CHECKING",
       institution: "Some Bank",

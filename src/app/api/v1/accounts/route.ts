@@ -1,16 +1,16 @@
 // GET /api/v1/accounts — all non-archived accounts with balances.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
+import { requireApiHousehold, apiJson, readOnlyMethods } from "../_auth";
 import { getAccounts } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const auth = await requireApiUser(req);
+  const auth = await requireApiHousehold(req);
   if (!auth.ok) return auth.response;
 
-  const accounts = await getAccounts(auth.userId);
+  const accounts = await getAccounts(auth.householdId);
   return apiJson({
     accounts: accounts.map((a) => ({
       id: a.id,

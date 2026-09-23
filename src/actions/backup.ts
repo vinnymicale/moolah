@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { getHouseholdContext } from "@/lib/household";
+import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/demo-guard";
 import { encryptSecret } from "@/lib/crypto";
@@ -15,6 +16,19 @@ const DESTINATIONS = ["local", "dropbox", "gdrive"];
 // blank form doesn't overwrite a stored connection with an empty blob.
 function hasValues(creds: Record<string, string | undefined>): boolean {
   return Object.values(creds).some((v) => typeof v === "string" && v.trim() !== "");
+}
+
+/**
+ * A backup covers the whole household ledger, so only an admin may configure or
+ * run one. Returns the household id, or an error result the settings form can
+ * show as-is.
+ */
+async function requireAdmin() {
+  const { userId } = await requireUser();
+  const ctx = await getHouseholdContext(userId);
+  if (!ctx) return { ok: false as const, error: "You don't belong to a household." };
+  if (!ctx.isAdmin) return { ok: false as const, error: "Only a household admin can do that." };
+  return { householdId: ctx.householdId };
 }
 
 export interface BackupConfigInput {
@@ -35,8 +49,8 @@ export interface BackupConfigInput {
 
 export async function saveBackupConfigAction(input: BackupConfigInput) {
   if (isDemoMode()) return { ok: true as const };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  const admin = await requireAdmin();
+  if ("error" in admin) return admin;
 
   if (!DESTINATIONS.includes(input.destination)) {
     return { ok: false as const, error: "Invalid destination." };
@@ -60,7 +74,7 @@ export async function saveBackupConfigAction(input: BackupConfigInput) {
   // with credentials supplied now or ones already stored from a prior save.
   if (input.destination === "gdrive" && input.enabled && !newCredentials) {
     const existing = await prisma.backupConfig.findUnique({
-      where: { userId: session.user.id },
+      where: { householdId: admin.householdId },
       select: { credentials: true },
     });
     if (!existing?.credentials) {
@@ -80,14 +94,14 @@ export async function saveBackupConfigAction(input: BackupConfigInput) {
   };
 
   await prisma.backupConfig.upsert({
-    where: { userId: session.user.id },
-    create: { userId: session.user.id, ...data },
+    where: { householdId: admin.householdId },
+    create: { householdId: admin.householdId, ...data },
     update: data,
   });
 
   // The schedule may have changed; tell the running scheduler to re-read it.
   const { rescheduleUser } = await import("@/lib/backup/scheduler");
-  await rescheduleUser(session.user.id);
+  await rescheduleUser(admin.householdId);
 
   revalidatePath("/settings");
   return { ok: true as const };
@@ -95,11 +109,11 @@ export async function saveBackupConfigAction(input: BackupConfigInput) {
 
 export async function runBackupNowAction() {
   if (isDemoMode()) return { ok: false as const, error: "Not available in demo mode." };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  const admin = await requireAdmin();
+  if ("error" in admin) return admin;
 
   try {
-    const result = await runScheduledBackupForUser(session.user.id);
+    const result = await runScheduledBackupForUser(admin.householdId);
     revalidatePath("/settings");
     return { ok: true as const, name: result.name, pruned: result.pruned.length };
   } catch (e) {
@@ -114,12 +128,12 @@ export async function runBackupNowAction() {
 // shouldn't overwrite a "gdrive failed" message the user still needs to see.
 export async function runLocalBackupNowAction() {
   if (isDemoMode()) return { ok: false as const, error: "Not available in demo mode." };
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false as const, error: "Not signed in." };
+  const admin = await requireAdmin();
+  if ("error" in admin) return admin;
 
   try {
     const config = await prisma.backupConfig.findUnique({
-      where: { userId: session.user.id },
+      where: { householdId: admin.householdId },
       select: { keepCount: true },
     });
     const result = await performBackup(new LocalDestination(), config?.keepCount ?? 7);

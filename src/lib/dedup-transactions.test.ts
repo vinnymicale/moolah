@@ -61,7 +61,7 @@ describe("scanDuplicateTransactions", () => {
       row({ id: "new", createdAt: "2026-06-25T00:00:00Z" }),
     ] as never);
 
-    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+    const { groups, removableCount } = await scanDuplicateTransactions("h1");
 
     expect(removableCount).toBe(1);
     expect(groups).toHaveLength(1);
@@ -78,7 +78,7 @@ describe("scanDuplicateTransactions", () => {
       row({ id: "e", date: "2026-05-31", createdAt: "2026-06-05T00:00:00Z" }),
     ] as never);
 
-    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+    const { groups, removableCount } = await scanDuplicateTransactions("h1");
 
     expect(removableCount).toBe(0);
     expect(groups).toHaveLength(0);
@@ -91,7 +91,7 @@ describe("scanDuplicateTransactions", () => {
       row({ id: "3", createdAt: "2026-06-03T00:00:00Z" }),
     ] as never);
 
-    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+    const { groups, removableCount } = await scanDuplicateTransactions("h1");
 
     expect(removableCount).toBe(2);
     expect(groups[0].keepId).toBe("1");
@@ -100,10 +100,10 @@ describe("scanDuplicateTransactions", () => {
 
   it("only scans the user's non-deleted, plaid-sourced rows", async () => {
     findMany.mockResolvedValueOnce([] as never);
-    await scanDuplicateTransactions("u1");
+    await scanDuplicateTransactions("h1");
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: "u1", deletedAt: null, plaidTransactionId: { not: null } },
+        where: { householdId: "h1", deletedAt: null, plaidTransactionId: { not: null } },
         orderBy: { createdAt: "asc" },
       }),
     );
@@ -115,7 +115,7 @@ describe("scanDuplicateTransactions", () => {
       row({ id: "b", createdAt: "2026-06-02T00:00:00Z", dedupIgnored: true }),
     ] as never);
 
-    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+    const { groups, removableCount } = await scanDuplicateTransactions("h1");
 
     expect(removableCount).toBe(0);
     expect(groups).toHaveLength(0);
@@ -128,7 +128,7 @@ describe("scanDuplicateTransactions", () => {
       row({ id: "c", createdAt: "2026-06-03T00:00:00Z" }),
     ] as never);
 
-    const { groups, removableCount } = await scanDuplicateTransactions("u1");
+    const { groups, removableCount } = await scanDuplicateTransactions("h1");
 
     expect(removableCount).toBe(2);
     expect(groups[0].keepId).toBe("a");
@@ -140,17 +140,17 @@ describe("ignoreDuplicateGroup", () => {
   it("flags every row in the group, scoped to the user", async () => {
     updateMany.mockResolvedValueOnce({ count: 2 } as never);
 
-    const n = await ignoreDuplicateGroup("u1", ["keep", "dupe"]);
+    const n = await ignoreDuplicateGroup("h1", ["keep", "dupe"]);
 
     expect(n).toBe(2);
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["keep", "dupe"] }, userId: "u1" },
+      where: { id: { in: ["keep", "dupe"] }, householdId: "h1" },
       data: { dedupIgnored: true },
     });
   });
 
   it("is a no-op with no ids", async () => {
-    expect(await ignoreDuplicateGroup("u1", [])).toBe(0);
+    expect(await ignoreDuplicateGroup("h1", [])).toBe(0);
     expect(updateMany).not.toHaveBeenCalled();
   });
 });
@@ -165,10 +165,10 @@ describe("removeDuplicateTransactions", () => {
     findMany.mockResolvedValueOnce(twoCopies as never);
     deleteMany.mockResolvedValueOnce({ count: 1 } as never);
 
-    const removed = await removeDuplicateTransactions("u1", "hard", ["keep"]);
+    const removed = await removeDuplicateTransactions("h1", "hard", ["keep"]);
 
     expect(removed).toBe(1);
-    expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["drop"] }, userId: "u1" } });
+    expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["drop"] }, householdId: "h1" } });
     expect(updateMany).not.toHaveBeenCalled();
   });
 
@@ -176,12 +176,12 @@ describe("removeDuplicateTransactions", () => {
     findMany.mockResolvedValueOnce(twoCopies as never);
     updateMany.mockResolvedValueOnce({ count: 1 } as never);
 
-    const removed = await removeDuplicateTransactions("u1", "soft", ["keep"]);
+    const removed = await removeDuplicateTransactions("h1", "soft", ["keep"]);
 
     expect(removed).toBe(1);
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: { in: ["drop"] }, userId: "u1", deletedAt: null },
+        where: { id: { in: ["drop"] }, householdId: "h1", deletedAt: null },
         data: expect.objectContaining({ deletedAt: expect.any(Date) }),
       }),
     );
@@ -196,15 +196,15 @@ describe("removeDuplicateTransactions", () => {
     ] as never);
     deleteMany.mockResolvedValueOnce({ count: 1 } as never);
 
-    const removed = await removeDuplicateTransactions("u1", "hard", ["keep2"]);
+    const removed = await removeDuplicateTransactions("h1", "hard", ["keep2"]);
 
     expect(removed).toBe(1);
-    expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["drop2"] }, userId: "u1" } });
+    expect(deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["drop2"] }, householdId: "h1" } });
   });
 
   it("is a no-op when nothing is selected", async () => {
     findMany.mockResolvedValueOnce(twoCopies as never);
-    const removed = await removeDuplicateTransactions("u1", "hard", []);
+    const removed = await removeDuplicateTransactions("h1", "hard", []);
     expect(removed).toBe(0);
     expect(deleteMany).not.toHaveBeenCalled();
     expect(updateMany).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe("removeDuplicateTransactions", () => {
 
   it("is a no-op when there is nothing to remove", async () => {
     findMany.mockResolvedValueOnce([] as never);
-    const removed = await removeDuplicateTransactions("u1", "hard", ["keep"]);
+    const removed = await removeDuplicateTransactions("h1", "hard", ["keep"]);
     expect(removed).toBe(0);
     expect(deleteMany).not.toHaveBeenCalled();
     expect(updateMany).not.toHaveBeenCalled();

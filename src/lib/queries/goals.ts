@@ -13,9 +13,9 @@ export interface SavingsGoalDTO {
   archived: boolean;
 }
 
-export async function getSavingsGoals(userId: string, includeArchived = false): Promise<SavingsGoalDTO[]> {
+export async function getSavingsGoals(householdId: string, includeArchived = false): Promise<SavingsGoalDTO[]> {
   const rows = await prisma.savingsGoal.findMany({
-    where: { userId, ...(includeArchived ? {} : { archived: false }) },
+    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
     orderBy: { createdAt: "asc" },
   });
   return rows.map((g) => ({

@@ -3,7 +3,7 @@
 // historical data is preserved; only the Plaid link is removed.
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
 import { decryptSecret } from "@/lib/crypto";
@@ -12,16 +12,16 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
 
   const { itemId } = await params;
-  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, userId: session.user.id } });
+  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, householdId: ctx.householdId } });
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   try {
     // Tell Plaid to revoke the access token.
-    const plaidClient = await getPlaidClient(session.user.id);
+    const plaidClient = await getPlaidClient(ctx.householdId);
     await plaidClient.itemRemove({ access_token: decryptSecret(item.accessToken) });
   } catch {
     // Non-fatal - the item may already be removed on Plaid's side.

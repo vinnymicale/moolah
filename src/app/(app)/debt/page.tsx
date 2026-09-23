@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getAccounts } from "@/lib/queries";
 import { LIABILITY_TYPES } from "@/lib/account-meta";
 import { PageHeader, EmptyState } from "@/components/ui-bits";
@@ -9,7 +9,7 @@ import { DEMO_ACCOUNTS } from "@/lib/demo-data";
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 export default async function DebtPage() {
-  const accounts = DEMO_MODE ? DEMO_ACCOUNTS : await getAccounts((await requireUser()).userId);
+  const accounts = DEMO_MODE ? DEMO_ACCOUNTS : await getAccounts((await requirePageCapability("VIEW_DEBT")).householdId);
   const debts = accounts.filter((a) => LIABILITY_TYPES.includes(a.type) && a.currentBalance > 0);
   // Amortization only means something for installment debt with a rate and
   // either a recorded payment or a term to derive one from.

@@ -32,7 +32,7 @@ export const budgetThreshold: TriggerDef = {
   async evaluate(ctx) {
     const { percent, categoryId } = ctx.params as { percent: number; categoryId?: string };
     const month = ctx.todayISO.slice(0, 7);
-    const lines = await getBudgetMonth(ctx.userId, ctx.todayISO);
+    const lines = await getBudgetMonth(ctx.householdId, ctx.todayISO);
     return lines
       .filter((l) => l.effectiveLimit > 0 && (l.actual / l.effectiveLimit) * 100 >= percent)
       .filter((l) => !categoryId || l.categoryId === categoryId)

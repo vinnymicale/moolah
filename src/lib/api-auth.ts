@@ -5,14 +5,14 @@
 //
 //   - selector: a non-secret random id. We store it verbatim under a unique
 //     index, so authenticating is an O(1) lookup by selector - no scanning all
-//     users to find a matching hash.
+//     households to find a matching hash.
 //   - verifier: the actual secret. We store only a slow (scrypt) hash of it.
 //     Even though the verifier is full-entropy, hashing it with a KDF means a
 //     leaked DB can't be brute-forced back to a working token, and it keeps
 //     static analysis (CodeQL) from flagging a fast hash on a credential.
 //
 // Per request we do one indexed selector lookup plus exactly one scrypt verify
-// - constant work, independent of the number of users.
+// - constant work, independent of the number of households.
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -41,7 +41,7 @@ export function parseApiToken(raw: string): { selector: string; verifier: string
 
 /**
  * Slow (scrypt) hash of a token's verifier half, stored in
- * User.apiTokenVerifierHash. Format is `salt:derivedKey`, both hex; the salt is
+ * Household.apiTokenVerifierHash. Format is `salt:derivedKey`, both hex; the salt is
  * embedded so verifyApiTokenVerifier is self-contained.
  */
 export function hashApiTokenVerifier(verifier: string): string {
@@ -66,38 +66,38 @@ export function bearerFromHeader(header: string | null): string | null {
   return m ? m[1].trim() : null;
 }
 
-export interface ApiUser {
-  userId: string;
+export interface ApiCaller {
+  householdId: string;
 }
 
 /**
- * Resolve the user for a read-only API request from its Authorization header.
- * Returns null when the header is missing, the token is malformed, or it
- * doesn't match any user.
+ * Resolve the household for a read-only API request from its Authorization
+ * header. Returns null when the header is missing, the token is malformed, or
+ * it doesn't match any household.
  *
  * The selector is looked up under a unique index (O(1)); the verifier is then
  * checked with a slow, constant-time scrypt compare. We always run the verify
- * against either the stored hash or a throwaway one when no user matches, so a
+ * against either the stored hash or a throwaway one when nothing matches, so a
  * valid-but-unknown selector and an invalid verifier take the same time.
  */
-export async function authenticateApiRequest(authHeader: string | null): Promise<ApiUser | null> {
+export async function authenticateApiRequest(authHeader: string | null): Promise<ApiCaller | null> {
   const raw = bearerFromHeader(authHeader);
   if (!raw) return null;
   const parsed = parseApiToken(raw);
   if (!parsed) return null;
 
-  const user = await prisma.user.findUnique({
+  const household = await prisma.household.findUnique({
     where: { apiTokenSelector: parsed.selector },
     select: { id: true, apiTokenVerifierHash: true },
   });
-  const stored = user?.apiTokenVerifierHash ?? DUMMY_VERIFIER_HASH;
+  const stored = household?.apiTokenVerifierHash ?? DUMMY_VERIFIER_HASH;
 
   if (!verifyApiTokenVerifier(parsed.verifier, stored)) return null;
-  return user ? { userId: user.id } : null;
+  return household ? { householdId: household.id } : null;
 }
 
-// Burned on requests whose selector matches no user, so those take the same
-// scrypt time as a real verify instead of returning early.
+// Burned on requests whose selector matches no household, so those take the
+// same scrypt time as a real verify instead of returning early.
 const DUMMY_VERIFIER_HASH = hashApiTokenVerifier(randomBytes(VERIFIER_BYTES).toString("base64url"));
 
 /**

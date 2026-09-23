@@ -27,17 +27,19 @@ describe("startNotificationScheduler", () => {
 describe("sweep", () => {
   it("runs sweep-mode rules once per user with enabled rules", async () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([
-      { userId: "u1" }, { userId: "u2" },
+      { user: { id: "u1", membership: { householdId: "h1" } } },
+      { user: { id: "u2", membership: { householdId: "h2" } } },
     ] as never);
     await sweep();
     expect(runRules).toHaveBeenCalledTimes(2);
-    expect(runRules).toHaveBeenCalledWith("u1", { mode: "sweep" });
-    expect(runRules).toHaveBeenCalledWith("u2", { mode: "sweep" });
+    expect(runRules).toHaveBeenCalledWith("u1", "h1", { mode: "sweep" });
+    expect(runRules).toHaveBeenCalledWith("u2", "h2", { mode: "sweep" });
   });
 
   it("continues past one user's failure", async () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([
-      { userId: "u1" }, { userId: "u2" },
+      { user: { id: "u1", membership: { householdId: "h1" } } },
+      { user: { id: "u2", membership: { householdId: "h2" } } },
     ] as never);
     vi.mocked(runRules).mockRejectedValueOnce(new Error("boom"));
     await sweep();

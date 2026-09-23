@@ -34,7 +34,7 @@ export const recurringPriceChange: TriggerDef = {
     const txns = await prisma.transaction.findMany({
       where: {
         id: { in: ctx.event.newTransactionIds },
-        userId: ctx.userId,
+        householdId: ctx.householdId,
         deletedAt: null,
         recurringRuleId: { not: null },
       },

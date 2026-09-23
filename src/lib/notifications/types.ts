@@ -41,7 +41,10 @@ export interface NotificationEventPayload {
 }
 
 export interface TriggerContext {
+  /** Whose rule fired. Notification rows and channels belong to this user. */
   userId: string;
+  /** The ledger to query. Everything financial is household-scoped. */
+  householdId: string;
   /** Already validated against the trigger's paramsSchema. */
   params: Record<string, unknown>;
   todayISO: string;

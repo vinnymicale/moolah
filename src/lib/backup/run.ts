@@ -49,12 +49,12 @@ export async function performBackup(
  * outcome on the config row (lastRunAt/lastStatus/lastError/lastBackupName) so
  * the Settings UI can show it. Throws on failure after recording the error.
  */
-export async function runScheduledBackupForUser(userId: string): Promise<BackupRunResult> {
-  const config = await prisma.backupConfig.findUnique({ where: { userId } });
+export async function runScheduledBackupForUser(householdId: string): Promise<BackupRunResult> {
+  const config = await prisma.backupConfig.findUnique({ where: { householdId } });
   if (!config) throw new Error("No backup configuration for this user.");
 
   await prisma.backupConfig.update({
-    where: { userId },
+    where: { householdId },
     data: { lastStatus: "running", lastError: null },
   });
 
@@ -62,7 +62,7 @@ export async function runScheduledBackupForUser(userId: string): Promise<BackupR
     const dest = destinationFor(config);
     const result = await performBackup(dest, config.keepCount);
     await prisma.backupConfig.update({
-      where: { userId },
+      where: { householdId },
       data: {
         lastRunAt: new Date(),
         lastStatus: "success",
@@ -74,7 +74,7 @@ export async function runScheduledBackupForUser(userId: string): Promise<BackupR
   } catch (e) {
     const message = e instanceof Error ? e.message : "Backup failed.";
     await prisma.backupConfig.update({
-      where: { userId },
+      where: { householdId },
       data: { lastRunAt: new Date(), lastStatus: "error", lastError: message },
     });
     throw e;

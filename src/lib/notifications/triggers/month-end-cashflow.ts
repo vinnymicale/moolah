@@ -4,10 +4,10 @@ import { formatUSD, toNumber } from "@/lib/money";
 import { endOfUTCMonth, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import type { TriggerDef } from "../types";
 
-async function sumFor(userId: string, type: "INCOME" | "EXPENSE", start: Date, end: Date): Promise<number> {
+async function sumFor(householdId: string, type: "INCOME" | "EXPENSE", start: Date, end: Date): Promise<number> {
   const agg = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: { userId, deletedAt: null, isTransfer: false, type, date: { gte: start, lte: end } },
+    where: { householdId, deletedAt: null, isTransfer: false, type, date: { gte: start, lte: end } },
   });
   return toNumber(agg._sum.amount ?? 0);
 }
@@ -37,8 +37,8 @@ export const monthEndCashflow: TriggerDef = {
     const monthEnd = endOfUTCMonth(today);
     if (isoDayLocal(today) !== isoDayLocal(monthEnd)) return [];
     const monthStart = startOfUTCMonth(today);
-    const income = await sumFor(ctx.userId, "INCOME", monthStart, monthEnd);
-    const expenses = await sumFor(ctx.userId, "EXPENSE", monthStart, monthEnd);
+    const income = await sumFor(ctx.householdId, "INCOME", monthStart, monthEnd);
+    const expenses = await sumFor(ctx.householdId, "EXPENSE", monthStart, monthEnd);
     const month = ctx.todayISO.slice(0, 7);
     return [
       {

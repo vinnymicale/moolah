@@ -40,7 +40,7 @@ describe("getSpendingAnomalies", () => {
       { id: "groceries", name: "Groceries", color: "#0a0", icon: "cart" },
     ] as never);
 
-    const res = await getSpendingAnomalies("u1", "2026-06");
+    const res = await getSpendingAnomalies("h1", "2026-06");
     expect(res).toHaveLength(1);
     expect(res[0]).toMatchObject({
       categoryId: "groceries",
@@ -62,7 +62,7 @@ describe("getSpendingAnomalies", () => {
       { id: "travel", name: "Travel", color: "#00a", icon: "plane" },
     ] as never);
 
-    const res = await getSpendingAnomalies("u1", "2026-06");
+    const res = await getSpendingAnomalies("h1", "2026-06");
     expect(res).toEqual([]);
   });
 
@@ -77,7 +77,7 @@ describe("getSpendingAnomalies", () => {
     ] as never);
 
     // avg = 10, thisMonth 28 → overPct 180% but overBy only $18 (< $30).
-    const res = await getSpendingAnomalies("u1", "2026-06");
+    const res = await getSpendingAnomalies("h1", "2026-06");
     expect(res).toEqual([]);
   });
 
@@ -103,7 +103,7 @@ describe("getSpendingAnomalies", () => {
       { id: "shopping", name: "Shopping", color: "#a0a", icon: "bag" },
     ] as never);
 
-    const res = await getSpendingAnomalies("u1", "2026-06");
+    const res = await getSpendingAnomalies("h1", "2026-06");
     // Only groceries clears both thresholds ($250 vs avg 100). Shopping at $50
     // vs avg 60 is under, not over.
     expect(res.map((a) => a.categoryId)).toEqual(["groceries"]);
@@ -112,7 +112,7 @@ describe("getSpendingAnomalies", () => {
 
   it("returns [] when there is no spending this month", async () => {
     txnFind.mockResolvedValueOnce([] as never);
-    const res = await getSpendingAnomalies("u1", "2026-06");
+    const res = await getSpendingAnomalies("h1", "2026-06");
     expect(res).toEqual([]);
     // Short-circuits before querying history or categories.
     expect(catFind).not.toHaveBeenCalled();
@@ -125,10 +125,10 @@ describe("soft-delete exclusion", () => {
   // soft-deleted transaction would leak back into balances and totals.
   it("getTransactionsBetween scopes its query to non-deleted rows", async () => {
     txnFind.mockResolvedValueOnce([] as never);
-    await getTransactionsBetween("u1", "2026-06-01", "2026-06-30");
+    await getTransactionsBetween("h1", "2026-06-01", "2026-06-30");
     expect(txnFind).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ userId: "u1", deletedAt: null }),
+        where: expect.objectContaining({ householdId: "h1", deletedAt: null }),
       }),
     );
   });
@@ -136,7 +136,7 @@ describe("soft-delete exclusion", () => {
   it("getSpendingAnomalies excludes deleted rows from every month it sums", async () => {
     // current month + three history months = 4 findMany calls.
     txnFind.mockResolvedValue([] as never);
-    await getSpendingAnomalies("u1", "2026-06");
+    await getSpendingAnomalies("h1", "2026-06");
     for (const call of txnFind.mock.calls) {
       expect(call[0]).toEqual(
         expect.objectContaining({

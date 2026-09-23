@@ -1,6 +1,6 @@
 // Shared gate for /api/v1 routes: authenticate the bearer token and apply a
-// per-token rate limit. Routes call requireApiUser() and either get a userId or
-// an error NextResponse to return as-is.
+// per-token rate limit. Routes call requireApiHousehold() and either get a
+// householdId or an error NextResponse to return as-is.
 
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRequest, rateLimitKeyForToken, bearerFromHeader } from "@/lib/api-auth";
@@ -9,9 +9,9 @@ import { checkRateLimit } from "@/lib/rate-limit";
 const RATE_MAX = 60; // requests
 const RATE_WINDOW_MS = 60_000; // per minute, per token
 
-type AuthOutcome = { ok: true; userId: string } | { ok: false; response: NextResponse };
+type AuthOutcome = { ok: true; householdId: string } | { ok: false; response: NextResponse };
 
-export async function requireApiUser(req: NextRequest): Promise<AuthOutcome> {
+export async function requireApiHousehold(req: NextRequest): Promise<AuthOutcome> {
   const authHeader = req.headers.get("authorization");
 
   // Rate-limit by token hash (falls back to IP-ish header) before hitting the
@@ -35,8 +35,8 @@ export async function requireApiUser(req: NextRequest): Promise<AuthOutcome> {
     };
   }
 
-  const user = await authenticateApiRequest(authHeader);
-  if (!user) {
+  const caller = await authenticateApiRequest(authHeader);
+  if (!caller) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -45,7 +45,7 @@ export async function requireApiUser(req: NextRequest): Promise<AuthOutcome> {
       ),
     };
   }
-  return { ok: true, userId: user.userId };
+  return { ok: true, householdId: caller.householdId };
 }
 
 /** Current API version, surfaced on every response and the discovery root. */

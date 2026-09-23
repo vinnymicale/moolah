@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { parseISODay } from "@/lib/dates";
 import { toNumber } from "@/lib/money";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
@@ -25,11 +25,11 @@ export type GoalInput = z.input<typeof goalSchema>;
 export async function createGoalAction(input: GoalInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = goalSchema.parse(input);
     await prisma.savingsGoal.create({
       data: {
-        userId,
+        householdId,
         name: data.name,
         targetAmount: data.targetAmount,
         currentAmount: data.currentAmount ?? 0,
@@ -45,8 +45,8 @@ export async function createGoalAction(input: GoalInput): Promise<ActionResult> 
 export async function updateGoalAction(id: string, input: GoalInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const existing = await prisma.savingsGoal.findFirst({ where: { id, userId } });
+    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Goal not found");
     const data = goalSchema.parse(input);
     await prisma.savingsGoal.update({
@@ -68,8 +68,8 @@ export async function updateGoalAction(id: string, input: GoalInput): Promise<Ac
 export async function contributeGoalAction(id: string, delta: number): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const goal = await prisma.savingsGoal.findFirst({ where: { id, userId } });
+    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const goal = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
     if (!goal) throw new UserError("Goal not found");
     const amount = z.coerce.number().finite().parse(delta);
     const next = Math.max(0, toNumber(goal.currentAmount) + amount);
@@ -81,8 +81,8 @@ export async function contributeGoalAction(id: string, delta: number): Promise<A
 export async function deleteGoalAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const existing = await prisma.savingsGoal.findFirst({ where: { id, userId } });
+    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Goal not found");
     await prisma.savingsGoal.delete({ where: { id } });
     revalidatePaths();

@@ -23,9 +23,7 @@ import type { AccountDTO, CategoryDTO } from "@/lib/queries";
 
 // The three destinations that earn a spot in the mobile tab bar; everything
 // else lives behind the Menu tab (full drawer).
-const MOBILE_TABS = ["/", "/transactions", "/budgets"]
-  .map((h) => NAV_BY_HREF.get(h))
-  .filter((x): x is NavItem => !!x);
+const MOBILE_TAB_HREFS = ["/", "/transactions", "/budgets"];
 
 function MobileTab({ tab, active }: { tab: NavItem; active: boolean }) {
   const Icon = tab.icon;
@@ -49,6 +47,7 @@ export function AppChrome({
   authBypass = false,
   demoMode = false,
   unreadCount = 0,
+  allowedHrefs,
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -57,6 +56,9 @@ export function AppChrome({
   authBypass?: boolean;
   demoMode?: boolean;
   unreadCount?: number;
+  /** Hrefs this member may open, from the server. Undefined means show everything
+   *  (demo mode, where there is no household to ask). */
+  allowedHrefs?: string[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -120,9 +122,13 @@ export function AppChrome({
     persistOrder(next);
   };
 
+  const isAllowed = (href: string) => !allowedHrefs || allowedHrefs.includes(href);
+  const mobileTabs = MOBILE_TAB_HREFS
+    .map((h) => NAV_BY_HREF.get(h))
+    .filter((x): x is NavItem => !!x && isAllowed(x.href));
   const orderedNav = mergedOrder
     .map((h) => NAV_BY_HREF.get(h))
-    .filter((x): x is NavItem => !!x);
+    .filter((x): x is NavItem => !!x && isAllowed(x.href));
   const customized = mergedOrder.join() !== DEFAULT_ORDER.join();
   const isCollapsed = collapsed;
 
@@ -182,7 +188,7 @@ export function AppChrome({
   // Command-palette entries: jump to any page, or run the same quick actions the
   // sidebar/shortcuts expose. The palette closes itself before calling `run`.
   const commands = useMemo<Command[]>(() => {
-    const nav: Command[] = NAV.map((item) => ({
+    const nav: Command[] = NAV.filter((item) => !allowedHrefs || allowedHrefs.includes(item.href)).map((item) => ({
       id: `nav:${item.href}`,
       label: item.label,
       keywords: `go to open ${item.label}`,
@@ -199,7 +205,7 @@ export function AppChrome({
         : [{ id: "act:chat", label: "Finance assistant", keywords: "chat ai ask bot", icon: Bot, run: () => setChatOpen(true) } as Command]),
     ];
     return [...actions, ...nav];
-  }, [router, demoMode]);
+  }, [router, demoMode, allowedHrefs]);
 
   const sidebarProps = {
     user,
@@ -262,8 +268,8 @@ export function AppChrome({
         className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
         aria-label="Primary"
       >
-        <div className="grid h-16 grid-cols-5 items-center">
-          {MOBILE_TABS.slice(0, 2).map((tab) => (
+        <div className="grid h-16 items-center" style={{ gridTemplateColumns: `repeat(${mobileTabs.length + 2}, minmax(0, 1fr))` }}>
+          {mobileTabs.slice(0, 2).map((tab) => (
             <MobileTab key={tab.href} tab={tab} active={isActive(tab.href)} />
           ))}
           <div className="flex justify-center">
@@ -275,7 +281,7 @@ export function AppChrome({
               <Plus size={24} />
             </button>
           </div>
-          {MOBILE_TABS.slice(2).map((tab) => (
+          {mobileTabs.slice(2).map((tab) => (
             <MobileTab key={tab.href} tab={tab} active={isActive(tab.href)} />
           ))}
           <button

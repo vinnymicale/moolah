@@ -8,7 +8,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const ctx = (over: Partial<TriggerContext> = {}): TriggerContext => ({
-  userId: "u1", params: { days: 3 }, todayISO: "2026-07-09",
+  userId: "u1", householdId: "h1", params: { days: 3 }, todayISO: "2026-07-09",
   now: new Date("2026-07-09T12:00:00Z"), ...over,
 });
 beforeEach(() => vi.clearAllMocks());

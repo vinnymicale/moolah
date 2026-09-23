@@ -181,7 +181,7 @@ export function ccDueIsVisible(
  * "upcoming" panel.
  */
 export async function getUpcoming(
-  userId: string,
+  householdId: string,
   todayISO: string,
   days = 14,
 ): Promise<UpcomingItem[]> {
@@ -190,11 +190,11 @@ export async function getUpcoming(
 
   const items: UpcomingItem[] = [];
 
-  const accounts = await getAccounts(userId);
+  const accounts = await getAccounts(householdId);
   const accountById = new Map(accounts.map((a) => [a.id, a]));
 
   const pending = await prisma.transaction.findMany({
-    where: { userId, deletedAt: null, cleared: false, date: { gte: start, lte: end } },
+    where: { householdId, deletedAt: null, cleared: false, date: { gte: start, lte: end } },
   });
   for (const t of pending) {
     const acct = t.accountId ? accountById.get(t.accountId) : null;
@@ -212,12 +212,12 @@ export async function getUpcoming(
   }
 
   const rules = await prisma.recurringRule.findMany({
-    where: { userId, archived: false },
+    where: { householdId, archived: false },
     include: versionsInclude,
   });
   const materialised = new Set(
     (await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, recurringRuleId: { not: null }, date: { gte: start, lte: end } },
+      where: { householdId, deletedAt: null, recurringRuleId: { not: null }, date: { gte: start, lte: end } },
       select: { recurringRuleId: true, date: true },
     })).map((t) => `${t.recurringRuleId}|${isoDay(t.date)}`),
   );
@@ -247,7 +247,7 @@ export async function getUpcoming(
 }
 
 export async function getCalendarMonth(
-  userId: string,
+  householdId: string,
   monthDateISO: string,
   todayISO: string,
 ): Promise<CalendarMonth> {
@@ -261,7 +261,7 @@ export async function getCalendarMonth(
   const rangeStart = today.getTime() < gridStart.getTime() ? today : gridStart;
   const rangeEnd = today.getTime() > gridEnd.getTime() ? today : gridEnd;
 
-  const accounts = await getAccounts(userId);
+  const accounts = await getAccounts(householdId);
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const anchorBalance = accounts
     .filter((a) => a.includeInCash)
@@ -269,7 +269,7 @@ export async function getCalendarMonth(
 
   // Concrete transactions in range.
   const txnRows = await prisma.transaction.findMany({
-    where: { userId, deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
+    where: { householdId, deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
     orderBy: { date: "asc" },
     include: { transferPeer: { select: { account: { select: { type: true } } } } },
   });
@@ -311,7 +311,7 @@ export async function getCalendarMonth(
   }
   // Project recurring rules across the range.
   const rules = await prisma.recurringRule.findMany({
-    where: { userId, archived: false },
+    where: { householdId, archived: false },
     include: versionsInclude,
   });
   for (const rule of rules) {

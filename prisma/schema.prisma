@@ -27,52 +27,26 @@ model User {
   // one. The app layout forces a change before any page renders.
   mustChangePassword Boolean @default(false)
 
-  // AI assistant configuration — user-supplied key, never sent to the browser.
-  aiProvider String? // "anthropic" | "openai" | "gemini"
-  aiApiKey   String?
-  aiModel    String? // Overrides the provider's default model when set.
+  accounts Account[] // OAuth accounts (Auth.js)
+  sessions Session[]
 
-  // Plaid credentials — per-user so each account links banks against their own
-  // Plaid developer account. Secret is encrypted at rest; falls back to the
-  // PLAID_* env vars when unset.
-  plaidClientId String?
-  plaidSecret   String?
-  plaidEnv      String? // "sandbox" | "production"
+  // Notifications stay per-user: the ledger is shared, but who gets told about
+  // it is not.
+  notificationChannels NotificationChannel[]
+  notificationRules    NotificationRule[]
+  notifications        Notification[]
 
-  // Read-only data API token, stored as a selector/verifier pair (shown once at
-  // generation; the raw value is never persisted). The selector is a non-secret
-  // random id used for an O(1) indexed lookup; the verifier half is kept as a
-  // slow (scrypt) hash so a DB dump can't be brute-forced back to a token. Both
-  // null when the user hasn't generated one. apiTokenCreatedAt aids rotation.
-  apiTokenSelector     String?   @unique
-  apiTokenVerifierHash String?
-  apiTokenCreatedAt    DateTime?
+  ownedHouseholds Household[]      @relation("HouseholdOwner")
+  membership      HouseholdMember?
+  auditEntries    AuditLog[]
 
-  accounts              Account[] // OAuth accounts (Auth.js)
-  sessions              Session[]
-  financialAccounts     FinancialAccount[]
-  categories            Category[]
-  transactions          Transaction[]
-  recurring             RecurringRule[]
-  budgets               Budget[]
-  savingsGoals          SavingsGoal[]
-  plaidItems            PlaidItem[]
-  rules                 Rule[]
-  ruleRuns              RuleRun[]
-  backupConfig          BackupConfig?
-  notificationChannels  NotificationChannel[]
-  notificationRules     NotificationRule[]
-  notifications         Notification[]
-  tags                  Tag[]
-  attachments           Attachment[]
-  retirementPlan        RetirementPlan?
-  contributions         Contribution[]
-  contributionSchedules ContributionSchedule[]
-  employerMatches       EmployerMatch[]
-  ytdContributions      YtdContribution[]
-  ownedHouseholds       Household[]            @relation("HouseholdOwner")
-  membership            HouseholdMember?
-  auditEntries          AuditLog[]
+  // Attribution only - "who entered this". Never used to filter a query; the
+  // household owns the row.
+  createdTransactions Transaction[]   @relation("CreatedBy")
+  createdRules        Rule[]          @relation("CreatedBy")
+  createdBudgets      Budget[]        @relation("CreatedBy")
+  createdGoals        SavingsGoal[]   @relation("CreatedBy")
+  createdRecurring    RecurringRule[] @relation("CreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +89,24 @@ model Household {
   owner   User              @relation("HouseholdOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members HouseholdMember[]
   audit   AuditLog[]
+
+  financialAccounts     FinancialAccount[]
+  categories            Category[]
+  transactions          Transaction[]
+  attachments           Attachment[]
+  tags                  Tag[]
+  rules                 Rule[]
+  ruleRuns              RuleRun[]
+  recurring             RecurringRule[]
+  budgets               Budget[]
+  savingsGoals          SavingsGoal[]
+  plaidItems            PlaidItem[]
+  backupConfig          BackupConfig?
+  retirementPlan        RetirementPlan?
+  contributions         Contribution[]
+  contributionSchedules ContributionSchedule[]
+  ytdContributions      YtdContribution[]
+  employerMatches       EmployerMatch[]
 
   @@index([ownerId])
 }
@@ -234,9 +226,9 @@ enum Frequency {
 }
 
 model FinancialAccount {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   name                 String
   type                 AccountType
@@ -284,7 +276,7 @@ model FinancialAccount {
   employerMatch         EmployerMatch?
   ytdContributions      YtdContribution[]
 
-  @@index([userId])
+  @@index([householdId])
 }
 
 model AccountSnapshot {
@@ -302,9 +294,9 @@ model AccountSnapshot {
 }
 
 model Category {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   name     String
   kind     CategoryKind
@@ -321,7 +313,7 @@ model Category {
   budgets      Budget[]
   splits       TransactionSplit[]
 
-  @@index([userId])
+  @@index([householdId])
 }
 
 // User-defined automation. A rule matches a transaction when all of its
@@ -334,9 +326,11 @@ model Category {
 // shapes are heterogeneous and never queried by their inner fields, so child
 // tables would add joins for no benefit. See src/lib/rules.ts for the types.
 model Rule {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   name       String? // optional label; falls back to a generated summary
   enabled    Boolean @default(true)
@@ -347,16 +341,16 @@ model Rule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])
+  @@index([householdId])
 }
 
 // One "Apply to existing" run, kept so it can be undone. Each change row holds
 // the transaction's prior values for exactly the fields that run touched, so an
 // undo restores the before-state rather than guessing at an inverse.
 model RuleRun {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   // Null when the run covered every enabled rule; set when it was one row.
   ruleId String?
@@ -366,7 +360,7 @@ model RuleRun {
 
   changes RuleRunChange[]
 
-  @@index([userId, createdAt])
+  @@index([householdId, createdAt])
 }
 
 model RuleRunChange {
@@ -379,27 +373,29 @@ model RuleRunChange {
   // Prior values. Only the fields the run actually changed are non-null in the
   // corresponding `had*` flag; the flags exist because null is a legitimate
   // prior value for categoryId, description is never null, and so on.
-  hadDescription    Boolean @default(false)
-  prevDescription   String?
-  hadCategory       Boolean @default(false)
-  prevCategoryId    String?
-  hadTransfer       Boolean @default(false)
-  prevIsTransfer    Boolean?
+  hadDescription     Boolean  @default(false)
+  prevDescription    String?
+  hadCategory        Boolean  @default(false)
+  prevCategoryId     String?
+  hadTransfer        Boolean  @default(false)
+  prevIsTransfer     Boolean?
   prevTransferPeerId String?
   // Splits the run created (undo deletes them). Prior splits are never
   // overwritten - a split only applies to a transaction that had none.
-  createdSplits     Boolean @default(false)
+  createdSplits      Boolean  @default(false)
   // Tag ids the run connected, so undo disconnects exactly those.
-  addedTagIds       String[]
+  addedTagIds        String[]
 
   @@index([runId])
   @@index([transactionId])
 }
 
 model Transaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   accountId String?
   account   FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
@@ -455,10 +451,10 @@ model Transaction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId, date])
+  @@index([householdId, date])
   @@index([accountId])
   @@index([categoryId])
-  @@index([userId, deletedAt])
+  @@index([householdId, deletedAt])
 }
 
 // One slice of a split transaction: part of the parent's amount attributed to a
@@ -481,9 +477,9 @@ model TransactionSplit {
 // so the feature works on both Vercel and self-host, and rides along with the
 // whole-schema backup dump.
 model Attachment {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   transactionId String
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
@@ -496,7 +492,7 @@ model Attachment {
   createdAt DateTime @default(now())
 
   @@index([transactionId])
-  @@index([userId])
+  @@index([householdId])
 }
 
 // A recurring series. Holds only what never changes over the life of the series:
@@ -504,9 +500,11 @@ model Attachment {
 // category, account - lives on RecurringRuleVersion, so editing a rule going
 // forward leaves what past months looked like intact.
 model RecurringRule {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   // Stays on the rule rather than the version: it is the identity users match
   // on, and both the suggestion detector's dedup and the Plaid matcher key off
@@ -520,7 +518,7 @@ model RecurringRule {
   versions     RecurringRuleVersion[]
   transactions Transaction[]
 
-  @@index([userId])
+  @@index([householdId])
 }
 
 // The rule as it stood from effectiveFrom onward. A rule always has at least
@@ -560,9 +558,11 @@ model RecurringRuleVersion {
 }
 
 model Budget {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -573,14 +573,16 @@ model Budget {
   // Carry last month's leftover (or overspend) into this month's effective limit.
   rollover Boolean  @default(false)
 
-  @@unique([userId, categoryId, month])
-  @@index([userId])
+  @@unique([householdId, categoryId, month])
+  @@index([householdId])
 }
 
 model SavingsGoal {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   name          String
   targetAmount  Decimal   @db.Decimal(14, 2)
@@ -593,15 +595,15 @@ model SavingsGoal {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  @@index([userId])
+  @@index([householdId])
 }
 
 // ── Plaid bank connections ────────────────────────────────────────────────────
 
 model PlaidItem {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   // The Plaid access token is server-side only — never exposed to the browser.
   accessToken     String
@@ -619,7 +621,7 @@ model PlaidItem {
 
   linkedAccounts PlaidLinkedAccount[]
 
-  @@index([userId])
+  @@index([householdId])
 }
 
 model PlaidLinkedAccount {
@@ -656,9 +658,9 @@ model PlaidLinkedAccount {
 // destination credentials (OAuth refresh token, folder path/id) are stored
 // encrypted with ENCRYPTION_KEY in the same format as Plaid/AI secrets.
 model BackupConfig {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String    @unique
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   enabled     Boolean @default(false)
   // Where backups are written: "local" | "dropbox" | "gdrive".
@@ -750,9 +752,9 @@ model Notification {
 }
 
 model Tag {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   name      String
   color     String   @default("#64748b")
@@ -760,8 +762,8 @@ model Tag {
 
   transactions Transaction[]
 
-  @@unique([userId, name])
-  @@index([userId])
+  @@unique([householdId, name])
+  @@index([householdId])
 }
 
 // ── Retirement planning ───────────────────────────────────────────────────────
@@ -798,21 +800,21 @@ enum ContributionBasis {
 // afterwards. completedAt distinguishes "wizard never run" (null) from "run and
 // saved", which is what gates the wizard on /retirement.
 model RetirementPlan {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String    @unique
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   birthYear                     Int
-  targetRetirementAge           Int     @default(65)
+  targetRetirementAge           Int          @default(65)
   // Percentages are stored human-readable: 7.0 means 7%.
-  expectedReturn                Decimal @default(7.0) @db.Decimal(6, 3)
-  inflationRate                 Decimal @default(3.0) @db.Decimal(6, 3)
-  incomeReplacementRatio        Decimal @default(80.0) @db.Decimal(6, 3)
-  safeWithdrawalRate            Decimal @default(4.0) @db.Decimal(6, 3)
-  expectedSocialSecurityMonthly Decimal @default(0) @db.Decimal(14, 2)
-  currentAnnualSalary           Decimal @default(0) @db.Decimal(14, 2)
+  expectedReturn                Decimal      @default(7.0) @db.Decimal(6, 3)
+  inflationRate                 Decimal      @default(3.0) @db.Decimal(6, 3)
+  incomeReplacementRatio        Decimal      @default(80.0) @db.Decimal(6, 3)
+  safeWithdrawalRate            Decimal      @default(4.0) @db.Decimal(6, 3)
+  expectedSocialSecurityMonthly Decimal      @default(0) @db.Decimal(14, 2)
+  currentAnnualSalary           Decimal      @default(0) @db.Decimal(14, 2)
   // Real (above-inflation) annual salary growth. 0 means raises track inflation.
-  salaryGrowthRate              Decimal @default(0) @db.Decimal(6, 3)
+  salaryGrowthRate              Decimal      @default(0) @db.Decimal(6, 3)
   // Drives the marginal-bracket estimate behind the traditional-vs-Roth advice.
   filingStatus                  FilingStatus @default(SINGLE)
 
@@ -829,9 +831,9 @@ model RetirementPlan {
 // money once instead of twice; @unique stops two contributions claiming one
 // transaction.
 model Contribution {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   financialAccountId String
   financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
@@ -858,7 +860,7 @@ model Contribution {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId, date])
+  @@index([householdId, date])
   @@index([financialAccountId])
   @@index([scheduleId])
 }
@@ -871,9 +873,9 @@ model Contribution {
 // any tracked account - it would show up as a phantom expense. The recurrence
 // math is shared via expandOccurrences(); only the storage is separate.
 model ContributionSchedule {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   financialAccountId String
   financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
@@ -899,7 +901,7 @@ model ContributionSchedule {
 
   contributions Contribution[]
 
-  @@index([userId])
+  @@index([householdId])
   @@index([financialAccountId])
 }
 
@@ -911,9 +913,9 @@ model ContributionSchedule {
 // Overriding rather than adding avoids double-counting a deposit that was both
 // logged individually and included in the statement total.
 model YtdContribution {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   financialAccountId String
   financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
@@ -925,8 +927,8 @@ model YtdContribution {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, year, financialAccountId, source])
-  @@index([userId, year])
+  @@unique([householdId, year, financialAccountId, source])
+  @@index([householdId, year])
   @@index([financialAccountId])
 }
 
@@ -936,9 +938,9 @@ model YtdContribution {
 // inner fields, so a child table would add joins for no benefit.
 // See MatchTier in src/lib/retirement-types.ts.
 model EmployerMatch {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   financialAccountId String           @unique
   financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
@@ -949,5 +951,5 @@ model EmployerMatch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])
+  @@index([householdId])
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { parseISODay, isoDay } from "@/lib/dates";
 import { toCents } from "@/lib/money";
 import { expandVersioned } from "@/lib/recurrence";
@@ -50,7 +50,7 @@ export async function analyzeImportAction(
   rowsInput: ParsedRowInput[],
 ): Promise<{ ok: true; rows: AnalyzedRow[] } | { ok: false; error: string }> {
   try {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
     const rows = z.array(parsedRowSchema).max(5000).parse(rowsInput);
     if (rows.length === 0) return { ok: true, rows: [] };
 
@@ -63,7 +63,7 @@ export async function analyzeImportAction(
     // Existing concrete transactions in range, counted as a multiset so we only
     // flag as many CSV rows as there are real matches.
     const existing = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
+      where: { householdId, deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
       select: { type: true, date: true, amount: true },
     });
     const existingCounts = new Map<string, number>();
@@ -75,7 +75,7 @@ export async function analyzeImportAction(
     // Projected recurring occurrences in range (a rule yields at most one per
     // day, so a set is enough).
     const recurringRules = await prisma.recurringRule.findMany({
-      where: { userId, archived: false },
+      where: { householdId, archived: false },
       include: versionsInclude,
     });
     const recurringKeys = new Set<string>();
@@ -87,14 +87,14 @@ export async function analyzeImportAction(
 
     // Category lookup by (name, kind).
     const categories = await prisma.category.findMany({
-      where: { userId },
+      where: { householdId },
       select: { id: true, name: true, kind: true },
     });
     const catByName = new Map(categories.map((c) => [`${c.kind}|${c.name.toLowerCase()}`, c.id]));
 
     // User-defined rules beat the built-in keyword guesser. The import account
     // isn't chosen until commit, so account-scoped conditions can't fire here.
-    const ruleRows = await prisma.rule.findMany({ where: { userId }, orderBy: { priority: "asc" } });
+    const ruleRows = await prisma.rule.findMany({ where: { householdId }, orderBy: { priority: "asc" } });
     const rules: RuleLike[] = ruleRows.map((rl) => ({
       id: rl.id,
       priority: rl.priority,
@@ -157,11 +157,11 @@ export type CommitImportInput = z.input<typeof commitSchema>;
 export async function commitImportAction(input: CommitImportInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { userId, householdId } = await requireCapability("EDIT_TRANSACTIONS");
     const { rows, accountId } = commitSchema.parse(input);
 
     if (accountId) {
-      const acct = await prisma.financialAccount.findFirst({ where: { id: accountId, userId } });
+      const acct = await prisma.financialAccount.findFirst({ where: { id: accountId, householdId } });
       if (!acct) throw new UserError("Account not found");
     }
 
@@ -169,19 +169,19 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
     const provided = [...new Set(rows.map((r) => r.categoryId).filter((c): c is string => !!c))];
     const validCatIds = new Set(
       provided.length
-        ? (await prisma.category.findMany({ where: { userId, id: { in: provided } }, select: { id: true } })).map((c) => c.id)
+        ? (await prisma.category.findMany({ where: { householdId, id: { in: provided } }, select: { id: true } })).map((c) => c.id)
         : [],
     );
 
     const providedTags = [...new Set(rows.flatMap((r) => r.tagIds ?? []))];
     const validTagIds = new Set(
       providedTags.length
-        ? (await prisma.tag.findMany({ where: { userId, id: { in: providedTags } }, select: { id: true } })).map((t) => t.id)
+        ? (await prisma.tag.findMany({ where: { householdId, id: { in: providedTags } }, select: { id: true } })).map((t) => t.id)
         : [],
     );
 
     const rowData = (r: (typeof rows)[number]) => ({
-      userId,
+      householdId,
       accountId: accountId || null,
       categoryId: r.categoryId && validCatIds.has(r.categoryId) ? r.categoryId : null,
       type: r.type as TxnType,
@@ -210,12 +210,12 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
     }
 
     // Imported CC payments pair up the same way Plaid-synced ones do.
-    await matchTransfers(userId);
+    await matchTransfers(householdId);
 
     // Fire event-mode notification rules with the imported ids. Non-fatal.
     try {
       const { runRules } = await import("@/lib/notifications/engine");
-      await runRules(userId, {
+      await runRules(userId, householdId, {
         mode: "event",
         event: { kind: "csv-import", newTransactionIds: created.map((t) => t.id) },
       });

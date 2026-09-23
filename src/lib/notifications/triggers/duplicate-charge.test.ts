@@ -8,7 +8,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const ctx = (over: Partial<TriggerContext> = {}): TriggerContext => ({
-  userId: "u1", params: { withinDays: 3 }, todayISO: "2026-07-09",
+  userId: "u1", householdId: "h1", params: { withinDays: 3 }, todayISO: "2026-07-09",
   now: new Date("2026-07-09T12:00:00Z"), ...over,
 });
 const syncEvent = (ids: string[]) => ({ kind: "plaid-sync" as const, newTransactionIds: ids });
@@ -29,7 +29,7 @@ describe("duplicate-charge", () => {
     expect(prisma.transaction.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          userId: "u1",
+          householdId: "h1",
           deletedAt: null,
           isTransfer: false,
           dedupIgnored: false,

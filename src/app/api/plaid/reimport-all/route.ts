@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { syncPlaidItem } from "@/lib/plaid-sync";
 
@@ -15,11 +15,11 @@ import { syncPlaidItem } from "@/lib/plaid-sync";
  * re-created. Nothing is duplicated.
  */
 export async function POST() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id;
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
+  const { householdId } = ctx;
 
-  const items = await prisma.plaidItem.findMany({ where: { userId }, select: { id: true } });
+  const items = await prisma.plaidItem.findMany({ where: { householdId }, select: { id: true } });
 
   let synced = 0;
   let failed = 0;
@@ -27,7 +27,7 @@ export async function POST() {
 
   for (const { id } of items) {
     try {
-      const r = await syncPlaidItem(id, userId, { recategorizeOnly: true });
+      const r = await syncPlaidItem(id, householdId, { recategorizeOnly: true });
       synced++;
       totals.added += r.added;
       totals.modified += r.modified;

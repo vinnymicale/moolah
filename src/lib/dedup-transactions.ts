@@ -31,9 +31,9 @@ export type DedupScan = {
  * This is content-based, so it works even when the duplicates carry different
  * plaidTransactionIds (the exact case the cursor-reset re-import produced).
  */
-export async function scanDuplicateTransactions(userId: string): Promise<DedupScan> {
+export async function scanDuplicateTransactions(householdId: string): Promise<DedupScan> {
   const rows = await prisma.transaction.findMany({
-    where: { userId, deletedAt: null, plaidTransactionId: { not: null } },
+    where: { householdId, deletedAt: null, plaidTransactionId: { not: null } },
     select: {
       id: true,
       accountId: true,
@@ -88,10 +88,10 @@ export async function scanDuplicateTransactions(userId: string): Promise<DedupSc
  * because the scan only suppresses a group whose rows are all flagged.
  * `ids` is a group's keepId plus its removeIds.
  */
-export async function ignoreDuplicateGroup(userId: string, ids: string[]): Promise<number> {
+export async function ignoreDuplicateGroup(householdId: string, ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
   const res = await prisma.transaction.updateMany({
-    where: { id: { in: ids }, userId },
+    where: { id: { in: ids }, householdId },
     data: { dedupIgnored: true },
   });
   return res.count;
@@ -105,21 +105,21 @@ export async function ignoreDuplicateGroup(userId: string, ids: string[]): Promi
  * user checked. Returns the number of rows removed.
  */
 export async function removeDuplicateTransactions(
-  userId: string,
+  householdId: string,
   mode: "soft" | "hard",
   keepIds: string[],
 ): Promise<number> {
-  const { groups } = await scanDuplicateTransactions(userId);
+  const { groups } = await scanDuplicateTransactions(householdId);
   const selected = new Set(keepIds);
   const ids = groups.filter((g) => selected.has(g.keepId)).flatMap((g) => g.removeIds);
   if (ids.length === 0) return 0;
 
   if (mode === "hard") {
-    const res = await prisma.transaction.deleteMany({ where: { id: { in: ids }, userId } });
+    const res = await prisma.transaction.deleteMany({ where: { id: { in: ids }, householdId } });
     return res.count;
   }
   const res = await prisma.transaction.updateMany({
-    where: { id: { in: ids }, userId, deletedAt: null },
+    where: { id: { in: ids }, householdId, deletedAt: null },
     data: { deletedAt: new Date() },
   });
   return res.count;

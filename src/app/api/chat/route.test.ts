@@ -9,7 +9,13 @@ vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ decryptSecret: vi.fn((s: string) => `plain:${s}`) }));
-vi.mock("@/lib/prisma", () => ({ prisma: { user: { findUnique: vi.fn() } } }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    user: { findUnique: vi.fn() },
+    household: { findUnique: vi.fn() },
+    householdMember: { findUnique: vi.fn() },
+  },
+}));
 vi.mock("@/lib/chat-writes", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/chat-writes")>()),
   stageWrite: vi.fn(),
@@ -38,6 +44,8 @@ const authMock = vi.mocked(auth);
 const demoMock = vi.mocked(isDemoMode);
 const rateLimit = vi.mocked(checkRateLimit);
 const findUser = vi.mocked(prisma.user.findUnique);
+const findHousehold = vi.mocked(prisma.household.findUnique);
+const findMembership = vi.mocked(prisma.householdMember.findUnique);
 const stage = vi.mocked(stageWrite);
 
 function post(body: unknown): Request {
@@ -80,11 +88,17 @@ beforeEach(() => {
   authMock.mockResolvedValue({ user: { id: "u1" } } as never);
   demoMock.mockReturnValue(false);
   rateLimit.mockReturnValue({ allowed: true, retryAfterSec: 0 } as never);
-  findUser.mockResolvedValue({
-    id: "u1",
-    name: "Vinny",
+  findMembership.mockResolvedValue({
+    householdId: "h1",
+    role: "OWNER",
+    capabilities: [],
+    deniedCapabilities: [],
+  } as never);
+  findUser.mockResolvedValue({ id: "u1", name: "Vinny" } as never);
+  findHousehold.mockResolvedValue({
     aiProvider: "anthropic",
     aiApiKey: "enc",
+    aiModel: null,
   } as never);
 });
 
@@ -112,14 +126,14 @@ describe("POST /api/chat guards", () => {
   });
 
   it("422s when no API key is configured", async () => {
-    findUser.mockResolvedValue({ id: "u1", name: "V", aiProvider: "anthropic", aiApiKey: null } as never);
+    findHousehold.mockResolvedValue({ aiProvider: "anthropic", aiApiKey: null, aiModel: null } as never);
     const res = await POST(post(hello));
     expect(res.status).toBe(422);
     expect((await res.json()).error).toMatch(/Settings/);
   });
 
   it("422s on an unrecognised provider rather than guessing", async () => {
-    findUser.mockResolvedValue({ id: "u1", name: "V", aiProvider: "hal9000", aiApiKey: "enc" } as never);
+    findHousehold.mockResolvedValue({ aiProvider: "hal9000", aiApiKey: "enc", aiModel: null } as never);
     const res = await POST(post(hello));
     expect(res.status).toBe(422);
     expect((await res.json()).error).toBe("Unknown AI provider");
@@ -202,12 +216,12 @@ describe("POST /api/chat tool loop", () => {
     expect(await res.json()).toEqual({ reply: "You spent $12.", staged: [] });
   });
 
-  it("scopes a read tool to the session's user, not anything the model sent", async () => {
+  it("scopes a read tool to the caller's household, not anything the model sent", async () => {
     vi.mocked(queries.getSavingsGoals).mockResolvedValue([] as never);
     queueFetch(okJson(toolUse("get_savings_goals", { userId: "someone-else" })), okJson(endTurn("No goals yet.")));
     const res = await POST(post(hello));
     expect(await res.json()).toEqual({ reply: "No goals yet.", staged: [] });
-    expect(queries.getSavingsGoals).toHaveBeenCalledWith("u1");
+    expect(queries.getSavingsGoals).toHaveBeenCalledWith("h1");
   });
 
   it("hands a staged write back to the client without committing it", async () => {
@@ -216,7 +230,7 @@ describe("POST /api/chat tool loop", () => {
     queueFetch(okJson(toolUse("create_transaction", { amount: 4 })), okJson(endTurn("Ready to save.")));
     const res = await POST(post(hello));
     expect(await res.json()).toEqual({ reply: "Ready to save.", staged: [staged] });
-    expect(stage).toHaveBeenCalledWith("create_transaction", { amount: 4 }, "u1");
+    expect(stage).toHaveBeenCalledWith("create_transaction", { amount: 4 }, "h1");
   });
 
   it("refuses write tools in demo mode without calling stageWrite", async () => {

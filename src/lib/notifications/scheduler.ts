@@ -22,16 +22,20 @@ export async function startNotificationScheduler(): Promise<void> {
 }
 
 export async function sweep(): Promise<void> {
-  const users = await prisma.notificationRule.findMany({
+  // Rules belong to a user, but the data they read belongs to that user's
+  // household, so the membership row supplies the ledger to query.
+  const members = await prisma.notificationRule.findMany({
     where: { enabled: true },
-    select: { userId: true },
+    select: { user: { select: { id: true, membership: { select: { householdId: true } } } } },
     distinct: ["userId"],
   });
-  for (const { userId } of users) {
+  for (const { user } of members) {
+    const householdId = user.membership?.householdId;
+    if (!householdId) continue;
     try {
-      await runRules(userId, { mode: "sweep" });
+      await runRules(user.id, householdId, { mode: "sweep" });
     } catch (e) {
-      console.error(`[notifications] sweep failed for user ${userId}:`, e);
+      console.error(`[notifications] sweep failed for user ${user.id}:`, e);
     }
   }
 }

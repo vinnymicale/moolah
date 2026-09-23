@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { toCents } from "@/lib/money";
@@ -57,7 +57,7 @@ export type RuleInput = z.input<typeof ruleSchema>;
 // Validate that every category/account referenced by the rule belongs to the
 // user, so a rule can't smuggle in another user's ids via the JSON payload.
 async function assertReferencesOwned(
-  userId: string,
+  householdId: string,
   conditions: RuleCondition[],
   actions: RuleAction[],
 ): Promise<void> {
@@ -72,15 +72,15 @@ async function assertReferencesOwned(
   }
 
   if (categoryIds.size > 0) {
-    const found = await prisma.category.count({ where: { userId, id: { in: [...categoryIds] } } });
+    const found = await prisma.category.count({ where: { householdId, id: { in: [...categoryIds] } } });
     if (found !== categoryIds.size) throw new UserError("Category not found");
   }
   if (accountIds.size > 0) {
-    const found = await prisma.financialAccount.count({ where: { userId, id: { in: [...accountIds] } } });
+    const found = await prisma.financialAccount.count({ where: { householdId, id: { in: [...accountIds] } } });
     if (found !== accountIds.size) throw new UserError("Account not found");
   }
   if (tagIds.size > 0) {
-    const found = await prisma.tag.count({ where: { userId, id: { in: [...tagIds] } } });
+    const found = await prisma.tag.count({ where: { householdId, id: { in: [...tagIds] } } });
     if (found !== tagIds.size) throw new UserError("Tag not found");
   }
 }
@@ -90,13 +90,13 @@ async function assertReferencesOwned(
 export async function createRuleAction(input: RuleInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_RULES");
     const data = ruleSchema.parse(input);
-    await assertReferencesOwned(userId, data.conditions, data.actions);
-    const last = await prisma.rule.findFirst({ where: { userId }, orderBy: { priority: "desc" } });
+    await assertReferencesOwned(householdId, data.conditions, data.actions);
+    const last = await prisma.rule.findFirst({ where: { householdId }, orderBy: { priority: "desc" } });
     await prisma.rule.create({
       data: {
-        userId,
+        householdId,
         name: data.name ?? null,
         enabled: data.enabled,
         priority: (last?.priority ?? -1) + 1,
@@ -111,11 +111,11 @@ export async function createRuleAction(input: RuleInput): Promise<ActionResult> 
 export async function updateRuleAction(id: string, input: RuleInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_RULES");
     const data = ruleSchema.parse(input);
-    const existing = await prisma.rule.findFirst({ where: { id, userId } });
+    const existing = await prisma.rule.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Rule not found");
-    await assertReferencesOwned(userId, data.conditions, data.actions);
+    await assertReferencesOwned(householdId, data.conditions, data.actions);
     await prisma.rule.update({
       where: { id },
       data: {
@@ -132,8 +132,8 @@ export async function updateRuleAction(id: string, input: RuleInput): Promise<Ac
 export async function deleteRuleAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const rule = await prisma.rule.findFirst({ where: { id, userId } });
+    const { householdId } = await requireCapability("MANAGE_RULES");
+    const rule = await prisma.rule.findFirst({ where: { id, householdId } });
     if (!rule) throw new UserError("Rule not found");
     await prisma.rule.delete({ where: { id } });
     revalidatePath("/categories");
@@ -143,8 +143,8 @@ export async function deleteRuleAction(id: string): Promise<ActionResult> {
 export async function setRuleEnabledAction(id: string, enabled: boolean): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const { count } = await prisma.rule.updateMany({ where: { id, userId }, data: { enabled } });
+    const { householdId } = await requireCapability("MANAGE_RULES");
+    const { count } = await prisma.rule.updateMany({ where: { id, householdId }, data: { enabled } });
     if (count === 0) throw new UserError("Rule not found");
     revalidatePath("/categories");
   });
@@ -154,8 +154,8 @@ export async function setRuleEnabledAction(id: string, enabled: boolean): Promis
 export async function reorderRulesAction(ids: string[]): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const owned = await prisma.rule.findMany({ where: { userId }, select: { id: true } });
+    const { householdId } = await requireCapability("MANAGE_RULES");
+    const owned = await prisma.rule.findMany({ where: { householdId }, select: { id: true } });
     const ownedIds = new Set(owned.map((r) => r.id));
     if (ids.length !== ownedIds.size || !ids.every((id) => ownedIds.has(id))) {
       // A mismatch means the caller's rule list is stale - another client added or
@@ -180,9 +180,9 @@ const LOOKBACK_DAYS = 365;
 // How many changed rows the preview lists in full. The rest are counted.
 const SAMPLE_LIMIT = 8;
 
-async function loadRules(userId: string, ruleId?: string): Promise<RuleLike[]> {
+async function loadRules(householdId: string, ruleId?: string): Promise<RuleLike[]> {
   const rows = await prisma.rule.findMany({
-    where: { userId, ...(ruleId ? { id: ruleId } : {}) },
+    where: { householdId, ...(ruleId ? { id: ruleId } : {}) },
     orderBy: { priority: "asc" },
   });
   return rows.map((r) => ({
@@ -197,9 +197,9 @@ async function loadRules(userId: string, ruleId?: string): Promise<RuleLike[]> {
 // A single-rule run still has to respect the enabled flag, but a disabled rule
 // the user explicitly asked to run is a no-op rather than an error, matching
 // what "apply all" does with it.
-async function loadRulesForRun(userId: string, ruleId?: string): Promise<RuleLike[]> {
-  if (!ruleId) return loadRules(userId);
-  const rules = await loadRules(userId, ruleId);
+async function loadRulesForRun(householdId: string, ruleId?: string): Promise<RuleLike[]> {
+  if (!ruleId) return loadRules(householdId);
+  const rules = await loadRules(householdId, ruleId);
   if (rules.length === 0) throw new UserError("Rule not found");
   return rules;
 }
@@ -255,15 +255,15 @@ export async function previewRulesAction(ruleId?: string): Promise<RulePreview |
     return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [], moreSamples: 0 };
   }
   try {
-    const { userId } = await requireUser();
-    const rules = await loadRulesForRun(userId, ruleId);
+    const { householdId } = await requireCapability("VIEW_RULES");
+    const rules = await loadRulesForRun(householdId, ruleId);
     if (rules.length === 0) {
       return { ok: true, wouldCategorize: 0, wouldRename: 0, wouldMarkTransfer: 0, wouldSplit: 0, wouldTag: 0, samples: [], moreSamples: 0 };
     }
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
     const txns = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: since } },
+      where: { householdId, deletedAt: null, date: { gte: since } },
       select: {
         description: true,
         date: true,
@@ -281,8 +281,8 @@ export async function previewRulesAction(ruleId?: string): Promise<RulePreview |
     // Names, not just ids: the preview shows what a change reads as, and a rule
     // can point at a category or tag that no longer exists.
     const [liveTags, liveCategories] = await Promise.all([
-      prisma.tag.findMany({ where: { userId }, select: { id: true, name: true } }),
-      prisma.category.findMany({ where: { userId }, select: { id: true, name: true } }),
+      prisma.tag.findMany({ where: { householdId }, select: { id: true, name: true } }),
+      prisma.category.findMany({ where: { householdId }, select: { id: true, name: true } }),
     ]);
     const tagNames = new Map(liveTags.map((t) => [t.id, t.name]));
     const categoryNames = new Map(liveCategories.map((c) => [c.id, c.name]));
@@ -415,13 +415,13 @@ type PriorState = {
 export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | { ok: false; error: string }> {
   if (isDemoMode()) return EMPTY_APPLY;
   try {
-    const { userId } = await requireUser();
-    const rules = await loadRulesForRun(userId, ruleId);
+    const { householdId } = await requireCapability("MANAGE_RULES");
+    const rules = await loadRulesForRun(householdId, ruleId);
     if (rules.length === 0) return EMPTY_APPLY;
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000);
     const txns = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: since } },
+      where: { householdId, deletedAt: null, date: { gte: since } },
       select: {
         id: true,
         description: true,
@@ -437,7 +437,7 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
     });
 
     const liveTagIds = new Set(
-      (await prisma.tag.findMany({ where: { userId }, select: { id: true } })).map((t) => t.id),
+      (await prisma.tag.findMany({ where: { householdId }, select: { id: true } })).map((t) => t.id),
     );
 
     let categorized = 0;
@@ -539,14 +539,14 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
     if (transfersMarked > 0) {
       // Pairing writes transferPeerId on the rows it links. The before-value
       // is already captured in prevTransferPeerId, so undo restores it.
-      await matchTransfers(userId);
+      await matchTransfers(householdId);
     }
 
     let runId: string | undefined;
     if (priors.length > 0) {
       const run = await prisma.ruleRun.create({
         data: {
-          userId,
+          householdId,
           ruleId: ruleId ?? null,
           changes: { create: priors.map(({ transactionId, ...rest }) => ({ transactionId, ...rest })) },
         },
@@ -575,10 +575,10 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
 export async function undoRuleRunAction(runId: string): Promise<ActionResult> {
   return run(async () => {
     if (isDemoMode()) throw new UserError("This is a read-only demo. Changes are disabled.");
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_RULES");
 
     const ruleRun = await prisma.ruleRun.findFirst({
-      where: { id: runId, userId },
+      where: { id: runId, householdId },
       include: { changes: true },
     });
     if (!ruleRun) throw new UserError("That run is no longer available.");
@@ -599,7 +599,7 @@ export async function undoRuleRunAction(runId: string): Promise<ActionResult> {
       // Ownership is checked up front so every write below can address the row
       // by id: a tampered runId can't reach another user's transactions.
       const owned = await prisma.transaction.findFirst({
-        where: { id: c.transactionId, userId },
+        where: { id: c.transactionId, householdId },
         select: { id: true },
       });
       if (!owned) continue;

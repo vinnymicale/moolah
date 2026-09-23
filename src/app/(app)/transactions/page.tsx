@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getAccounts, getCategories, getRecurringRules, getTags, getTransactionsPage, type TransactionsPageDTO } from "@/lib/queries";
 import { addUTCMonths, isoDay, parseISODay } from "@/lib/dates";
 import { PageHeader } from "@/components/ui-bits";
@@ -21,7 +21,7 @@ export default async function TransactionsPage({
   }>;
 }) {
   const params = await searchParams;
-  const userId = DEMO_MODE ? "" : (await requireUser()).userId;
+  const householdId = DEMO_MODE ? "" : (await requirePageCapability("VIEW_TRANSACTIONS")).householdId;
   const todayISO = await userTodayISO();
   const { range, monthISO, startISO, endISO, rangeLabel } = resolveTransactionsRange(params, todayISO);
   const monthFirst = parseISODay(monthISO);
@@ -30,7 +30,7 @@ export default async function TransactionsPage({
   // so the filter would otherwise drop options that have matching rows.
   const [accounts, categories, tags, recurring] = DEMO_MODE
     ? [DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TAGS, DEMO_RECURRING]
-    : await Promise.all([getAccounts(userId), getCategories(userId), getTags(userId), getRecurringRules(userId, true)]);
+    : await Promise.all([getAccounts(householdId), getCategories(householdId), getTags(householdId), getRecurringRules(householdId, true)]);
 
   // Validate id filters from the URL against real rows, keeping only ids that
   // exist (plus the "uncategorized" / "no account" sentinels).
@@ -51,7 +51,7 @@ export default async function TransactionsPage({
     const catNames = new Map(categories.map((c) => [c.id, c.name]));
     txnPage = paginateTransactionDTOs(filterTransactionDTOs(inRange, filters, catNames), page);
   } else {
-    txnPage = await getTransactionsPage(userId, startISO, endISO, filters, page);
+    txnPage = await getTransactionsPage(householdId, startISO, endISO, filters, page);
   }
 
   return (

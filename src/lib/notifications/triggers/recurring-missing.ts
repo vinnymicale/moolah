@@ -33,7 +33,7 @@ export const recurringMissing: TriggerDef = {
     const cutoff = addUTCDays(today, -graceDays);
     const windowStart = addUTCDays(today, -60);
     const rules = await prisma.recurringRule.findMany({
-      where: { userId: ctx.userId, archived: false },
+      where: { householdId: ctx.householdId, archived: false },
       select: { id: true, description: true, versions: { orderBy: { effectiveFrom: "asc" } } },
     });
     const events: TriggerEvent[] = [];
@@ -42,7 +42,7 @@ export const recurringMissing: TriggerDef = {
       if (!expected) continue;
       const matched = await prisma.transaction.findFirst({
         where: {
-          userId: ctx.userId,
+          householdId: ctx.householdId,
           recurringRuleId: rule.id,
           deletedAt: null,
           date: { gte: addUTCDays(expected, -4) },

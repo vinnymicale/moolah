@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -28,7 +28,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { previewRulesAction } from "./rules";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { evaluateRules } from "@/lib/rules";
 
 const rule = vi.mocked(prisma.rule);
@@ -57,7 +57,7 @@ function row(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  vi.mocked(requireUser).mockResolvedValue({ userId: "u1" } as never);
+  vi.mocked(requireCapability).mockResolvedValue({ householdId: "h1" } as never);
   rule.findMany.mockResolvedValue([ENABLED_RULE] as never);
   tag.findMany.mockResolvedValue([{ id: "t1", name: "reimbursable" }] as never);
   category.findMany.mockResolvedValue([
@@ -197,7 +197,7 @@ describe("previewRulesAction", () => {
   });
 
   it("rejects an unauthenticated caller without querying", async () => {
-    vi.mocked(requireUser).mockRejectedValue(new Error("no session"));
+    vi.mocked(requireCapability).mockRejectedValue(new Error("no session"));
     const res = await previewRulesAction();
     expect(res.ok).toBe(false);
     expect(txn.findMany).not.toHaveBeenCalled();

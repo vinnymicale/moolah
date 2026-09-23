@@ -36,7 +36,7 @@ export const bankFee: TriggerDef = {
     const txns = await prisma.transaction.findMany({
       where: {
         id: { in: ctx.event.newTransactionIds },
-        userId: ctx.userId, deletedAt: null, isTransfer: false, type: "EXPENSE",
+        householdId: ctx.householdId, deletedAt: null, isTransfer: false, type: "EXPENSE",
       },
       select: { id: true, description: true, amount: true, account: { select: { name: true } } },
     });

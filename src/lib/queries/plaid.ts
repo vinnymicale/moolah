@@ -23,9 +23,9 @@ export interface PlaidItemDTO {
   linkedAccounts: PlaidLinkedAccountDTO[];
 }
 
-export async function getPlaidItems(userId: string): Promise<PlaidItemDTO[]> {
+export async function getPlaidItems(householdId: string): Promise<PlaidItemDTO[]> {
   const items = await prisma.plaidItem.findMany({
-    where: { userId },
+    where: { householdId },
     include: { linkedAccounts: true },
     orderBy: { createdAt: "asc" },
   });

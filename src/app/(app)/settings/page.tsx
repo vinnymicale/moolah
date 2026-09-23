@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requirePageAdmin } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
@@ -30,30 +30,33 @@ export default async function SettingsPage() {
     );
   }
 
-  const { userId } = await requireUser();
+  const ctx = await requirePageAdmin();
+  const { householdId } = ctx;
 
-  const [user, accounts, categories] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        aiProvider: true,
-        aiModel: true,
-        // Avoid leaking the actual keys to the browser; just signal whether they're set.
-        aiApiKey: true,
-        plaidClientId: true,
-        plaidSecret: true,
-        plaidEnv: true,
-        apiTokenSelector: true,
-        apiTokenCreatedAt: true,
-      },
-    }),
-    getAccounts(userId),
-    getCategories(userId),
+  // Credentials live on the household and are admin-only, so a member without
+  // admin gets the same "not configured" view rather than a peek at the keys.
+  const [household, accounts, categories] = await Promise.all([
+    ctx.isAdmin
+      ? prisma.household.findUnique({
+          where: { id: householdId },
+          select: {
+            aiProvider: true,
+            aiModel: true,
+            // Avoid leaking the actual keys to the browser; just signal whether they're set.
+            aiApiKey: true,
+            plaidClientId: true,
+            plaidSecret: true,
+            plaidEnv: true,
+            apiTokenSelector: true,
+            apiTokenCreatedAt: true,
+          },
+        })
+      : null,
+    getAccounts(householdId),
+    getCategories(householdId),
   ]);
-  if (!user) return null;
 
-  const backupConfig = await prisma.backupConfig.findUnique({ where: { userId } });
+  const backupConfig = await prisma.backupConfig.findUnique({ where: { householdId } });
   const backupProps = {
     enabled: backupConfig?.enabled ?? false,
     destination: backupConfig?.destination ?? "local",
@@ -79,9 +82,9 @@ export default async function SettingsPage() {
           automatically. Sandbox uses fake test banks; Production connects your real banks.
         </p>
         <PlaidConfigForm
-          currentClientId={user.plaidClientId}
-          hasSecret={!!user.plaidSecret}
-          currentEnv={user.plaidEnv}
+          currentClientId={household?.plaidClientId ?? null}
+          hasSecret={!!household?.plaidSecret}
+          currentEnv={household?.plaidEnv ?? null}
           envFallback={envFallback}
         />
       </section>
@@ -138,9 +141,9 @@ export default async function SettingsPage() {
           own database and never shared.
         </p>
         <AiConfigForm
-          currentProvider={user.aiProvider}
-          currentModel={user.aiModel}
-          hasKey={!!user.aiApiKey}
+          currentProvider={household?.aiProvider ?? null}
+          currentModel={household?.aiModel ?? null}
+          hasKey={!!household?.aiApiKey}
         />
       </section>
 
@@ -151,8 +154,8 @@ export default async function SettingsPage() {
           budget status, and upcoming bills over your network. The token grants read-only access.
         </p>
         <ApiTokenForm
-          hasToken={!!user.apiTokenSelector}
-          createdAt={user.apiTokenCreatedAt ? user.apiTokenCreatedAt.toISOString() : null}
+          hasToken={!!household?.apiTokenSelector}
+          createdAt={household?.apiTokenCreatedAt ? household.apiTokenCreatedAt.toISOString() : null}
         />
       </section>
     </div>

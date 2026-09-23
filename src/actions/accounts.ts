@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -55,8 +55,8 @@ function debtFields(type: AccountType, data: z.infer<typeof accountSchema>) {
   };
 }
 
-async function ownedAccount(id: string, userId: string) {
-  const acct = await prisma.financialAccount.findFirst({ where: { id, userId } });
+async function ownedAccount(id: string, householdId: string) {
+  const acct = await prisma.financialAccount.findFirst({ where: { id, householdId } });
   if (!acct) throw new UserError("Account not found");
   return acct;
 }
@@ -64,11 +64,11 @@ async function ownedAccount(id: string, userId: string) {
 export async function createAccountAction(input: AccountInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
     const data = accountSchema.parse(input);
     await prisma.financialAccount.create({
       data: {
-        userId,
+        householdId,
         name: data.name,
         type: data.type,
         institution: data.institution || null,
@@ -88,8 +88,8 @@ export async function createAccountAction(input: AccountInput): Promise<ActionRe
 export async function updateAccountAction(id: string, input: AccountInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await ownedAccount(id, userId);
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
+    await ownedAccount(id, householdId);
     const data = accountSchema.parse(input);
     await prisma.financialAccount.update({
       where: { id },
@@ -127,8 +127,8 @@ export type DebtTermsInput = z.input<typeof debtTermsSchema>;
 export async function updateDebtTermsAction(id: string, input: DebtTermsInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const acct = await ownedAccount(id, userId);
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
+    const acct = await ownedAccount(id, householdId);
     if (isAssetType(acct.type)) throw new UserError("Only debt accounts have payoff terms.");
     const data = debtTermsSchema.parse(input);
     await prisma.financialAccount.update({
@@ -148,8 +148,8 @@ export async function updateDebtTermsAction(id: string, input: DebtTermsInput): 
 export async function archiveAccountAction(id: string, archived = true): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await ownedAccount(id, userId);
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
+    await ownedAccount(id, householdId);
     await prisma.financialAccount.update({ where: { id }, data: { archived } });
     revalidatePath("/accounts");
   });
@@ -158,8 +158,8 @@ export async function archiveAccountAction(id: string, archived = true): Promise
 export async function deleteAccountAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await ownedAccount(id, userId);
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
+    await ownedAccount(id, householdId);
     await prisma.financialAccount.delete({ where: { id } });
     revalidatePath("/accounts");
     revalidatePath("/");
@@ -179,9 +179,9 @@ export type SnapshotInput = z.input<typeof snapshotSchema>;
 export async function addSnapshotAction(input: SnapshotInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
     const data = snapshotSchema.parse(input);
-    await ownedAccount(data.accountId, userId);
+    await ownedAccount(data.accountId, householdId);
     const date = parseISODay(data.date);
     await prisma.accountSnapshot.upsert({
       where: { accountId_date: { accountId: data.accountId, date } },
@@ -203,8 +203,8 @@ export async function addSnapshotAction(input: SnapshotInput): Promise<ActionRes
 export async function deleteSnapshotAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const snap = await prisma.accountSnapshot.findFirst({ where: { id, account: { userId } } });
+    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
+    const snap = await prisma.accountSnapshot.findFirst({ where: { id, account: { householdId } } });
     if (!snap) throw new UserError("Snapshot not found");
     await prisma.accountSnapshot.delete({ where: { id } });
     revalidatePath("/accounts");

@@ -38,15 +38,6 @@ function userRow(passwordHash: string | null) {
     emailVerified: null,
     createdAt: new Date(),
     mustChangePassword: false,
-    aiProvider: null,
-    aiModel: null,
-    aiApiKey: null,
-    plaidClientId: null,
-    plaidSecret: null,
-    plaidEnv: null,
-    apiTokenSelector: null,
-    apiTokenVerifierHash: null,
-    apiTokenCreatedAt: null,
   };
 }
 

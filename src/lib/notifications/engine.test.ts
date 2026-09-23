@@ -46,7 +46,7 @@ describe("runRules", () => {
   it("renders the default template, inserts an inbox row, and delivers to the channel", async () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([rule({ channelId: "ch1", channel })] as never);
     evaluate.mockResolvedValue([{ dedupeKey: "k1", vars: { name: "World" } }]);
-    const summary = await runRules("u1", { mode: "sweep" });
+    const summary = await runRules("u1", "h1", { mode: "sweep" });
     expect(prisma.notification.create).toHaveBeenCalledWith({
       data: {
         userId: "u1", ruleId: "r1", ruleName: "My rule",
@@ -63,7 +63,7 @@ describe("runRules", () => {
       rule({ templateTitle: "Custom {{name}}", templateBody: "B" }),
     ] as never);
     evaluate.mockResolvedValue([{ dedupeKey: "k1", vars: { name: "X" } }]);
-    await runRules("u1", { mode: "sweep" });
+    await runRules("u1", "h1", { mode: "sweep" });
     expect(prisma.notification.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ title: "Custom X", body: "B" }) }),
     );
@@ -73,7 +73,7 @@ describe("runRules", () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([rule()] as never);
     evaluate.mockResolvedValue([{ dedupeKey: "k1", vars: {} }]);
     vi.mocked(prisma.notification.create).mockRejectedValue(Object.assign(new Error("dup"), { code: "P2002" }));
-    const summary = await runRules("u1", { mode: "sweep" });
+    const summary = await runRules("u1", "h1", { mode: "sweep" });
     expect(summary).toEqual({ created: 0, delivered: 0, failed: 0 });
   });
 
@@ -81,7 +81,7 @@ describe("runRules", () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([rule({ channelId: "ch1", channel })] as never);
     evaluate.mockResolvedValue([{ dedupeKey: "k1", vars: { name: "W" } }]);
     vi.mocked(sendDiscord).mockRejectedValue(new Error("404 Not Found"));
-    const summary = await runRules("u1", { mode: "sweep" });
+    const summary = await runRules("u1", "h1", { mode: "sweep" });
     expect(prisma.notification.update).toHaveBeenCalledWith({
       where: { id: "n1" },
       data: { deliveryStatus: "failed", deliveryError: "404 Not Found" },
@@ -94,13 +94,13 @@ describe("runRules", () => {
     evaluate
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce([{ dedupeKey: "k2", vars: { name: "ok" } }]);
-    const summary = await runRules("u1", { mode: "sweep" });
+    const summary = await runRules("u1", "h1", { mode: "sweep" });
     expect(summary.created).toBe(1);
   });
 
   it("skips rules whose trigger doesn't match the mode", async () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([rule()] as never);
-    const summary = await runRules("u1", { mode: "event", event: { kind: "plaid-sync", newTransactionIds: [] } });
+    const summary = await runRules("u1", "h1", { mode: "event", event: { kind: "plaid-sync", newTransactionIds: [] } });
     expect(evaluate).not.toHaveBeenCalled();
     expect(summary).toEqual({ created: 0, delivered: 0, failed: 0 });
   });
@@ -108,7 +108,7 @@ describe("runRules", () => {
   it("test mode synthesizes a sample event and prefixes the dedupe key", async () => {
     vi.mocked(prisma.notificationRule.findMany).mockResolvedValue([rule({ enabled: false })] as never);
     evaluate.mockResolvedValue([]);
-    const summary = await runRules("u1", { mode: "sweep", ruleId: "r1", test: true });
+    const summary = await runRules("u1", "h1", { mode: "sweep", ruleId: "r1", test: true });
     expect(prisma.notificationRule.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "r1", userId: "u1" } }),
     );

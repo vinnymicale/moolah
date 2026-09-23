@@ -1,5 +1,5 @@
 // Action-layer tests for backup.ts. saveBackupConfigAction carries the logic
-// worth covering: the demo/auth guards, input validation (destination, schedule,
+// worth covering: the demo/admin guards, input validation (destination, schedule,
 // keepCount), the "connect Google Drive before enabling it" gate, and the rule
 // that a blank credentials blob never overwrites a stored connection.
 // runBackupNowAction's success and error mapping are covered too. DB, crypto,
@@ -10,8 +10,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
 
-const session = { value: { user: { id: "u1" } } as { user: { id: string } } | null };
-vi.mock("@/auth", () => ({ auth: () => Promise.resolve(session.value) }));
+// Backups are admin-only, so the household context stands in for the session:
+// null means no membership, isAdmin false means an ordinary member.
+const household = { value: { householdId: "h1", isAdmin: true } as { householdId: string; isAdmin: boolean } | null };
+vi.mock("@/lib/household", () => ({ getHouseholdContext: () => Promise.resolve(household.value) }));
+vi.mock("@/lib/session", () => ({ requireUser: () => Promise.resolve({ userId: "u1" }) }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -60,7 +63,7 @@ function baseInput(over: Partial<Parameters<typeof saveBackupConfigAction>[0]> =
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  session.value = { user: { id: "u1" } };
+  household.value = { householdId: "h1", isAdmin: true };
   findUnique.mockResolvedValue(null as never);
   upsert.mockResolvedValue({} as never);
 });
@@ -73,10 +76,10 @@ describe("saveBackupConfigAction", () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  it("fails when not signed in", async () => {
-    session.value = null;
+  it("fails for a non-admin", async () => {
+    household.value = { householdId: "h1", isAdmin: false };
     const res = await saveBackupConfigAction(baseInput());
-    expect(res).toEqual({ ok: false, error: "Not signed in." });
+    expect(res).toEqual({ ok: false, error: "Only a household admin can do that." });
     expect(upsert).not.toHaveBeenCalled();
   });
 
@@ -109,12 +112,12 @@ describe("saveBackupConfigAction", () => {
     );
     expect(res).toEqual({ ok: true });
     const arg = upsert.mock.calls[0][0];
-    expect(arg.where).toEqual({ userId: "u1" });
+    expect(arg.where).toEqual({ householdId: "h1" });
     expect(arg.update.cron).toBe("0 4 * * 1");
     expect(arg.update.enabled).toBe(true);
     // No credentials field written for local.
     expect("credentials" in arg.update).toBe(false);
-    expect(rescheduleUser).toHaveBeenCalledWith("u1");
+    expect(rescheduleUser).toHaveBeenCalledWith("h1");
   });
 
   it("encrypts and stores credentials when supplied", async () => {
@@ -183,9 +186,9 @@ describe("runBackupNowAction", () => {
     expect(runScheduledBackupForUser).not.toHaveBeenCalled();
   });
 
-  it("fails when not signed in", async () => {
-    session.value = null;
-    expect(await runBackupNowAction()).toEqual({ ok: false, error: "Not signed in." });
+  it("fails for a non-admin", async () => {
+    household.value = { householdId: "h1", isAdmin: false };
+    expect(await runBackupNowAction()).toEqual({ ok: false, error: "Only a household admin can do that." });
   });
 
   it("returns the backup name and pruned count on success", async () => {
@@ -217,9 +220,9 @@ describe("runLocalBackupNowAction", () => {
     expect(performBackup).not.toHaveBeenCalled();
   });
 
-  it("fails when not signed in", async () => {
-    session.value = null;
-    expect(await runLocalBackupNowAction()).toEqual({ ok: false, error: "Not signed in." });
+  it("fails for a non-admin", async () => {
+    household.value = { householdId: "h1", isAdmin: false };
+    expect(await runLocalBackupNowAction()).toEqual({ ok: false, error: "Only a household admin can do that." });
   });
 
   it("backs up to a LocalDestination with the configured keepCount", async () => {

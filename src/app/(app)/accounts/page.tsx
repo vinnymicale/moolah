@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getNetWorth, getSnapshots, getPlaidItems } from "@/lib/queries";
 import { formatUSD } from "@/lib/money";
 import { PageHeader, StatCard } from "@/components/ui-bits";
@@ -27,12 +27,12 @@ export default async function AccountsPage() {
     );
   }
 
-  const { userId } = await requireUser();
+  const { householdId } = await requirePageCapability("VIEW_ACCOUNTS");
   const [netWorth, snapshots, plaidItems, hasPlaid] = await Promise.all([
-    getNetWorth(userId, true),
-    getSnapshots(userId),
-    getPlaidItems(userId),
-    hasPlaidConfig(userId),
+    getNetWorth(householdId, true),
+    getSnapshots(householdId),
+    getPlaidItems(householdId),
+    hasPlaidConfig(householdId),
   ]);
 
   return (

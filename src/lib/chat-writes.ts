@@ -144,12 +144,12 @@ function frequencyLabel(frequency: string, interval: number): string {
 export async function stageWrite(
   name: WriteTool,
   args: Record<string, unknown>,
-  userId: string,
+  householdId: string,
 ): Promise<StageOutcome> {
   switch (name) {
     case "create_transaction": {
       const input = createTransactionArgs.parse(args);
-      const [categories, accounts] = await Promise.all([getCategories(userId), getAccounts(userId)]);
+      const [categories, accounts] = await Promise.all([getCategories(householdId), getAccounts(householdId)]);
       const category = matchByName(categories, input.category_name);
       const account = matchByName(accounts, input.account_name);
 
@@ -179,7 +179,7 @@ export async function stageWrite(
 
     case "create_recurring_rule": {
       const input = createRecurringArgs.parse(args);
-      const [categories, accounts] = await Promise.all([getCategories(userId), getAccounts(userId)]);
+      const [categories, accounts] = await Promise.all([getCategories(householdId), getAccounts(householdId)]);
       const category = matchByName(categories, input.category_name);
       const account = matchByName(accounts, input.account_name);
       const interval = input.interval || 1;
@@ -212,7 +212,7 @@ export async function stageWrite(
 
     case "set_budget": {
       const input = setBudgetArgs.parse(args);
-      const categories = await getCategories(userId);
+      const categories = await getCategories(householdId);
       const category = matchByName(categories, input.category_name);
       if (!category) {
         // Nothing to confirm - the model picked a category the user doesn't
@@ -259,17 +259,17 @@ function stagedResult(staged: StagedWrite): string {
 
 /**
  * Perform a previously staged write. Every id in the descriptor is re-checked
- * against this user's own records first: the descriptor came back from the
+ * against this household's own records first: the descriptor came back from the
  * browser, so it is caller-supplied input regardless of how it was produced.
  */
-export async function commitWrite(staged: StagedWrite, userId: string): Promise<string> {
+export async function commitWrite(staged: StagedWrite, householdId: string): Promise<string> {
   const ownsCategory = async (id: string | null) => {
     if (!id) return true;
-    return Boolean(await prisma.category.findFirst({ where: { id, userId }, select: { id: true } }));
+    return Boolean(await prisma.category.findFirst({ where: { id, householdId }, select: { id: true } }));
   };
   const ownsAccount = async (id: string | null) => {
     if (!id) return true;
-    return Boolean(await prisma.account.findFirst({ where: { id, userId }, select: { id: true } }));
+    return Boolean(await prisma.financialAccount.findFirst({ where: { id, householdId }, select: { id: true } }));
   };
 
   switch (staged.tool) {
@@ -280,7 +280,7 @@ export async function commitWrite(staged: StagedWrite, userId: string): Promise<
       }
       await prisma.transaction.create({
         data: {
-          userId,
+          householdId,
           type: p.type,
           amount: p.amount,
           date: new Date(`${p.date}T00:00:00.000Z`),
@@ -302,7 +302,7 @@ export async function commitWrite(staged: StagedWrite, userId: string): Promise<
       const startDate = new Date(`${p.startDate}T00:00:00.000Z`);
       await prisma.recurringRule.create({
         data: {
-          userId,
+          householdId,
           description: p.description,
           versions: {
             create: [{
@@ -330,9 +330,9 @@ export async function commitWrite(staged: StagedWrite, userId: string): Promise<
       const monthDate = new Date(`${p.month}-01T00:00:00.000Z`);
       await prisma.budget.upsert({
         where: {
-          userId_categoryId_month: { userId, categoryId: p.categoryId, month: monthDate },
+          householdId_categoryId_month: { householdId, categoryId: p.categoryId, month: monthDate },
         },
-        create: { userId, categoryId: p.categoryId, month: monthDate, limit: p.limit },
+        create: { householdId, categoryId: p.categoryId, month: monthDate, limit: p.limit },
         update: { limit: p.limit },
       });
       return `Saved budget of ${formatUSD(p.limit)} for ${p.month}.`;

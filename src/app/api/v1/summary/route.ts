@@ -4,7 +4,7 @@
 // Optional ?tz=America/New_York to anchor "today"; defaults to UTC.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
+import { requireApiHousehold, apiJson, readOnlyMethods } from "../_auth";
 import { getNetWorth, getBudgetMonth } from "@/lib/queries";
 import { getUpcoming } from "@/lib/calendar";
 import { todayInZone } from "@/lib/user-tz";
@@ -13,18 +13,18 @@ import { sumMoney } from "@/lib/money";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const auth = await requireApiUser(req);
+  const auth = await requireApiHousehold(req);
   if (!auth.ok) return auth.response;
-  const { userId } = auth;
+  const { householdId } = auth;
 
   const tz = req.nextUrl.searchParams.get("tz") ?? undefined;
   const todayISO = todayInZone(tz);
   const monthISO = `${todayISO.slice(0, 7)}-01`;
 
   const [netWorth, budget, upcoming] = await Promise.all([
-    getNetWorth(userId),
-    getBudgetMonth(userId, monthISO),
-    getUpcoming(userId, todayISO, 14),
+    getNetWorth(householdId),
+    getBudgetMonth(householdId, monthISO),
+    getUpcoming(householdId, todayISO, 14),
   ]);
 
   const budgetTotal = sumMoney(budget.map((b) => b.limit));

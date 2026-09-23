@@ -51,7 +51,7 @@ describe("getSpendingAnomalies", () => {
   it("queries only the caller's cleared, non-transfer expenses for the month", async () => {
     await getSpendingAnomalies("u1", "2026-09");
     const where = db.transaction.findMany.mock.calls[0][0].where;
-    expect(where.userId).toBe("u1");
+    expect(where.householdId).toBe("u1");
     expect(where.deletedAt).toBeNull();
     expect(where.type).toBe("EXPENSE");
     expect(where.cleared).toBe(true);
@@ -178,7 +178,7 @@ describe("getTopMerchants", () => {
   it("queries only the caller's cleared, non-transfer expenses for the month", async () => {
     await getTopMerchants("u1", "2026-09");
     const where = db.transaction.findMany.mock.calls[0][0].where;
-    expect(where.userId).toBe("u1");
+    expect(where.householdId).toBe("u1");
     expect(where.deletedAt).toBeNull();
     expect(where.type).toBe("EXPENSE");
     expect(where.cleared).toBe(true);

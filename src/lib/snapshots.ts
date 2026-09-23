@@ -26,11 +26,11 @@ export interface NetWorthPoint {
  * `todayISO` lets callers pass the user's own calendar day; defaults to UTC.
  */
 export async function captureNetWorthSnapshot(
-  userId: string,
+  householdId: string,
   todayISO: string = isoDay(new Date()),
 ): Promise<{ captured: number }> {
   const accounts = await prisma.financialAccount.findMany({
-    where: { userId, archived: false },
+    where: { householdId, archived: false },
     select: { id: true, currentBalance: true },
   });
   const date = parseISODay(todayISO);
@@ -56,7 +56,7 @@ export async function captureNetWorthSnapshot(
  * before an account's first snapshot simply omit it (it didn't exist yet).
  */
 export async function getNetWorthHistory(
-  userId: string,
+  householdId: string,
   days: number,
   todayISO: string = isoDay(new Date()),
 ): Promise<NetWorthPoint[]> {
@@ -64,7 +64,7 @@ export async function getNetWorthHistory(
   const start = addUTCDays(today, -(days - 1));
 
   const accounts = await prisma.financialAccount.findMany({
-    where: { userId, includeInNetWorth: true, archived: false },
+    where: { householdId, includeInNetWorth: true, archived: false },
     select: { id: true, isAsset: true },
   });
   if (accounts.length === 0) return [];

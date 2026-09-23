@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
 vi.mock("@/lib/prisma", () => ({
@@ -13,7 +13,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import {
   createTagAction,
@@ -23,7 +23,7 @@ import {
   mergeTagsAction,
 } from "./tags";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const tagFindFirst = vi.mocked(prisma.tag.findFirst);
 const tagCreate = vi.mocked(prisma.tag.create);
 const tagUpdate = vi.mocked(prisma.tag.update);
@@ -32,12 +32,12 @@ const txnFindMany = vi.mocked(prisma.transaction.findMany);
 const ruleFindMany = vi.mocked(prisma.rule.findMany);
 const ruleUpdate = vi.mocked(prisma.rule.update);
 
-const owned = { id: "t1", userId: "u1", name: "vacation", color: "#64748b" };
+const owned = { id: "t1", householdId: "h1", name: "vacation", color: "#64748b" };
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
   vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
 });
 
@@ -62,7 +62,7 @@ describe("createTagAction", () => {
     const res = await createTagAction({ name: "  vacation   2026 " });
     expect(res).toEqual({ ok: true, id: "t9", name: "vacation 2026" });
     expect(tagCreate).toHaveBeenCalledWith({
-      data: { userId: "u1", name: "vacation 2026", color: "#64748b" },
+      data: { householdId: "h1", name: "vacation 2026", color: "#64748b" },
       select: { id: true },
     });
   });
@@ -139,7 +139,7 @@ describe("mergeTagsAction", () => {
     expect(res).toEqual({ ok: true });
     // only transactions NOT already carrying the target get connected
     expect(txnFindMany).toHaveBeenCalledWith({
-      where: { userId: "u1", tags: { some: { id: "src" } }, NOT: { tags: { some: { id: "tgt" } } } },
+      where: { householdId: "h1", tags: { some: { id: "src" } }, NOT: { tags: { some: { id: "tgt" } } } },
       select: { id: true },
     });
     expect(tagDelete).toHaveBeenCalledWith({ where: { id: "src" } });

@@ -1,7 +1,10 @@
 import { requireUser } from "@/lib/session";
+import { getHouseholdContext } from "@/lib/household";
+import { redirect } from "next/navigation";
 import { getAccounts, getCategories } from "@/lib/queries";
 import { getUnreadNotificationCount } from "@/lib/queries/notifications";
 import { AppChrome } from "@/components/AppChrome";
+import { allowedNavHrefs } from "@/components/app-nav";
 import { AutoPlaidSync } from "./AutoPlaidSync";
 import { DemoStoreProvider } from "@/components/DemoStore";
 import {
@@ -39,16 +42,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const ctx = await requireUser();
+  const user = await requireUser();
+  // The chrome needs both ids: accounts and categories come from the shared
+  // household ledger, while the notification count is the user's own.
+  const household = await getHouseholdContext(user.userId);
+  if (!household) redirect("/no-household");
   const [accounts, categories, unreadCount] = await Promise.all([
-    getAccounts(ctx.userId),
-    getCategories(ctx.userId),
-    getUnreadNotificationCount(ctx.userId),
+    getAccounts(household.householdId),
+    getCategories(household.householdId),
+    getUnreadNotificationCount(user.userId),
   ]);
 
   return (
     <AppChrome
-      user={{ name: ctx.name, email: ctx.email, image: ctx.image }}
+      user={{ name: user.name, email: user.email, image: user.image }}
+      allowedHrefs={allowedNavHrefs(household.can, household.isAdmin)}
       accounts={accounts}
       categories={categories}
       authBypass={process.env.AUTH_BYPASS === "true"}

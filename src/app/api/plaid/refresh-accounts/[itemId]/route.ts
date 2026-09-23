@@ -8,7 +8,7 @@
 // rather than trusting a single read.
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
 import { syncPlaidAccounts } from "@/lib/plaid-accounts";
@@ -35,8 +35,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
 
   const { itemId } = await params;
   const body = await req.json().catch(() => ({})) as { selectedAccountIds?: unknown };
@@ -44,12 +44,12 @@ export async function POST(
     ? body.selectedAccountIds.filter((id): id is string => typeof id === "string")
     : [];
 
-  // Ensure the item belongs to this user.
-  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, userId: session.user.id } });
+  // Ensure the item belongs to this household.
+  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, householdId: ctx.householdId } });
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   try {
-    const plaidClient = await getPlaidClient(session.user.id);
+    const plaidClient = await getPlaidClient(ctx.householdId);
     const accessToken = decryptSecret(item.accessToken);
 
     // Plaid fetches a newly selected account's data after Link closes, so the
@@ -60,7 +60,7 @@ export async function POST(
       plaidClient,
       accessToken,
       plaidItemRowId: item.id,
-      userId: session.user.id,
+      householdId: ctx.householdId,
       institutionName: item.institutionName,
     });
 
@@ -71,7 +71,7 @@ export async function POST(
         plaidClient,
         accessToken,
         plaidItemRowId: item.id,
-        userId: session.user.id,
+        householdId: ctx.householdId,
         institutionName: item.institutionName,
       });
       result = { added: result.added + retry.added, updated: retry.updated };
@@ -79,7 +79,7 @@ export async function POST(
     }
 
     // Pull transactions so a newly added account isn't left empty.
-    const syncResult = await syncPlaidItem(item.id, session.user.id);
+    const syncResult = await syncPlaidItem(item.id, ctx.householdId);
 
     // syncResult.added counts transactions, result.added counts accounts - keep
     // them apart so the caller's "added N accounts" message stays truthful.

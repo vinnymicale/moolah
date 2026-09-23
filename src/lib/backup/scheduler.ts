@@ -12,15 +12,15 @@ import cron, { type ScheduledTask } from "node-cron";
 import { prisma } from "@/lib/prisma";
 import { runScheduledBackupForUser } from "./run";
 
-// userId -> its live cron task, so we can stop/replace it on reschedule.
+// householdId -> its live cron task, so we can stop/replace it on reschedule.
 const tasks = new Map<string, ScheduledTask>();
 let started = false;
 
-function stopUser(userId: string): void {
-  const existing = tasks.get(userId);
+function stopUser(householdId: string): void {
+  const existing = tasks.get(householdId);
   if (existing) {
     void existing.stop();
-    tasks.delete(userId);
+    tasks.delete(householdId);
   }
 }
 
@@ -29,26 +29,26 @@ function stopUser(userId: string): void {
  * when enabled with a valid cron, stop otherwise. Safe to call repeatedly - it
  * always replaces any existing task for that user.
  */
-export async function rescheduleUser(userId: string): Promise<void> {
-  stopUser(userId);
+export async function rescheduleUser(householdId: string): Promise<void> {
+  stopUser(householdId);
 
-  const config = await prisma.backupConfig.findUnique({ where: { userId } });
+  const config = await prisma.backupConfig.findUnique({ where: { householdId } });
   if (!config || !config.enabled) return;
   if (!cron.validate(config.cron)) {
-    console.warn(`[backup] invalid cron "${config.cron}" for user ${userId}; not scheduling`);
+    console.warn(`[backup] invalid cron "${config.cron}" for user ${householdId}; not scheduling`);
     return;
   }
 
   const task = cron.schedule(config.cron, async () => {
     try {
-      await runScheduledBackupForUser(userId);
+      await runScheduledBackupForUser(householdId);
     } catch (e) {
       // runScheduledBackupForUser already recorded the error on the config row;
       // log so it's visible in server output too. Never throw out of the timer.
-      console.error(`[backup] scheduled run failed for user ${userId}:`, e);
+      console.error(`[backup] scheduled run failed for user ${householdId}:`, e);
     }
   });
-  tasks.set(userId, task);
+  tasks.set(householdId, task);
 }
 
 /**
@@ -71,7 +71,7 @@ export async function startScheduler(): Promise<void> {
   }
 
   for (const config of configs) {
-    await rescheduleUser(config.userId);
+    await rescheduleUser(config.householdId);
   }
   if (tasks.size > 0) {
     console.log(`[backup] scheduled ${tasks.size} backup job(s)`);
