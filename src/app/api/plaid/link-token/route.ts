@@ -1,29 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "@/lib/plaid";
 import { decryptSecret } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { ctx, response } = await householdForRoute("MANAGE_ACCOUNTS");
+  if (response) return response;
 
   // Optional: reconnect an existing item in Plaid update mode.
   const body = await req.json().catch(() => ({})) as { itemId?: string; accountSelection?: boolean };
 
   try {
-    const plaidClient = await getPlaidClient(session.user.id);
+    const plaidClient = await getPlaidClient(ctx.householdId);
     let linkTokenParams: Parameters<typeof plaidClient.linkTokenCreate>[0];
 
     if (body.itemId) {
       // Update mode - re-authenticate an existing connection without creating a new item.
       const item = await prisma.plaidItem.findFirst({
-        where: { id: body.itemId, userId: session.user.id },
+        where: { id: body.itemId, householdId: ctx.householdId },
       });
       if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
       linkTokenParams = {
-        user: { client_user_id: session.user.id },
+        user: { client_user_id: ctx.householdId },
         client_name: "Moolah",
         country_codes: PLAID_COUNTRY_CODES,
         language: "en",
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Fresh link - connect a new bank.
       linkTokenParams = {
-        user: { client_user_id: session.user.id },
+        user: { client_user_id: ctx.householdId },
         client_name: "Moolah",
         products: PLAID_PRODUCTS,
         country_codes: PLAID_COUNTRY_CODES,

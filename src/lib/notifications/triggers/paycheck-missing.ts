@@ -33,7 +33,7 @@ export const paycheckMissing: TriggerDef = {
     const rules = await prisma.recurringRule.findMany({
       // Type is per-version now, so filter on any income version and confirm
       // against the version that actually covers the expected occurrence.
-      where: { userId: ctx.userId, archived: false, versions: { some: { type: "INCOME" } } },
+      where: { householdId: ctx.householdId, archived: false, versions: { some: { type: "INCOME" } } },
       select: { id: true, description: true, versions: { orderBy: { effectiveFrom: "asc" } } },
     });
     const events: TriggerEvent[] = [];
@@ -43,7 +43,7 @@ export const paycheckMissing: TriggerDef = {
       const expected = last.date;
       const matched = await prisma.transaction.findFirst({
         where: {
-          userId: ctx.userId, recurringRuleId: rule.id, deletedAt: null, isTransfer: false,
+          householdId: ctx.householdId, recurringRuleId: rule.id, deletedAt: null, isTransfer: false,
           date: { gte: addUTCDays(expected, -4) },
         },
         select: { id: true },

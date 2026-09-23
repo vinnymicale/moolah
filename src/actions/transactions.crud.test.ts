@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -41,6 +41,7 @@ vi.mock("@/lib/prisma", () => {
     recurringRule: { create: vi.fn(), findFirst: vi.fn() },
     financialAccount: { findFirst: vi.fn() },
     category: { findFirst: vi.fn(), count: vi.fn() },
+    auditLog: { create: vi.fn() },
     $transaction: vi.fn(),
   };
   // Interactive transactions get the same client; array form just awaits all.
@@ -67,9 +68,9 @@ import {
   materializeOccurrenceAction,
 } from "./transactions";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const txn = vi.mocked(prisma.transaction);
 const splitRow = vi.mocked(prisma.transactionSplit);
 const recurring = vi.mocked(prisma.recurringRule);
@@ -86,9 +87,11 @@ const baseInput = {
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
   recurring.create.mockResolvedValue({ id: "rr1" } as never);
   txn.create.mockResolvedValue({ id: "t1" } as never);
+  // updateMany returns a count; the bulk audit entry reports it.
+  txn.updateMany.mockResolvedValue({ count: 1 } as never);
 });
 
 describe("createTransactionAction", () => {
@@ -98,7 +101,7 @@ describe("createTransactionAction", () => {
     expect(result).toEqual({ ok: true, id: "t1" });
     const data = txn.create.mock.calls[0][0].data;
     expect(data).toMatchObject({
-      userId: "u1",
+      householdId: "h1",
       accountId: null,
       categoryId: null,
       type: "EXPENSE",
@@ -121,7 +124,7 @@ describe("createTransactionAction", () => {
     account.findFirst.mockResolvedValue(null);
     const result = await createTransactionAction({ ...baseInput, accountId: "acc-other" });
     expect(result).toEqual({ ok: false, error: "Account not found" });
-    expect(account.findFirst).toHaveBeenCalledWith({ where: { id: "acc-other", userId: "u1" } });
+    expect(account.findFirst).toHaveBeenCalledWith({ where: { id: "acc-other", householdId: "h1" } });
     expect(txn.create).not.toHaveBeenCalled();
   });
 
@@ -130,7 +133,7 @@ describe("createTransactionAction", () => {
     const result = await createTransactionAction({ ...baseInput, categoryId: "cat-income" });
     expect(result).toEqual({ ok: false, error: "Category not found" });
     expect(category.findFirst).toHaveBeenCalledWith({
-      where: { id: "cat-income", userId: "u1", kind: "EXPENSE" },
+      where: { id: "cat-income", householdId: "h1", kind: "EXPENSE" },
     });
   });
 
@@ -143,7 +146,7 @@ describe("createTransactionAction", () => {
     expect(result).toEqual({ ok: true, id: "t1" });
     expect(recurring.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        userId: "u1",
+        householdId: "h1",
         description: "Coffee beans",
         versions: {
           create: [
@@ -234,7 +237,7 @@ describe("trash lifecycle", () => {
     const result = await restoreTransactionAction("t1");
     expect(result).toEqual({ ok: false, error: "Transaction not found" });
     expect(txn.findFirst).toHaveBeenCalledWith({
-      where: { id: "t1", userId: "u1", deletedAt: { not: null } },
+      where: { id: "t1", householdId: "h1", deletedAt: { not: null } },
     });
   });
 
@@ -253,7 +256,7 @@ describe("trash lifecycle", () => {
   it("listDeletedTransactionsAction returns the user's trash", async () => {
     getDeletedMock.mockResolvedValue([{ id: "t1" }]);
     expect(await listDeletedTransactionsAction()).toEqual([{ id: "t1" }]);
-    expect(getDeletedMock).toHaveBeenCalledWith("u1");
+    expect(getDeletedMock).toHaveBeenCalledWith("h1");
   });
 });
 
@@ -261,17 +264,17 @@ describe("duplicate cleanup delegates to the dedup lib with the caller's id", ()
   it("scan", async () => {
     dedup.scan.mockResolvedValue({ groups: [], removableCount: 0 });
     await scanDuplicateTransactionsAction();
-    expect(dedup.scan).toHaveBeenCalledWith("u1");
+    expect(dedup.scan).toHaveBeenCalledWith("h1");
   });
 
   it("remove", async () => {
     expect(await removeDuplicateTransactionsAction("soft", ["k1"])).toEqual({ ok: true });
-    expect(dedup.remove).toHaveBeenCalledWith("u1", "soft", ["k1"]);
+    expect(dedup.remove).toHaveBeenCalledWith("h1", "soft", ["k1"]);
   });
 
   it("ignore", async () => {
     expect(await ignoreDuplicateGroupAction(["a", "b"])).toEqual({ ok: true });
-    expect(dedup.ignore).toHaveBeenCalledWith("u1", ["a", "b"]);
+    expect(dedup.ignore).toHaveBeenCalledWith("h1", ["a", "b"]);
   });
 });
 
@@ -294,10 +297,10 @@ describe("bulk operations", () => {
 
     expect(result).toEqual({ ok: true });
     expect(splitRow.deleteMany).toHaveBeenCalledWith({
-      where: { transaction: { userId: "u1", id: { in: ["t1", "t2"] } } },
+      where: { transaction: { householdId: "h1", id: { in: ["t1", "t2"] } } },
     });
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { userId: "u1", id: { in: ["t1", "t2"] } },
+      where: { householdId: "h1", id: { in: ["t1", "t2"] } },
       data: { categoryId: "cat1" },
     });
   });
@@ -306,7 +309,7 @@ describe("bulk operations", () => {
     expect(await bulkSetCategoryAction(["t1"], null)).toEqual({ ok: true });
     expect(category.findFirst).not.toHaveBeenCalled();
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { userId: "u1", id: { in: ["t1"] } },
+      where: { householdId: "h1", id: { in: ["t1"] } },
       data: { categoryId: null },
     });
   });
@@ -323,7 +326,7 @@ describe("bulk operations", () => {
     account.findFirst.mockResolvedValue({ id: "acc1" } as never);
     expect(await bulkSetAccountAction(["t1"], "acc1")).toEqual({ ok: true });
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { userId: "u1", id: { in: ["t1"] } },
+      where: { householdId: "h1", id: { in: ["t1"] } },
       data: { accountId: "acc1" },
     });
   });
@@ -331,7 +334,7 @@ describe("bulk operations", () => {
   it("bulkSetClearedAction updates the selection", async () => {
     expect(await bulkSetClearedAction(["t1", "t2"], true)).toEqual({ ok: true });
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { userId: "u1", id: { in: ["t1", "t2"] } },
+      where: { householdId: "h1", id: { in: ["t1", "t2"] } },
       data: { cleared: true },
     });
   });
@@ -339,7 +342,7 @@ describe("bulk operations", () => {
   it("bulkDeleteTransactionsAction soft-deletes only rows not already trashed", async () => {
     expect(await bulkDeleteTransactionsAction(["t1"])).toEqual({ ok: true });
     const args = txn.updateMany.mock.calls[0][0];
-    expect(args.where).toEqual({ userId: "u1", id: { in: ["t1"] }, deletedAt: null });
+    expect(args.where).toEqual({ householdId: "h1", id: { in: ["t1"] }, deletedAt: null });
     expect(args.data.deletedAt).toBeInstanceOf(Date);
   });
 });
@@ -381,7 +384,7 @@ describe("convertToRecurringAction", () => {
     expect(result).toEqual({ ok: true });
     expect(recurring.create).toHaveBeenCalledWith({
       data: {
-        userId: "u1",
+        householdId: "h1",
         description: "Netflix",
         versions: {
           create: [
@@ -447,7 +450,7 @@ describe("materializeOccurrenceAction", () => {
     expect(result).toEqual({ ok: true });
     const data = txn.create.mock.calls[0][0].data;
     expect(data).toMatchObject({
-      userId: "u1",
+      householdId: "h1",
       accountId: "acc1",
       categoryId: "cat1",
       type: "EXPENSE",

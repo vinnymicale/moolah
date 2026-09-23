@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 // isDemoMode is toggled per-test via this mock.
 const demoMode = { value: false };
@@ -47,17 +47,17 @@ import {
   ignoreDuplicateGroupAction,
 } from "./transactions";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { resolveTagIds } from "@/lib/tags";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const txn = vi.mocked(prisma.transaction);
 const resolveTagIdsMock = vi.mocked(resolveTagIds);
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
 });
 
 describe("demo-mode guard", () => {
@@ -74,7 +74,7 @@ describe("demo-mode guard", () => {
     });
     expect(result).toEqual({ ok: true });
     // No auth, no DB write happened.
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(txn.create).not.toHaveBeenCalled();
   });
 
@@ -100,7 +100,7 @@ describe("demo-mode guard", () => {
 
   it("scanDuplicateTransactionsAction returns an empty scan in demo mode", async () => {
     expect(await scanDuplicateTransactionsAction()).toEqual({ groups: [], removableCount: 0 });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(txn.findMany).not.toHaveBeenCalled();
   });
 
@@ -112,7 +112,7 @@ describe("demo-mode guard", () => {
 
   it("ignoreDuplicateGroupAction is a no-op success in demo mode", async () => {
     expect(await ignoreDuplicateGroupAction(["k1", "d1"])).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(txn.updateMany).not.toHaveBeenCalled();
   });
 });
@@ -124,7 +124,7 @@ describe("existence / ownership checks", () => {
     expect(result).toEqual({ ok: false, error: "Transaction not found" });
     expect(txn.update).not.toHaveBeenCalled();
     // Lookup is scoped to the caller and ignores already-trashed rows.
-    expect(txn.findFirst).toHaveBeenCalledWith({ where: { id: "t1", userId: "u1", deletedAt: null } });
+    expect(txn.findFirst).toHaveBeenCalledWith({ where: { id: "t1", householdId: "h1", deletedAt: null } });
   });
 
   it("setClearedAction updates only after confirming ownership", async () => {
@@ -171,7 +171,7 @@ describe("updateTransactionAction tag handling", () => {
     resolveTagIdsMock.mockResolvedValue(["tag1", "tag2"]);
     const result = await updateTransactionAction("t1", { ...baseInput, tags: ["work", "food"] });
     expect(result).toEqual({ ok: true });
-    expect(resolveTagIdsMock).toHaveBeenCalledWith("u1", ["work", "food"]);
+    expect(resolveTagIdsMock).toHaveBeenCalledWith("h1", ["work", "food"]);
     const call = txn.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(call.data).toHaveProperty("tags", { set: [{ id: "tag1" }, { id: "tag2" }] });
   });
@@ -180,7 +180,7 @@ describe("updateTransactionAction tag handling", () => {
     resolveTagIdsMock.mockResolvedValue([]);
     const result = await updateTransactionAction("t1", { ...baseInput, tags: [] });
     expect(result).toEqual({ ok: true });
-    expect(resolveTagIdsMock).toHaveBeenCalledWith("u1", []);
+    expect(resolveTagIdsMock).toHaveBeenCalledWith("h1", []);
     const call = txn.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(call.data).toHaveProperty("tags", { set: [] });
   });

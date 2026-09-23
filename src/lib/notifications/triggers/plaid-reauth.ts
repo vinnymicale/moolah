@@ -19,7 +19,7 @@ export const plaidReauth: TriggerDef = {
   sampleVars: { institution: "Sample Bank" },
   async evaluate(ctx) {
     const items = await prisma.plaidItem.findMany({
-      where: { userId: ctx.userId, error: { contains: "ITEM_LOGIN_REQUIRED" } },
+      where: { householdId: ctx.householdId, error: { contains: "ITEM_LOGIN_REQUIRED" } },
       select: { id: true, institutionName: true },
     });
     return items.map((item) => ({

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -203,7 +203,7 @@ const TOOLS = [
 async function executeTool(
   name: string,
   args: Record<string, unknown>,
-  userId: string,
+  householdId: string,
   staged: StagedWrite[],
 ): Promise<string> {
   const today = isoDay(new Date());
@@ -217,7 +217,7 @@ async function executeTool(
     // Nothing is written here. The call is validated and resolved into a
     // descriptor the user confirms in the panel; /api/chat/confirm commits it.
     try {
-      const outcome = await stageWrite(name, args, userId);
+      const outcome = await stageWrite(name, args, householdId);
       if (outcome.staged) staged.push(outcome.staged);
       return outcome.toolResult;
     } catch (err) {
@@ -229,12 +229,12 @@ async function executeTool(
     switch (name) {
       case "get_financial_summary": {
         const [netWorth, accounts] = await Promise.all([
-          getNetWorth(userId),
-          getAccounts(userId),
+          getNetWorth(householdId),
+          getAccounts(householdId),
         ]);
         const now = new Date();
         const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-        const txns = await getTransactionsBetween(userId, monthStart, today);
+        const txns = await getTransactionsBetween(householdId, monthStart, today);
         const income = txns.filter((t) => t.type === "INCOME" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
         const expenses = txns.filter((t) => t.type === "EXPENSE" && !t.effectiveTransfer).reduce((s, t) => s + t.amount, 0);
         return JSON.stringify({
@@ -261,9 +261,9 @@ async function executeTool(
         startDate.setDate(startDate.getDate() - 30);
         const start = (args.start_date as string) || isoDay(startDate);
         const [txns, categories, accounts] = await Promise.all([
-          getTransactionsBetween(userId, start, end),
-          getCategories(userId),
-          getAccounts(userId),
+          getTransactionsBetween(householdId, start, end),
+          getCategories(householdId),
+          getAccounts(householdId),
         ]);
         const catMap = new Map(categories.map((c) => [c.id, c.name]));
         const accMap = new Map(accounts.map((a) => [a.id, a.name]));
@@ -284,7 +284,7 @@ async function executeTool(
         const now = new Date();
         const monthStr = (args.month as string) ||
           `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-        const lines = await getBudgetMonth(userId, `${monthStr}-01`);
+        const lines = await getBudgetMonth(householdId, `${monthStr}-01`);
         return JSON.stringify(
           lines.map((l) => ({
             category: l.name,
@@ -298,7 +298,7 @@ async function executeTool(
       }
 
       case "get_savings_goals": {
-        const goals = await getSavingsGoals(userId);
+        const goals = await getSavingsGoals(householdId);
         return JSON.stringify(
           goals.map((g) => ({
             name: g.name,
@@ -312,17 +312,17 @@ async function executeTool(
 
       case "get_spending_insights": {
         const [anomalies, merchants] = await Promise.all([
-          getSpendingAnomalies(userId, today),
-          getTopMerchants(userId, today, 10),
+          getSpendingAnomalies(householdId, today),
+          getTopMerchants(householdId, today, 10),
         ]);
         return JSON.stringify({ anomalies, top_merchants: merchants });
       }
 
       case "get_recurring_expenses": {
-        const rules = await getRecurringRules(userId);
+        const rules = await getRecurringRules(householdId);
         const [categories, accounts] = await Promise.all([
-          getCategories(userId),
-          getAccounts(userId),
+          getCategories(householdId),
+          getAccounts(householdId),
         ]);
         const catMap = new Map(categories.map((c) => [c.id, c.name]));
         const accMap = new Map(accounts.map((a) => [a.id, a.name]));
@@ -364,7 +364,7 @@ async function callAnthropic(
   model: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  userId: string,
+  householdId: string,
   staged: StagedWrite[],
 ): Promise<string> {
   const anthropicTools = TOOLS.map((t) => ({
@@ -435,7 +435,7 @@ async function callAnthropic(
         toolUses.map(async (tu) => ({
           type: "tool_result" as const,
           tool_use_id: tu.id,
-          content: await executeTool(tu.name, tu.input, userId, staged),
+          content: await executeTool(tu.name, tu.input, householdId, staged),
         })),
       );
       convMessages.push({ role: "user", content: toolResults });
@@ -457,7 +457,7 @@ async function callOpenAI(
   model: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  userId: string,
+  householdId: string,
   staged: StagedWrite[],
 ): Promise<string> {
   const openaiTools = TOOLS.map((t) => ({
@@ -536,7 +536,7 @@ async function callOpenAI(
           content: await executeTool(
             tc.function.name,
             JSON.parse(tc.function.arguments) as Record<string, unknown>,
-            userId,
+            householdId,
             staged,
           ),
         })),
@@ -556,7 +556,7 @@ async function callGemini(
   model: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  userId: string,
+  householdId: string,
   staged: StagedWrite[],
 ): Promise<string> {
   const geminiTools = [
@@ -627,7 +627,7 @@ async function callGemini(
       functionCalls.map(async (fc) => ({
         functionResponse: {
           name: fc.functionCall.name,
-          response: { content: await executeTool(fc.functionCall.name, fc.functionCall.args, userId, staged) },
+          response: { content: await executeTool(fc.functionCall.name, fc.functionCall.args, householdId, staged) },
         },
       })),
     );
@@ -642,13 +642,11 @@ async function callGemini(
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { ctx, response } = await householdForRoute();
+  if (response) return response;
 
   // Each request can fan out into many paid model calls - keep a per-user lid on it.
-  const limit = checkRateLimit(`chat:${session.user.id}`, 20, 60_000);
+  const limit = checkRateLimit(`chat:${ctx.userId}`, 20, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Try again shortly." },
@@ -656,22 +654,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, name: true, aiProvider: true, aiApiKey: true, aiModel: true },
-  });
-  if (!user) {
+  // The key is the household's, set by an admin; the name is just for the prompt.
+  const [household, user] = await Promise.all([
+    prisma.household.findUnique({
+      where: { id: ctx.householdId },
+      select: { aiProvider: true, aiApiKey: true, aiModel: true },
+    }),
+    prisma.user.findUnique({ where: { id: ctx.userId }, select: { name: true } }),
+  ]);
+  if (!household || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!user.aiProvider || !user.aiApiKey) {
+  if (!household.aiProvider || !household.aiApiKey) {
     return NextResponse.json(
       { error: "AI assistant not configured. Add your API key in Settings." },
       { status: 422 },
     );
   }
 
-  const provider = user.aiProvider;
+  const provider = household.aiProvider;
   if (!isAiProvider(provider)) {
     return NextResponse.json({ error: "Unknown AI provider" }, { status: 422 });
   }
@@ -703,20 +705,20 @@ Guidelines:
 
   try {
     let reply: string;
-    const userId = user.id;
-    const apiKey = decryptSecret(user.aiApiKey);
+    const { householdId } = ctx;
+    const apiKey = decryptSecret(household.aiApiKey);
     const staged: StagedWrite[] = [];
-    const model = resolveModel(provider, user.aiModel);
+    const model = resolveModel(provider, household.aiModel);
 
     switch (provider) {
       case "anthropic":
-        reply = await callAnthropic(apiKey, model, systemPrompt, body.messages, userId, staged);
+        reply = await callAnthropic(apiKey, model, systemPrompt, body.messages, householdId, staged);
         break;
       case "openai":
-        reply = await callOpenAI(apiKey, model, systemPrompt, body.messages, userId, staged);
+        reply = await callOpenAI(apiKey, model, systemPrompt, body.messages, householdId, staged);
         break;
       case "gemini":
-        reply = await callGemini(apiKey, model, systemPrompt, body.messages, userId, staged);
+        reply = await callGemini(apiKey, model, systemPrompt, body.messages, householdId, staged);
         break;
     }
 

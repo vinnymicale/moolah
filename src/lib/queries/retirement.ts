@@ -162,7 +162,7 @@ function looksLikeIra(name: string): boolean {
 }
 
 export async function getRetirementPageData(
-  userId: string,
+  householdId: string,
   todayISO: string,
   selectedTaxYear?: number,
 ): Promise<RetirementPageData> {
@@ -174,19 +174,19 @@ export async function getRetirementPageData(
     selectedTaxYear != null && selectedTaxYear <= thisYear ? selectedTaxYear : thisYear;
 
   const [planRow, accountRows, contributionRows, scheduleRows, ytdRows] = await Promise.all([
-    prisma.retirementPlan.findUnique({ where: { userId } }),
+    prisma.retirementPlan.findUnique({ where: { householdId } }),
     prisma.financialAccount.findMany({
-      where: { userId, archived: false, type: { in: [...RETIREMENT_TYPES] } },
+      where: { householdId, archived: false, type: { in: [...RETIREMENT_TYPES] } },
       select: { id: true, name: true, type: true, currentBalance: true, color: true },
       orderBy: { name: "asc" },
     }),
     prisma.contribution.findMany({
-      where: { userId },
+      where: { householdId },
       orderBy: { date: "desc" },
       include: { financialAccount: { select: { name: true } } },
     }),
-    prisma.contributionSchedule.findMany({ where: { userId, archived: false } }),
-    prisma.ytdContribution.findMany({ where: { userId } }),
+    prisma.contributionSchedule.findMany({ where: { householdId, archived: false } }),
+    prisma.ytdContribution.findMany({ where: { householdId } }),
   ]);
 
   const ytdRowsForYear = ytdRows.filter((y) => y.year === currentTaxYear);
@@ -300,7 +300,7 @@ export async function getRetirementPageData(
     ) / 100;
 
   const matchRow = await prisma.employerMatch.findFirst({
-    where: { userId, financialAccountId: { in: accounts.map((a) => a.id) } },
+    where: { householdId, financialAccountId: { in: accounts.map((a) => a.id) } },
   });
   const parsedTiers = matchRow ? matchTiersSchema.safeParse(matchRow.tiers) : null;
   const matchTiers: MatchTier[] | null =
@@ -578,13 +578,13 @@ export async function getRetirementPageData(
  * each day splits investment value into money added and money earned.
  */
 export async function getInvestmentGrowthSeries(
-  userId: string,
+  householdId: string,
   days: number,
   todayISO: string,
 ): Promise<{ date: string; contributed: number; gains: number }[]> {
   const [history, contributionRows] = await Promise.all([
-    getNetWorthHistory(userId, days, todayISO),
-    prisma.contribution.findMany({ where: { userId }, orderBy: { date: "asc" } }),
+    getNetWorthHistory(householdId, days, todayISO),
+    prisma.contribution.findMany({ where: { householdId }, orderBy: { date: "asc" } }),
   ]);
   if (history.length === 0) return [];
 

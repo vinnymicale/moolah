@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { syncPlaidItem } from "@/lib/plaid-sync";
 import { syncPlaidAccounts } from "@/lib/plaid-accounts";
@@ -10,13 +10,13 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { ctx, response } = await householdForRoute("RUN_SYNC");
+  if (response) return response;
 
   const { itemId } = await params;
 
-  // Ensure the item belongs to this user.
-  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, userId: session.user.id } });
+  // Ensure the item belongs to this household.
+  const item = await prisma.plaidItem.findFirst({ where: { id: itemId, householdId: ctx.householdId } });
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
   try {
@@ -24,14 +24,14 @@ export async function POST(
     // it already knows about, so on its own a reconnect can never surface an
     // account the user just authorized at the bank.
     const accounts = await syncPlaidAccounts({
-      plaidClient: await getPlaidClient(session.user.id),
+      plaidClient: await getPlaidClient(ctx.householdId),
       accessToken: decryptSecret(item.accessToken),
       plaidItemRowId: item.id,
-      userId: session.user.id,
+      householdId: ctx.householdId,
       institutionName: item.institutionName,
     });
 
-    const result = await syncPlaidItem(itemId, session.user.id);
+    const result = await syncPlaidItem(itemId, ctx.householdId);
     return NextResponse.json({ ok: true, ...result, accounts });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Sync failed";
@@ -43,7 +43,7 @@ export async function POST(
     });
     try {
       const { runRules } = await import("@/lib/notifications/engine");
-      await runRules(session.user.id, {
+      await runRules(ctx.userId, ctx.householdId, {
         mode: "event",
         event: {
           kind: "plaid-sync-failed",

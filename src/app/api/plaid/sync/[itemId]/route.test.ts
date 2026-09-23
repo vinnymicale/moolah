@@ -5,7 +5,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+const household = vi.fn();
+vi.mock("@/lib/household", () => ({ householdForRoute: () => household() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     plaidItem: { findFirst: vi.fn(), update: vi.fn() },
@@ -16,7 +17,6 @@ vi.mock("@/lib/plaid-accounts", () => ({ syncPlaidAccounts: vi.fn() }));
 vi.mock("@/lib/plaid-sync", () => ({ syncPlaidItem: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ decryptSecret: vi.fn((v: string) => `dec:${v}`) }));
 
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
 import { syncPlaidAccounts } from "@/lib/plaid-accounts";
@@ -28,7 +28,7 @@ const req = {} as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
+  household.mockResolvedValue({ ctx: { userId: "u1", householdId: "h1" } });
   vi.mocked(prisma.plaidItem.findFirst).mockResolvedValue({
     id: "item_1",
     accessToken: "enc",
@@ -41,12 +41,12 @@ beforeEach(() => {
 
 describe("POST /api/plaid/sync/[itemId]", () => {
   it("rejects an unauthenticated caller", async () => {
-    vi.mocked(auth).mockResolvedValue(null as never);
+    household.mockResolvedValue({ response: Response.json({ error: "Unauthorized" }, { status: 401 }) });
     const res = await POST(req, { params });
     expect(res.status).toBe(401);
   });
 
-  it("404s on an item belonging to someone else", async () => {
+  it("404s on an item belonging to another household", async () => {
     vi.mocked(prisma.plaidItem.findFirst).mockResolvedValue(null as never);
     const res = await POST(req, { params });
     expect(res.status).toBe(404);
@@ -62,11 +62,11 @@ describe("POST /api/plaid/sync/[itemId]", () => {
       expect.objectContaining({
         accessToken: "dec:enc",
         plaidItemRowId: "item_1",
-        userId: "u1",
+        householdId: "h1",
         institutionName: "Some Bank",
       }),
     );
-    expect(syncPlaidItem).toHaveBeenCalledWith("item_1", "u1");
+    expect(syncPlaidItem).toHaveBeenCalledWith("item_1", "h1");
   });
 
   // Both syncs report "added"; the account count has to stay separate from the

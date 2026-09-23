@@ -7,7 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { isDemoMode } from "@/lib/demo-guard";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { toNumber, toCents, fromCents } from "@/lib/money";
@@ -35,14 +35,14 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
   if (isDemoMode()) return { ok: true, data: DEMO_BUDGET_SUGGESTIONS };
 
   try {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("VIEW_BUDGETS");
     const monthStart = startOfUTCMonth(parseISODay(parsed.data.month));
     const since = startOfUTCMonth(addUTCMonths(monthStart, -12));
 
     const [rules, txns, cats, budgets] = await Promise.all([
-      prisma.recurringRule.findMany({ where: { userId }, include: versionsInclude }),
+      prisma.recurringRule.findMany({ where: { householdId }, include: versionsInclude }),
       prisma.transaction.findMany({
-        where: { userId, deletedAt: null, isTransfer: false, date: { gte: since } },
+        where: { householdId, deletedAt: null, isTransfer: false, date: { gte: since } },
         select: {
           date: true,
           description: true,
@@ -55,10 +55,10 @@ export async function getBudgetSuggestionsAction(input: { month: string }): Prom
         orderBy: { date: "asc" },
       }),
       prisma.category.findMany({
-        where: { userId, kind: "EXPENSE" },
+        where: { householdId, kind: "EXPENSE" },
         select: { id: true, name: true, color: true, icon: true },
       }),
-      prisma.budget.findMany({ where: { userId, month: monthStart } }),
+      prisma.budget.findMany({ where: { householdId, month: monthStart } }),
     ]);
 
     // Dedupe detection against every rule the user has (any type/state) plus
@@ -194,12 +194,12 @@ export async function applyBudgetSuggestionsAction(input: {
 
   return run(async () => {
     const { month, entries } = applySchema.parse(input);
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_BUDGETS");
     const monthStart = startOfUTCMonth(parseISODay(month));
 
     const ids = [...new Set(entries.map((e) => e.categoryId))];
     const owned = await prisma.category.findMany({
-      where: { userId, id: { in: ids } },
+      where: { householdId, id: { in: ids } },
       select: { id: true },
     });
     if (owned.length !== ids.length) throw new UserError("Category not found");
@@ -207,9 +207,9 @@ export async function applyBudgetSuggestionsAction(input: {
     await prisma.$transaction(
       entries.map((e) =>
         prisma.budget.upsert({
-          where: { userId_categoryId_month: { userId, categoryId: e.categoryId, month: monthStart } },
+          where: { householdId_categoryId_month: { householdId, categoryId: e.categoryId, month: monthStart } },
           update: { limit: e.limit },
-          create: { userId, categoryId: e.categoryId, month: monthStart, limit: e.limit },
+          create: { householdId, categoryId: e.categoryId, month: monthStart, limit: e.limit },
         }),
       ),
     );

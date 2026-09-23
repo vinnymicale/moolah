@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -34,6 +34,7 @@ vi.mock("@/lib/prisma", () => ({
     tag: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     transaction: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     transactionSplit: { createMany: vi.fn(), deleteMany: vi.fn() },
+    auditLog: { create: vi.fn() },
     ruleRun: {
       create: vi.fn(async () => ({ id: "run1" })),
       findFirst: vi.fn(),
@@ -52,11 +53,11 @@ import {
   undoRuleRunAction,
 } from "./rules";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { evaluateRules, splitByRatio } from "@/lib/rules";
 import { matchTransfers } from "@/lib/plaid-sync";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const rule = vi.mocked(prisma.rule);
 const category = vi.mocked(prisma.category);
 const account = vi.mocked(prisma.financialAccount);
@@ -75,9 +76,11 @@ const setCategoryRule = {
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
   evaluateRulesMock.mockReturnValue({});
   ruleRun.create.mockResolvedValue({ id: "run1" } as never);
+  // The real client returns the created row; the audit call reads its id.
+  rule.create.mockResolvedValue({ id: "r1", name: "Groceries" } as never);
 });
 
 describe("demo-mode guard", () => {
@@ -87,7 +90,7 @@ describe("demo-mode guard", () => {
 
   it("createRuleAction is a no-op success in demo mode", async () => {
     expect(await createRuleAction(setCategoryRule)).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(rule.create).not.toHaveBeenCalled();
   });
 
@@ -182,7 +185,7 @@ describe("setRuleEnabledAction", () => {
     rule.updateMany.mockResolvedValue({ count: 1 } as never);
     const result = await setRuleEnabledAction("r1", false);
     expect(result).toEqual({ ok: true });
-    expect(rule.updateMany).toHaveBeenCalledWith({ where: { id: "r1", userId: "u1" }, data: { enabled: false } });
+    expect(rule.updateMany).toHaveBeenCalledWith({ where: { id: "r1", householdId: "h1" }, data: { enabled: false } });
   });
 });
 
@@ -242,7 +245,7 @@ describe("applyRulesAction", () => {
     const result = await applyRulesAction();
     expect(result).toMatchObject({ ok: true, transfersMarked: 1 });
     expect(txn.update).toHaveBeenCalledWith({ where: { id: "t1" }, data: { isTransfer: true } });
-    expect(matchTransfers).toHaveBeenCalledWith("u1");
+    expect(matchTransfers).toHaveBeenCalledWith("h1");
   });
 
   it("does not run the pairing pass when nothing was marked", async () => {
@@ -325,9 +328,9 @@ describe("applyRulesAction run recording", () => {
     expect(result).toMatchObject({ ok: true, runId: "run1" });
 
     const created = ruleRun.create.mock.calls[0][0] as never as {
-      data: { userId: string; ruleId: string | null; changes: { create: Record<string, unknown>[] } };
+      data: { householdId: string; ruleId: string | null; changes: { create: Record<string, unknown>[] } };
     };
-    expect(created.data.userId).toBe("u1");
+    expect(created.data.householdId).toBe("h1");
     expect(created.data.ruleId).toBeNull();
     expect(created.data.changes.create).toEqual([
       {
@@ -402,7 +405,7 @@ describe("applyRulesAction run recording", () => {
 describe("undoRuleRunAction", () => {
   const runWith = (changes: Record<string, unknown>[], undoneAt: Date | null = null) => ({
     id: "run1",
-    userId: "u1",
+    householdId: "h1",
     ruleId: null,
     undoneAt,
     changes: changes.map((c, i) => ({
@@ -435,7 +438,7 @@ describe("undoRuleRunAction", () => {
     expect(await undoRuleRunAction("run1")).toEqual({ ok: false, error: "That run is no longer available." });
     // Scoped by userId, so another user's run simply doesn't come back.
     expect(ruleRun.findFirst).toHaveBeenCalledWith({
-      where: { id: "run1", userId: "u1" },
+      where: { id: "run1", householdId: "h1" },
       include: { changes: true },
     });
   });

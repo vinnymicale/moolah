@@ -32,28 +32,28 @@ describe("normalizeTagName", () => {
 
 describe("resolveTagIds", () => {
   it("returns [] for empty input without touching the db", async () => {
-    expect(await resolveTagIds("u1", [])).toEqual([]);
+    expect(await resolveTagIds("h1", [])).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
   });
 
   it("resolves an existing tag case-insensitively instead of creating", async () => {
     findMany.mockResolvedValue([{ id: "t1", name: "Vacation" }] as never);
-    expect(await resolveTagIds("u1", ["vacation"])).toEqual(["t1"]);
+    expect(await resolveTagIds("h1", ["vacation"])).toEqual(["t1"]);
     expect(create).not.toHaveBeenCalled();
   });
 
   it("creates missing tags with the name as typed", async () => {
     findMany.mockResolvedValue([] as never);
     create.mockResolvedValue({ id: "t2" } as never);
-    expect(await resolveTagIds("u1", [" beach   trip "])).toEqual(["t2"]);
+    expect(await resolveTagIds("h1", [" beach   trip "])).toEqual(["t2"]);
     expect(create).toHaveBeenCalledWith({
-      data: { userId: "u1", name: "beach trip" },
+      data: { householdId: "h1", name: "beach trip" },
       select: { id: true },
     });
   });
 
   it("dedups case-insensitive duplicates in the input", async () => {
     findMany.mockResolvedValue([{ id: "t1", name: "Trip" }] as never);
-    expect(await resolveTagIds("u1", ["Trip", "trip"])).toEqual(["t1"]);
+    expect(await resolveTagIds("h1", ["Trip", "trip"])).toEqual(["t1"]);
   });
 });

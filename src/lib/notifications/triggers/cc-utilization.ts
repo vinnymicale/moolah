@@ -33,7 +33,7 @@ export const ccUtilization: TriggerDef = {
     const { percent, accountId } = ctx.params as { percent: number; accountId?: string };
     const cards = await prisma.financialAccount.findMany({
       where: {
-        userId: ctx.userId,
+        householdId: ctx.householdId,
         archived: false,
         type: "CREDIT_CARD",
         creditLimit: { not: null },

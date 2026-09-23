@@ -1,6 +1,6 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getRetirementPageData } from "@/lib/queries/retirement";
-import { getDemoUserId } from "@/lib/demo-session";
+import { getDemoHouseholdId } from "@/lib/demo-session";
 import { userTodayISO } from "@/lib/user-tz";
 import { PageHeader, EmptyState, StatCard } from "@/components/ui-bits";
 import { formatUSDWhole } from "@/lib/money";
@@ -21,11 +21,11 @@ export default async function RetirementPage({
 }: {
   searchParams: Promise<{ year?: string }>;
 }) {
-  const userId = DEMO_MODE ? ((await getDemoUserId()) ?? "") : (await requireUser()).userId;
+  const householdId = DEMO_MODE ? ((await getDemoHouseholdId()) ?? "") : (await requirePageCapability("VIEW_RETIREMENT")).householdId;
   const today = await userTodayISO();
   const yearParam = Number((await searchParams).year);
   const data = await getRetirementPageData(
-    userId,
+    householdId,
     today,
     Number.isInteger(yearParam) ? yearParam : undefined,
   );

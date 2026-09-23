@@ -33,7 +33,7 @@ export const categoryFirstUse: TriggerDef = {
     const txns = await prisma.transaction.findMany({
       where: {
         id: { in: ctx.event.newTransactionIds },
-        userId: ctx.userId, deletedAt: null, isTransfer: false, type: "EXPENSE",
+        householdId: ctx.householdId, deletedAt: null, isTransfer: false, type: "EXPENSE",
         ...(accountId ? { accountId } : {}),
       },
       select: { id: true, description: true, amount: true, categoryId: true, category: { select: { name: true } } },
@@ -45,7 +45,7 @@ export const categoryFirstUse: TriggerDef = {
       if (seen.has(t.categoryId)) continue;
       const prior = await prisma.transaction.count({
         where: {
-          userId: ctx.userId, deletedAt: null, isTransfer: false,
+          householdId: ctx.householdId, deletedAt: null, isTransfer: false,
           categoryId: t.categoryId,
           date: { gte: monthStart },
           id: { notIn: ctx.event.newTransactionIds },

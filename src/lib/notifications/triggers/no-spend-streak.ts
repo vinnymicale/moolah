@@ -27,7 +27,7 @@ export const noSpendStreak: TriggerDef = {
     const windowStart = addUTCDays(today, -days);
     const recent = await prisma.transaction.findFirst({
       where: {
-        userId: ctx.userId, deletedAt: null, isTransfer: false, type: "EXPENSE",
+        householdId: ctx.householdId, deletedAt: null, isTransfer: false, type: "EXPENSE",
         date: { gte: windowStart },
       },
       select: { id: true },

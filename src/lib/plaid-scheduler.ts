@@ -42,7 +42,7 @@ export async function startPlaidSyncScheduler(): Promise<void> {
   console.log(`[plaid] background sync scheduled (${SCHEDULE})`);
 }
 
-/** One pass over every user's due items. Exported for tests and manual runs. */
+/** One pass over every household's due items. Exported for tests and manual runs. */
 export async function sweep(): Promise<void> {
   if (running) {
     console.warn("[plaid] previous sweep still running; skipping this tick");

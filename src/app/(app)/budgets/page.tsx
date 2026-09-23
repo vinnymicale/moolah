@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getBudgetMonth, getBudgetYear } from "@/lib/queries";
 import { addUTCMonths, isoDay, monthLabel, parseISODay, startOfUTCMonth } from "@/lib/dates";
 import { BudgetsManager } from "./BudgetsManager";
@@ -17,9 +17,9 @@ export default async function BudgetsPage({
   const todayISO = await userTodayISO();
 
   if (!DEMO_MODE && view === "year") {
-    const { userId } = await requireUser();
+    const { householdId } = await requirePageCapability("VIEW_BUDGETS");
     const year = /^\d{4}$/.test(y ?? "") ? Number(y) : Number(todayISO.slice(0, 4));
-    const months = await getBudgetYear(userId, year);
+    const months = await getBudgetYear(householdId, year);
     return (
       <div className="mx-auto max-w-4xl">
         <BudgetYearView months={months} year={year} />
@@ -34,7 +34,7 @@ export default async function BudgetsPage({
 
   const lines = DEMO_MODE
     ? DEMO_BUDGETS
-    : await getBudgetMonth((await requireUser()).userId, monthISO);
+    : await getBudgetMonth((await requirePageCapability("VIEW_BUDGETS")).householdId, monthISO);
 
   return (
     <div className="mx-auto max-w-4xl">

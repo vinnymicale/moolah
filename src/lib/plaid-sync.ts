@@ -223,17 +223,17 @@ export interface SyncOptions {
 }
 
 /**
- * Sync a single Plaid item. Pass `userId` to scope the item lookup to that
+ * Sync a single Plaid item. Pass `householdId` to scope the item lookup to that
  * owner - the lookup throws if the item doesn't belong to them, so callers get
  * a defensive ownership check rather than relying on having pre-verified it.
  */
 export async function syncPlaidItem(
   plaidItemId: string,
-  userId: string,
+  householdId: string,
   opts?: SyncOptions,
 ): Promise<SyncResult> {
   const itemRow = await prisma.plaidItem.findUniqueOrThrow({
-    where: { id: plaidItemId, userId },
+    where: { id: plaidItemId, householdId },
     include: {
       linkedAccounts: {
         include: { financialAccount: true },
@@ -243,19 +243,19 @@ export async function syncPlaidItem(
   // Tokens are encrypted at rest; decryptSecret passes legacy plaintext through.
   const item = { ...itemRow, accessToken: decryptSecret(itemRow.accessToken) };
 
-  const plaidClient = await getPlaidClient(item.userId);
+  const plaidClient = await getPlaidClient(item.householdId);
 
   // Build a map from plaidAccountId → our linked account row.
   const linkedByPlaidId = new Map(item.linkedAccounts.map((a) => [a.plaidAccountId, a]));
 
   // Load the user's categories once so we can resolve names → ids.
-  const categories = await prisma.category.findMany({ where: { userId: item.userId } });
+  const categories = await prisma.category.findMany({ where: { householdId: item.householdId } });
   const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
 
   // User-defined rules beat Plaid's generic category mapping. Split actions are
   // left to the explicit "apply to existing" backfill (they need a follow-up
   // write keyed on the new row id); sync applies category, rename, and transfer.
-  const ruleRows = await prisma.rule.findMany({ where: { userId: item.userId }, orderBy: { priority: "asc" } });
+  const ruleRows = await prisma.rule.findMany({ where: { householdId: item.householdId }, orderBy: { priority: "asc" } });
   const automationRules: RuleLike[] = ruleRows.map((r) => ({
     id: r.id,
     priority: r.priority,
@@ -265,7 +265,7 @@ export async function syncPlaidItem(
   }));
 
   const liveTagIds = new Set(
-    (await prisma.tag.findMany({ where: { userId: item.userId }, select: { id: true } })).map((t) => t.id),
+    (await prisma.tag.findMany({ where: { householdId: item.householdId }, select: { id: true } })).map((t) => t.id),
   );
 
   // Load recurring rules for matching. When a Plaid transaction lands on (or
@@ -273,7 +273,7 @@ export async function syncPlaidItem(
   // to that rule so the calendar suppresses the virtual projection in favour
   // of the live bank data.
   const rules = await prisma.recurringRule.findMany({
-    where: { userId: item.userId, archived: false },
+    where: { householdId: item.householdId, archived: false },
     include: versionsInclude,
   });
 
@@ -347,7 +347,7 @@ export async function syncPlaidItem(
         if (!byId) {
           const twin = await prisma.transaction.findFirst({
             where: {
-              userId: item.userId,
+              householdId: item.householdId,
               deletedAt: null,
               accountId: linked.financialAccountId,
               date: txnDate,
@@ -372,7 +372,7 @@ export async function syncPlaidItem(
           ? { amount, description, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
           : { amount, description, date: txnDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
         create: {
-          userId: item.userId,
+          householdId: item.householdId,
           accountId: linked.financialAccountId,
           categoryId,
           isTransfer,
@@ -414,7 +414,7 @@ export async function syncPlaidItem(
         await prisma.transaction.deleteMany({
           where: {
             plaidTransactionId: txn.pending_transaction_id,
-            userId: item.userId,
+            householdId: item.householdId,
           },
         });
       }
@@ -458,7 +458,7 @@ export async function syncPlaidItem(
       });
 
       await prisma.transaction.updateMany({
-        where: { plaidTransactionId: txn.transaction_id, userId: item.userId },
+        where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
         data: opts?.recategorizeOnly
           ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
           : { amount, description: modDesc, date: modDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
@@ -467,7 +467,7 @@ export async function syncPlaidItem(
       const modTagIds = (modEffect.addTagIds ?? []).filter((id) => liveTagIds.has(id));
       if (modTagIds.length > 0) {
         const target = await prisma.transaction.findFirst({
-          where: { plaidTransactionId: txn.transaction_id, userId: item.userId },
+          where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
           select: { id: true, tags: { select: { id: true } } },
         });
         if (target) {
@@ -487,7 +487,7 @@ export async function syncPlaidItem(
         await prisma.transaction.deleteMany({
           where: {
             plaidTransactionId: txn.pending_transaction_id,
-            userId: item.userId,
+            householdId: item.householdId,
           },
         });
       }
@@ -495,7 +495,7 @@ export async function syncPlaidItem(
       // In recategorize mode, fill in the category only if the row has none.
       if (opts?.recategorizeOnly && categoryId) {
         await prisma.transaction.updateMany({
-          where: { plaidTransactionId: txn.transaction_id, userId: item.userId, categoryId: null },
+          where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId, categoryId: null },
           data: { categoryId },
         });
       }
@@ -506,7 +506,7 @@ export async function syncPlaidItem(
     // --- REMOVED ---
     for (const txn of data.removed) {
       await prisma.transaction.deleteMany({
-        where: { plaidTransactionId: txn.transaction_id, userId: item.userId },
+        where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
       });
       result.removed++;
     }
@@ -617,7 +617,7 @@ export async function syncPlaidItem(
   // Persist the cursor and last-synced time (skipped in recategorize mode so
   // the real sync position is not disturbed).
   if (!opts?.recategorizeOnly) {
-    await matchTransfers(item.userId);
+    await matchTransfers(item.householdId);
     await prisma.plaidItem.update({
       where: { id: plaidItemId },
       data: { cursor, lastSyncedAt: new Date(), error: null, failureCount: 0 },
@@ -625,17 +625,23 @@ export async function syncPlaidItem(
     // Record a net-worth snapshot now that balances are up to date. Non-fatal:
     // a failed snapshot must not fail the sync.
     try {
-      await captureNetWorthSnapshot(item.userId);
+      await captureNetWorthSnapshot(item.householdId);
     } catch {
       /* ignore */
     }
     // Fire event-mode notification rules with this sync's outcome. Non-fatal.
     try {
       const { runRules } = await import("@/lib/notifications/engine");
-      await runRules(item.userId, {
-        mode: "event",
-        event: { kind: "plaid-sync", plaidItemId, newTransactionIds: newTxnIds },
+      const owner = await prisma.household.findUnique({
+        where: { id: item.householdId },
+        select: { ownerId: true },
       });
+      if (owner) {
+        await runRules(owner.ownerId, item.householdId, {
+          mode: "event",
+          event: { kind: "plaid-sync", plaidItemId, newTransactionIds: newTxnIds },
+        });
+      }
     } catch (e) {
       console.error("[notifications] post-sync rules failed:", e);
     }
@@ -648,15 +654,15 @@ export async function syncPlaidItem(
  * Pair credit-card payment credits with the bank expense that funded them
  * across the last 90 days, so neither side counts as income/spending.
  */
-export async function matchTransfers(userId: string): Promise<number> {
+export async function matchTransfers(householdId: string): Promise<number> {
   const since = new Date(Date.now() - 90 * 86_400_000);
   const [accounts, txns] = await Promise.all([
     prisma.financialAccount.findMany({
-      where: { userId },
+      where: { householdId },
       select: { id: true, type: true },
     }),
     prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: since } },
+      where: { householdId, deletedAt: null, date: { gte: since } },
       select: { id: true, type: true, amount: true, date: true, accountId: true, isTransfer: true, transferPeerId: true },
     }),
   ]);

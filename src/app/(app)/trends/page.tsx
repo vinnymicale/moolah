@@ -1,17 +1,17 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { computeReports } from "@/lib/reports";
 import { PageHeader, StatCard } from "@/components/ui-bits";
 import { TrendsCharts } from "./TrendsCharts";
-import { getDemoUserId } from "@/lib/demo-session";
+import { getDemoHouseholdId } from "@/lib/demo-session";
 import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 export default async function TrendsPage() {
-  const userId = DEMO_MODE
-    ? (await getDemoUserId() ?? "")
-    : (await requireUser()).userId;
-  const reports = await computeReports(userId, await userTodayISO());
+  const householdId = DEMO_MODE
+    ? (await getDemoHouseholdId() ?? "")
+    : (await requirePageCapability("VIEW_TRENDS")).householdId;
+  const reports = await computeReports(householdId, await userTodayISO());
 
   const latestNet = reports.netWorthSeries.at(-1)?.value ?? 0;
   const firstNet = reports.netWorthSeries[0]?.value ?? 0;

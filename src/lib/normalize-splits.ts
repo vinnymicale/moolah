@@ -4,7 +4,7 @@
 // bundle and the build fails.
 //
 // It lives in lib rather than the actions module because every export of a
-// "use server" file is a callable endpoint, and this one takes userId from its
+// "use server" file is a callable endpoint, and this one takes householdId from its
 // caller. Keeping it here means the only way to reach it is through an action
 // that has already authenticated.
 
@@ -26,7 +26,7 @@ export interface NormalizedSplit {
  * (a single part or none means "not split").
  */
 export async function normalizeSplits(
-  userId: string,
+  householdId: string,
   type: TxnType,
   total: number,
   splits?: { categoryId?: string | null; amount: number }[] | null,
@@ -37,7 +37,7 @@ export async function normalizeSplits(
   if (err) throw new UserError(err);
   const catIds = [...new Set(cleaned.map((s) => s.categoryId).filter((id): id is string => !!id))];
   if (catIds.length > 0) {
-    const found = await prisma.category.count({ where: { id: { in: catIds }, userId, kind: type } });
+    const found = await prisma.category.count({ where: { id: { in: catIds }, householdId, kind: type } });
     if (found !== catIds.length) throw new UserError("Split category not found");
   }
   return cleaned;

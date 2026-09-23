@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => false }));
 vi.mock("@/lib/tags", () => ({ resolveTagIds: vi.fn() }));
 vi.mock("@/lib/user-tz", () => ({ userTodayISO: vi.fn(async () => "2026-06-15") }));
@@ -22,7 +22,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { userTodayISO } from "@/lib/user-tz";
 import { prisma } from "@/lib/prisma";
 import { matchingTransactionIdsAction } from "./transactions";
@@ -32,7 +32,7 @@ const txn = vi.mocked(prisma.transaction);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(requireUser).mockResolvedValue({ userId: "u1" } as never);
+  vi.mocked(requireCapability).mockResolvedValue({ householdId: "h1" } as never);
   vi.mocked(userTodayISO).mockResolvedValue("2026-06-15");
   txn.findMany.mockResolvedValue([] as never);
 });
@@ -50,8 +50,8 @@ describe("matchingTransactionIdsAction", () => {
 
   it("scopes the query to the caller and the resolved month", async () => {
     await matchingTransactionIdsAction({ m: "2026-04" });
-    const where = txn.findMany.mock.calls[0][0]!.where as { userId: string; date: { gte: Date; lte: Date } };
-    expect(where.userId).toBe("u1");
+    const where = txn.findMany.mock.calls[0][0]!.where as { householdId: string; date: { gte: Date; lte: Date } };
+    expect(where.householdId).toBe("h1");
     expect(where.date.gte.toISOString().slice(0, 10)).toBe("2026-04-01");
     expect(where.date.lte.toISOString().slice(0, 10)).toBe("2026-04-30");
   });
@@ -84,7 +84,7 @@ describe("matchingTransactionIdsAction", () => {
   });
 
   it("rejects an unauthenticated caller", async () => {
-    vi.mocked(requireUser).mockRejectedValue(new Error("Unauthorized"));
+    vi.mocked(requireCapability).mockRejectedValue(new Error("Unauthorized"));
     await expect(matchingTransactionIdsAction({ m: "2026-06" })).rejects.toThrow("Unauthorized");
     expect(txn.findMany).not.toHaveBeenCalled();
   });

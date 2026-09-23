@@ -3,7 +3,7 @@
 // just the page the client happens to have loaded.
 
 import type { NextRequest } from "next/server";
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getAccounts, getCategories, getTransactionsBetween, type TransactionDTO } from "@/lib/queries";
 import { userTodayISO } from "@/lib/user-tz";
 import { resolveTransactionsRange } from "../resolve-range";
@@ -14,14 +14,14 @@ const DEMO_MODE = process.env.DEMO_MODE === "true";
 
 export async function GET(req: NextRequest) {
   const params = Object.fromEntries(req.nextUrl.searchParams) as Record<string, string>;
-  const userId = DEMO_MODE ? "" : (await requireUser()).userId;
+  const householdId = DEMO_MODE ? "" : (await requirePageCapability("VIEW_TRANSACTIONS")).householdId;
   const todayISO = await userTodayISO();
   const { startISO, endISO, slug } = resolveTransactionsRange(params, todayISO);
   const filters = parseTransactionFilters(params);
 
   const [accounts, categories] = DEMO_MODE
     ? [DEMO_ACCOUNTS, DEMO_CATEGORIES]
-    : await Promise.all([getAccounts(userId), getCategories(userId)]);
+    : await Promise.all([getAccounts(householdId), getCategories(householdId)]);
   const catById = new Map(categories.map((c) => [c.id, c.name]));
   const acctById = new Map(accounts.map((a) => [a.id, a.name]));
 
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     const inRange = DEMO_TRANSACTIONS.filter((t) => t.date >= startISO && t.date <= endISO);
     transactions = filterTransactionDTOs(inRange, filters, catById);
   } else {
-    transactions = await getTransactionsBetween(userId, startISO, endISO, filters);
+    transactions = await getTransactionsBetween(householdId, startISO, endISO, filters);
   }
 
   const header = ["Date", "Type", "Amount", "Description", "Category", "Account", "Cleared", "Note", "Tags"];

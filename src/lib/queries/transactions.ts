@@ -75,7 +75,7 @@ export const EMPTY_TRANSACTION_FILTERS: TransactionFilters = {
 export const TRANSACTIONS_PAGE_SIZE = 100;
 
 function transactionWhere(
-  userId: string,
+  householdId: string,
   startISO: string,
   endISO: string,
   filters: TransactionFilters,
@@ -127,7 +127,7 @@ function transactionWhere(
     });
   }
   return {
-    userId,
+    householdId,
     deletedAt: null,
     date: { gte: new Date(`${startISO}T00:00:00.000Z`), lte: new Date(`${endISO}T00:00:00.000Z`) },
     ...(and.length > 0 ? { AND: and } : {}),
@@ -171,13 +171,13 @@ function toTransactionDTO(t: TransactionRow): TransactionDTO {
 }
 
 export async function getTransactionsBetween(
-  userId: string,
+  householdId: string,
   startISO: string,
   endISO: string,
   filters: TransactionFilters = EMPTY_TRANSACTION_FILTERS,
 ): Promise<TransactionDTO[]> {
   const rows = await prisma.transaction.findMany({
-    where: transactionWhere(userId, startISO, endISO, filters),
+    where: transactionWhere(householdId, startISO, endISO, filters),
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: {
       splits: true,
@@ -195,13 +195,13 @@ export async function getTransactionsBetween(
  * bulk action over rows it never rendered, and nothing else about them.
  */
 export async function getMatchingTransactionIds(
-  userId: string,
+  householdId: string,
   startISO: string,
   endISO: string,
   filters: TransactionFilters = EMPTY_TRANSACTION_FILTERS,
 ): Promise<string[]> {
   const rows = await prisma.transaction.findMany({
-    where: transactionWhere(userId, startISO, endISO, filters),
+    where: transactionWhere(householdId, startISO, endISO, filters),
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     select: { id: true },
   });
@@ -226,13 +226,13 @@ export interface TransactionsPageDTO {
  * stored flag, plus INCOME rows on credit-card accounts.
  */
 export async function getTransactionsPage(
-  userId: string,
+  householdId: string,
   startISO: string,
   endISO: string,
   filters: TransactionFilters = EMPTY_TRANSACTION_FILTERS,
   page = 1,
 ): Promise<TransactionsPageDTO> {
-  const where = transactionWhere(userId, startISO, endISO, filters);
+  const where = transactionWhere(householdId, startISO, endISO, filters);
   const notCreditCardIncome: Prisma.TransactionWhereInput = {
     OR: [{ accountId: null }, { account: { type: { not: "CREDIT_CARD" } } }],
   };
@@ -287,9 +287,9 @@ export interface DeletedTransactionDTO {
  * Recently soft-deleted transactions, newest deletion first. Powers the trash
  * view where rows can be restored or purged. Capped so the list stays bounded.
  */
-export async function getDeletedTransactions(userId: string, limit = 200): Promise<DeletedTransactionDTO[]> {
+export async function getDeletedTransactions(householdId: string, limit = 200): Promise<DeletedTransactionDTO[]> {
   const rows = await prisma.transaction.findMany({
-    where: { userId, deletedAt: { not: null } },
+    where: { householdId, deletedAt: { not: null } },
     orderBy: { deletedAt: "desc" },
     take: limit,
     select: { id: true, type: true, amount: true, date: true, description: true, accountId: true, categoryId: true, deletedAt: true },

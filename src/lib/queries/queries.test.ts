@@ -1,7 +1,8 @@
 // The thin query modules. These are mostly Prisma-row-to-DTO mappers, so the
 // things worth pinning down are the parts that aren't mechanical: that every
-// query is scoped to the caller's userId, that archived and soft-deleted rows
-// stay out by default, and that the net worth split honours includeInNetWorth.
+// query is scoped to the caller's household, that archived and soft-deleted
+// rows stay out by default, and that the net worth split honours
+// includeInNetWorth.
 
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
@@ -66,13 +67,13 @@ describe("getCategories", () => {
     db.category.findMany.mockResolvedValue([] as never);
     await getCategories("u1");
     const args = db.category.findMany.mock.calls[0][0]!;
-    expect(args.where).toEqual({ userId: "u1" });
+    expect(args.where).toEqual({ householdId: "u1" });
     expect(args.orderBy).toEqual([{ kind: "asc" }, { name: "asc" }]);
   });
 
   it("maps a row to its DTO", async () => {
     db.category.findMany.mockResolvedValue([
-      { id: "c1", name: "Food", kind: "EXPENSE", color: "#111", icon: "utensils", parentId: null, userId: "u1" },
+      { id: "c1", name: "Food", kind: "EXPENSE", color: "#111", icon: "utensils", parentId: null, householdId: "u1" },
     ] as never);
     expect(await getCategories("u1")).toEqual([
       { id: "c1", name: "Food", kind: "EXPENSE", color: "#111", icon: "utensils", parentId: null },
@@ -85,12 +86,12 @@ describe("getSavingsGoals", () => {
 
   it("hides archived goals by default", async () => {
     await getSavingsGoals("u1");
-    expect(db.savingsGoal.findMany.mock.calls[0][0]!.where).toEqual({ userId: "u1", archived: false });
+    expect(db.savingsGoal.findMany.mock.calls[0][0]!.where).toEqual({ householdId: "u1", archived: false });
   });
 
   it("includes archived goals when asked", async () => {
     await getSavingsGoals("u1", true);
-    expect(db.savingsGoal.findMany.mock.calls[0][0]!.where).toEqual({ userId: "u1" });
+    expect(db.savingsGoal.findMany.mock.calls[0][0]!.where).toEqual({ householdId: "u1" });
   });
 
   it("renders the target date as an ISO day and leaves a missing one null", async () => {
@@ -117,7 +118,7 @@ describe("getTags", () => {
     expect(tags[1].totalAmount).toBe(0);
 
     const args = db.tag.findMany.mock.calls[0][0]!;
-    expect(args.where).toEqual({ userId: "u1" });
+    expect(args.where).toEqual({ householdId: "u1" });
     expect(args.include!.transactions!.where).toEqual({ deletedAt: null });
   });
 });
@@ -140,9 +141,9 @@ describe("getAccounts", () => {
   it("hides archived accounts by default and includes them on request", async () => {
     db.financialAccount.findMany.mockResolvedValue([] as never);
     await getAccounts("u1");
-    expect(db.financialAccount.findMany.mock.calls[0][0]!.where).toEqual({ userId: "u1", archived: false });
+    expect(db.financialAccount.findMany.mock.calls[0][0]!.where).toEqual({ householdId: "u1", archived: false });
     await getAccounts("u1", true);
-    expect(db.financialAccount.findMany.mock.calls[1][0]!.where).toEqual({ userId: "u1" });
+    expect(db.financialAccount.findMany.mock.calls[1][0]!.where).toEqual({ householdId: "u1" });
   });
 
   it("converts the optional numeric and date columns without turning null into 0", async () => {
@@ -215,7 +216,7 @@ describe("getSnapshots", () => {
     ] as never);
     const snaps = await getSnapshots("u1");
     expect(snaps[0]).toEqual({ id: "s1", accountId: "a1", date: "2026-05-31", balance: 1234.5, note: null });
-    expect(db.accountSnapshot.findMany.mock.calls[0][0]!.where).toEqual({ account: { userId: "u1" } });
+    expect(db.accountSnapshot.findMany.mock.calls[0][0]!.where).toEqual({ account: { householdId: "u1" } });
   });
 });
 
@@ -229,8 +230,8 @@ describe("getOnboardingCounts", () => {
     expect(await getOnboardingCounts("u1")).toEqual({
       accountCount: 2, transactionCount: 50, budgetCount: 0, recurringCount: 3,
     });
-    expect(db.transaction.count).toHaveBeenCalledWith({ where: { userId: "u1", deletedAt: null } });
-    expect(db.financialAccount.count).toHaveBeenCalledWith({ where: { userId: "u1" } });
+    expect(db.transaction.count).toHaveBeenCalledWith({ where: { householdId: "u1", deletedAt: null } });
+    expect(db.financialAccount.count).toHaveBeenCalledWith({ where: { householdId: "u1" } });
   });
 });
 
@@ -291,7 +292,7 @@ describe("getPlaidItems", () => {
     const [item] = await getPlaidItems("u1");
     expect(item.lastSyncedAt).toBe("2026-06-01T00:00:00.000Z");
     expect(item.linkedAccounts[0]).toMatchObject({ mask: "1234", currentBalance: 100 });
-    expect(db.plaidItem.findMany.mock.calls[0][0]!.where).toEqual({ userId: "u1" });
+    expect(db.plaidItem.findMany.mock.calls[0][0]!.where).toEqual({ householdId: "u1" });
   });
 
   it("never carries the item's access token into the DTO", async () => {

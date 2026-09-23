@@ -3,7 +3,7 @@
 // FinancialAccount for each Plaid account, and kicks off the first sync.
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { getPlaidClient } from "@/lib/plaid";
 import { syncPlaidItem } from "@/lib/plaid-sync";
@@ -11,14 +11,14 @@ import { syncPlaidAccounts } from "@/lib/plaid-accounts";
 import { encryptSecret } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { ctx, response } = await householdForRoute("MANAGE_ACCOUNTS");
+  if (response) return response;
 
   const { public_token } = (await req.json()) as { public_token: string };
   if (!public_token) return NextResponse.json({ error: "Missing public_token" }, { status: 400 });
 
   try {
-    const plaidClient = await getPlaidClient(session.user.id);
+    const plaidClient = await getPlaidClient(ctx.householdId);
 
     // Exchange the short-lived public token for a permanent access token.
     const exchangeRes = await plaidClient.itemPublicTokenExchange({ public_token });
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const plaidItem = await prisma.plaidItem.upsert({
       where: { itemId: item_id },
       create: {
-        userId: session.user.id,
+        householdId: ctx.householdId,
         accessToken: encryptSecret(access_token),
         itemId: item_id,
         institutionId,
@@ -59,12 +59,12 @@ export async function POST(req: NextRequest) {
       plaidClient,
       accessToken: access_token,
       plaidItemRowId: plaidItem.id,
-      userId: session.user.id,
+      householdId: ctx.householdId,
       institutionName,
     });
 
     // First sync - pull all available transactions.
-    const syncResult = await syncPlaidItem(plaidItem.id, session.user.id);
+    const syncResult = await syncPlaidItem(plaidItem.id, ctx.householdId);
 
     return NextResponse.json({ ok: true, institutionName, ...syncResult });
   } catch (e: unknown) {

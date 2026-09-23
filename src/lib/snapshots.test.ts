@@ -36,7 +36,7 @@ describe("captureNetWorthSnapshot", () => {
     ] as never);
     snapUpsert.mockResolvedValue({} as never);
 
-    const res = await captureNetWorthSnapshot("u1", "2026-06-14");
+    const res = await captureNetWorthSnapshot("h1", "2026-06-14");
 
     expect(res).toEqual({ captured: 2 });
     expect(snapUpsert).toHaveBeenCalledTimes(2);
@@ -52,7 +52,7 @@ describe("captureNetWorthSnapshot", () => {
 
     // Only archived:false accounts are captured.
     expect(acctFind.mock.calls[0][0]).toMatchObject({
-      where: { userId: "u1", archived: false },
+      where: { householdId: "h1", archived: false },
     });
   });
 });
@@ -60,7 +60,7 @@ describe("captureNetWorthSnapshot", () => {
 describe("getNetWorthHistory", () => {
   it("returns empty when the user has no net-worth accounts", async () => {
     acctFind.mockResolvedValue([] as never);
-    const res = await getNetWorthHistory("u1", 7, "2026-06-14");
+    const res = await getNetWorthHistory("h1", 7, "2026-06-14");
     expect(res).toEqual([]);
     expect(snapFind).not.toHaveBeenCalled();
   });
@@ -73,7 +73,7 @@ describe("getNetWorthHistory", () => {
       { accountId: "a1", date: parseISODay("2026-06-14"), balance: 300 },
     ] as never);
 
-    const res = await getNetWorthHistory("u1", 3, "2026-06-14");
+    const res = await getNetWorthHistory("h1", 3, "2026-06-14");
 
     expect(res.map((p) => [p.date, p.net])).toEqual([
       ["2026-06-12", 100],
@@ -88,7 +88,7 @@ describe("getNetWorthHistory", () => {
       { accountId: "a1", date: parseISODay("2026-06-01"), balance: 500 },
     ] as never);
 
-    const res = await getNetWorthHistory("u1", 2, "2026-06-14");
+    const res = await getNetWorthHistory("h1", 2, "2026-06-14");
 
     // Both window days reflect the pre-window balance.
     expect(res).toEqual([
@@ -107,7 +107,7 @@ describe("getNetWorthHistory", () => {
       { accountId: "debt", date: parseISODay("2026-06-14"), balance: 400 },
     ] as never);
 
-    const res = await getNetWorthHistory("u1", 1, "2026-06-14");
+    const res = await getNetWorthHistory("h1", 1, "2026-06-14");
 
     expect(res).toEqual([{ date: "2026-06-14", assets: 1000, liabilities: 400, net: 600 }]);
   });
@@ -116,10 +116,10 @@ describe("getNetWorthHistory", () => {
     acctFind.mockResolvedValue([{ id: "a1", isAsset: true }] as never);
     snapFind.mockResolvedValue([] as never);
 
-    await getNetWorthHistory("u1", 1, "2026-06-14");
+    await getNetWorthHistory("h1", 1, "2026-06-14");
 
     expect(acctFind.mock.calls[0][0]).toMatchObject({
-      where: { userId: "u1", includeInNetWorth: true, archived: false },
+      where: { householdId: "h1", includeInNetWorth: true, archived: false },
     });
   });
 });

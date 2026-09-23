@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/session";
+import { householdForRoute } from "@/lib/household";
 import { isDemoMode } from "@/lib/demo-guard";
 import { prisma } from "@/lib/prisma";
 import { validateAttachmentUpload, sniffAttachmentType } from "@/lib/attachments";
@@ -8,12 +8,8 @@ import { validateAttachmentUpload, sniffAttachmentType } from "@/lib/attachments
 // A route handler rather than a server action: uploads can exceed the 1MB
 // server-action body cap, and downloads need a GET sibling anyway.
 export async function POST(req: NextRequest) {
-  let userId: string;
-  try {
-    ({ userId } = await requireUser());
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
+  if (response) return response;
 
   const form = await req.formData();
   const transactionId = form.get("transactionId");
@@ -30,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const txn = await prisma.transaction.findFirst({
-    where: { id: transactionId, userId },
+    where: { id: transactionId, householdId: ctx.householdId },
     select: { id: true, _count: { select: { attachments: true } } },
   });
   if (!txn) return NextResponse.json({ error: "Transaction not found." }, { status: 404 });
@@ -57,7 +53,7 @@ export async function POST(req: NextRequest) {
 
   const created = await prisma.attachment.create({
     data: {
-      userId,
+      householdId: ctx.householdId,
       transactionId,
       filename: file.name || "attachment",
       mimeType: sniffed,

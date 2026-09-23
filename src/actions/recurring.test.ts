@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -41,9 +41,9 @@ import {
   getTransactionLinkOptionsAction,
 } from "./recurring";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const rule = vi.mocked(prisma.recurringRule);
 const version = vi.mocked(prisma.recurringRuleVersion);
 const txn = vi.mocked(prisma.transaction);
@@ -59,7 +59,7 @@ const validInput = {
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
 });
 
 describe("demo-mode guard", () => {
@@ -69,7 +69,7 @@ describe("demo-mode guard", () => {
 
   it("createRecurringAction is a no-op success in demo mode", async () => {
     expect(await createRecurringAction(validInput)).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(rule.create).not.toHaveBeenCalled();
   });
 
@@ -85,7 +85,7 @@ describe("createRecurringAction", () => {
     expect(result).toEqual({ ok: true });
     expect(rule.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        userId: "u1",
+        householdId: "h1",
         versions: {
           create: [
             expect.objectContaining({
@@ -207,7 +207,7 @@ describe("deleteRecurringAction", () => {
 
   it("deletes the occurrences when asked", async () => {
     await deleteRecurringAction("r1", true);
-    expect(txn.deleteMany).toHaveBeenCalledWith({ where: { userId: "u1", recurringRuleId: "r1" } });
+    expect(txn.deleteMany).toHaveBeenCalledWith({ where: { householdId: "h1", recurringRuleId: "r1" } });
     expect(rule.delete).toHaveBeenCalled();
   });
 
@@ -237,7 +237,7 @@ describe("linkSuggestionToRuleAction", () => {
     const result = await linkSuggestionToRuleAction("r1", "EXPENSE|netflix");
     expect(result).toEqual({ ok: true });
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["t1", "t2"] }, userId: "u1" },
+      where: { id: { in: ["t1", "t2"] }, householdId: "h1" },
       data: { recurringRuleId: "r1" },
     });
   });
@@ -315,7 +315,7 @@ describe("linkTransactionToRuleAction", () => {
     await linkTransactionToRuleAction("t1", "r1", true);
 
     expect(txn.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["t2"] }, userId: "u1" },
+      where: { id: { in: ["t2"] }, householdId: "h1" },
       data: { recurringRuleId: "r1" },
     });
   });
@@ -354,7 +354,7 @@ describe("linkTransactionToRuleAction", () => {
   it("is a no-op success in demo mode", async () => {
     demoMode.value = true;
     expect(await linkTransactionToRuleAction("t1", "r1")).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(txn.update).not.toHaveBeenCalled();
   });
 });
@@ -378,7 +378,7 @@ describe("getTransactionLinkOptionsAction", () => {
     });
     expect(rule.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: "u1", archived: false, versions: { some: { type: "EXPENSE" } } },
+        where: { householdId: "h1", archived: false, versions: { some: { type: "EXPENSE" } } },
       }),
     );
   });
@@ -393,7 +393,7 @@ describe("getTransactionLinkOptionsAction", () => {
     const result = await getTransactionLinkOptionsAction("t1");
     expect(result).toMatchObject({ ok: true, matchCount: 1 });
     expect(txn.findMany).toHaveBeenCalledWith({
-      where: { userId: "u1", deletedAt: null, type: "EXPENSE", recurringRuleId: null },
+      where: { householdId: "h1", deletedAt: null, type: "EXPENSE", recurringRuleId: null },
       select: { id: true, description: true },
     });
   });
@@ -442,6 +442,6 @@ describe("getTransactionLinkOptionsAction", () => {
       matchCount: 0,
       linked: null,
     });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
   });
 });

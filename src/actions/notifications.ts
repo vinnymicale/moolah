@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { requireHousehold } from "@/lib/household";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { isValidDiscordWebhookUrl } from "@/lib/notifications/discord";
@@ -129,11 +130,11 @@ export async function deleteRuleAction(id: string): Promise<ActionResult> {
 export async function testRuleAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { userId, householdId } = await requireHousehold();
     const existing = await prisma.notificationRule.findFirst({ where: { id, userId } });
     if (!existing) throw new UserError("Rule not found.");
     const { runRules } = await import("@/lib/notifications/engine");
-    const summary = await runRules(userId, { mode: "sweep", ruleId: id, test: true });
+    const summary = await runRules(userId, householdId, { mode: "sweep", ruleId: id, test: true });
     if (summary.failed > 0) {
       throw new UserError("Test fired, but delivery failed - check the inbox entry for the error.");
     }

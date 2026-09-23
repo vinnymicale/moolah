@@ -10,13 +10,21 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { DEFAULT_CATEGORIES } from "../src/lib/default-categories";
+import { hash } from "bcryptjs";
+import { nameToEmail } from "../src/lib/user-setup";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 // Always use a fixed throwaway email for the demo account so that running
 // db:seed never touches a real user's data.
-const DEMO_EMAIL = "demo@example.com";
+const DEMO_NAME = "Demo User";
+// Sign-in looks the account up by the email derived from the typed name, so the
+// seeded row has to carry that address rather than a decorative one, or a real
+// (non-bypass) sign-in finds nothing. The password is a fixed throwaway for
+// local review and the E2E suite; a real deployment never runs this seed.
+const DEMO_EMAIL = nameToEmail(DEMO_NAME);
+const DEMO_PASSWORD = "demodemo123";
 
 // Work relative to a fixed "today" derived from the system clock.
 const today = new Date();
@@ -28,44 +36,65 @@ async function main() {
   console.log(`Seeding demo user (login email: ${DEMO_EMAIL}) …`);
 
   // ── Demo user ────────────────────────────────────────────────────────────
+  const passwordHash = await hash(DEMO_PASSWORD, 12);
   const demoUser = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { name: "Demo User" },
-    create: { email: DEMO_EMAIL, name: "Demo User" },
+    update: { name: DEMO_NAME, passwordHash, mustChangePassword: false },
+    create: { email: DEMO_EMAIL, name: DEMO_NAME, passwordHash, mustChangePassword: false },
   });
 
-  // ── Wipe existing demo financial data (keep the user) ────────────────────
-  await prisma.transaction.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.recurringRule.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.budget.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.accountSnapshot.deleteMany({
-    where: { account: { userId: demoUser.id } },
+  // ── Demo household ───────────────────────────────────────────────────────
+  // All financial data hangs off the household, so the demo user needs one.
+  // The member row is what getHouseholdContext resolves on sign-in.
+  const existingMembership = await prisma.householdMember.findUnique({
+    where: { userId: demoUser.id },
+    select: { householdId: true },
   });
-  await prisma.contribution.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.contributionSchedule.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.employerMatch.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.retirementPlan.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.financialAccount.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.savingsGoal.deleteMany({ where: { userId: demoUser.id } });
-  await prisma.category.deleteMany({ where: { userId: demoUser.id } });
+  const demoHousehold = existingMembership
+    ? await prisma.household.update({
+        where: { id: existingMembership.householdId },
+        data: { name: "Demo Household" },
+      })
+    : await prisma.household.create({
+        data: {
+          name: "Demo Household",
+          ownerId: demoUser.id,
+          members: { create: { userId: demoUser.id, role: "OWNER" } },
+        },
+      });
+
+  // ── Wipe existing demo financial data (keep the user and household) ──────
+  await prisma.transaction.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.recurringRule.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.budget.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.accountSnapshot.deleteMany({
+    where: { account: { householdId: demoHousehold.id } },
+  });
+  await prisma.contribution.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.contributionSchedule.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.employerMatch.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.retirementPlan.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.financialAccount.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.savingsGoal.deleteMany({ where: { householdId: demoHousehold.id } });
+  await prisma.category.deleteMany({ where: { householdId: demoHousehold.id } });
 
   // ── Categories ───────────────────────────────────────────────────────────
   await prisma.category.createMany({
-    data: DEFAULT_CATEGORIES.map((c) => ({ ...c, userId: demoUser.id, isSystem: true })),
+    data: DEFAULT_CATEGORIES.map((c) => ({ ...c, householdId: demoHousehold.id, isSystem: true })),
   });
-  const categories = await prisma.category.findMany({ where: { userId: demoUser.id } });
+  const categories = await prisma.category.findMany({ where: { householdId: demoHousehold.id } });
   const cat = (name: string) => categories.find((c) => c.name === name)!.id;
 
   // ── Accounts ─────────────────────────────────────────────────────────────
   const checking = await prisma.financialAccount.create({
-    data: { userId: demoUser.id, name: "Joint Checking", type: "CHECKING", institution: "Chase", currentBalance: 5240.5, isAsset: true, includeInCash: true, color: "#2563eb" },
+    data: { householdId: demoHousehold.id, name: "Joint Checking", type: "CHECKING", institution: "Chase", currentBalance: 5240.5, isAsset: true, includeInCash: true, color: "#2563eb" },
   });
   const savings = await prisma.financialAccount.create({
-    data: { userId: demoUser.id, name: "Emergency Savings", type: "SAVINGS", institution: "Ally", currentBalance: 18400, isAsset: true, includeInCash: true, color: "#0891b2" },
+    data: { householdId: demoHousehold.id, name: "Emergency Savings", type: "SAVINGS", institution: "Ally", currentBalance: 18400, isAsset: true, includeInCash: true, color: "#0891b2" },
   });
   const creditCard = await prisma.financialAccount.create({
     data: {
-      userId: demoUser.id, name: "Sapphire Card", type: "CREDIT_CARD", institution: "Chase",
+      householdId: demoHousehold.id, name: "Sapphire Card", type: "CREDIT_CARD", institution: "Chase",
       currentBalance: 1284.32, isAsset: false, includeInCash: false, color: "#dc2626",
       // Debt-payoff terms so the Debt page can build a plan.
       interestRate: 19.99, minimumPayment: 35, includeInDebtPlanner: true,
@@ -81,13 +110,13 @@ async function main() {
     },
   });
   const retirement401k = await prisma.financialAccount.create({
-    data: { userId: demoUser.id, name: "401(k)", type: "RETIREMENT", institution: "Fidelity", currentBalance: 142500, isAsset: true, includeInCash: false, color: "#7c3aed" },
+    data: { householdId: demoHousehold.id, name: "401(k)", type: "RETIREMENT", institution: "Fidelity", currentBalance: 142500, isAsset: true, includeInCash: false, color: "#7c3aed" },
   });
   const rothIra = await prisma.financialAccount.create({
-    data: { userId: demoUser.id, name: "Roth IRA", type: "RETIREMENT", institution: "Vanguard", currentBalance: 38250, isAsset: true, includeInCash: false, color: "#9333ea" },
+    data: { householdId: demoHousehold.id, name: "Roth IRA", type: "RETIREMENT", institution: "Vanguard", currentBalance: 38250, isAsset: true, includeInCash: false, color: "#9333ea" },
   });
   const car = await prisma.financialAccount.create({
-    data: { userId: demoUser.id, name: "Honda CR-V", type: "VEHICLE", currentBalance: 24800, isAsset: true, includeInCash: false, color: "#0d9488" },
+    data: { householdId: demoHousehold.id, name: "Honda CR-V", type: "VEHICLE", currentBalance: 24800, isAsset: true, includeInCash: false, color: "#0d9488" },
   });
 
   // ── Recurring rules ──────────────────────────────────────────────────────
@@ -100,7 +129,7 @@ async function main() {
   }) =>
     prisma.recurringRule.create({
       data: {
-        userId: demoUser.id,
+        householdId: demoHousehold.id,
         description: v.description,
         versions: {
           create: [{
@@ -132,7 +161,7 @@ async function main() {
     d: number, type: "INCOME" | "EXPENSE", amount: number, description: string,
     catName: string, accountId: string, cleared = true, recurringRuleId: string | null = null,
   ) => ({
-    userId: demoUser.id,
+    householdId: demoHousehold.id,
     accountId,
     categoryId: cat(catName),
         type, amount, description, cleared,
@@ -186,7 +215,7 @@ async function main() {
   // detector (getRecurringSuggestions) spots it and suggests creating a rule.
   await prisma.transaction.createMany({
     data: [1, 2, 3, 4].map((k) => ({
-      userId: demoUser.id,
+      householdId: demoHousehold.id,
       accountId: creditCard.id,
       categoryId: cat("Personal Care"),
             type: "EXPENSE" as const,
@@ -202,10 +231,10 @@ async function main() {
   const monthStart = new Date(Date.UTC(Y, M, 1));
   await prisma.budget.createMany({
     data: [
-      { userId: demoUser.id, categoryId: cat("Groceries"), month: monthStart, limit: 700 },
-      { userId: demoUser.id, categoryId: cat("Dining Out"), month: monthStart, limit: 300 },
-      { userId: demoUser.id, categoryId: cat("Gas / Fuel"), month: monthStart, limit: 200 },
-      { userId: demoUser.id, categoryId: cat("Entertainment"), month: monthStart, limit: 150 },
+      { householdId: demoHousehold.id, categoryId: cat("Groceries"), month: monthStart, limit: 700 },
+      { householdId: demoHousehold.id, categoryId: cat("Dining Out"), month: monthStart, limit: 300 },
+      { householdId: demoHousehold.id, categoryId: cat("Gas / Fuel"), month: monthStart, limit: 200 },
+      { householdId: demoHousehold.id, categoryId: cat("Entertainment"), month: monthStart, limit: 150 },
     ],
   });
 
@@ -237,10 +266,10 @@ async function main() {
   // ── Savings goals ────────────────────────────────────────────────────────
   await prisma.savingsGoal.createMany({
     data: [
-      { userId: demoUser.id, name: "Emergency fund", targetAmount: 15000, currentAmount: 9200, color: "#16a34a", icon: "shield" },
-      { userId: demoUser.id, name: "Hawaii vacation", targetAmount: 6000, currentAmount: 2400, color: "#0891b2", icon: "plane", targetDate: new Date(Date.UTC(Y, 11, 1)) },
-      { userId: demoUser.id, name: "New car fund", targetAmount: 25000, currentAmount: 8500, color: "#7c3aed", icon: "car" },
-      { userId: demoUser.id, name: "House down payment", targetAmount: 60000, currentAmount: 18000, color: "#2563eb", icon: "home" },
+      { householdId: demoHousehold.id, name: "Emergency fund", targetAmount: 15000, currentAmount: 9200, color: "#16a34a", icon: "shield" },
+      { householdId: demoHousehold.id, name: "Hawaii vacation", targetAmount: 6000, currentAmount: 2400, color: "#0891b2", icon: "plane", targetDate: new Date(Date.UTC(Y, 11, 1)) },
+      { householdId: demoHousehold.id, name: "New car fund", targetAmount: 25000, currentAmount: 8500, color: "#7c3aed", icon: "car" },
+      { householdId: demoHousehold.id, name: "House down payment", targetAmount: 60000, currentAmount: 18000, color: "#2563eb", icon: "home" },
     ],
   });
 
@@ -250,7 +279,7 @@ async function main() {
   // above ($2,600 * 26 = $67,600/yr). Everything else rides the schema
   // defaults (7% return, 3% inflation, 80% replacement, 4% SWR, target age 65).
   await prisma.retirementPlan.create({
-    data: { userId: demoUser.id, birthYear: Y - 35, currentAnnualSalary: 67600, completedAt: day(1) },
+    data: { householdId: demoHousehold.id, birthYear: Y - 35, currentAnnualSalary: 67600, completedAt: day(1) },
   });
 
   // Monthly deferral schedules feeding the two retirement accounts. Both start
@@ -264,10 +293,10 @@ async function main() {
   // below runs through the current month, so attribution is clean on a fresh
   // seed and picks up one gap month for each month that elapses afterward.
   const schedule401k = await prisma.contributionSchedule.create({
-    data: { userId: demoUser.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19) },
+    data: { householdId: demoHousehold.id, financialAccountId: retirement401k.id, amount: 550, source: "EMPLOYEE_PRETAX", frequency: "MONTHLY", dayOfMonth: 1, startDate: day(1, -19) },
   });
   const scheduleRoth = await prisma.contributionSchedule.create({
-    data: { userId: demoUser.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19) },
+    data: { householdId: demoHousehold.id, financialAccountId: rothIra.id, amount: 450, source: "EMPLOYEE_ROTH", frequency: "MONTHLY", dayOfMonth: 5, startDate: day(5, -19) },
   });
 
   // ~18 months of backdated contributions matching the schedules above, one
@@ -275,8 +304,8 @@ async function main() {
   // gaps and growth attribution reports confident: true.
   await prisma.contribution.createMany({
     data: Array.from({ length: 18 }, (_, i) => -18 + i + 1).flatMap((monthOffset) => [
-      { userId: demoUser.id, financialAccountId: retirement401k.id, date: day(1, monthOffset), amount: 550, source: "EMPLOYEE_PRETAX" as const, scheduleId: schedule401k.id },
-      { userId: demoUser.id, financialAccountId: rothIra.id, date: day(5, monthOffset), amount: 450, source: "EMPLOYEE_ROTH" as const, scheduleId: scheduleRoth.id },
+      { householdId: demoHousehold.id, financialAccountId: retirement401k.id, date: day(1, monthOffset), amount: 550, source: "EMPLOYEE_PRETAX" as const, scheduleId: schedule401k.id },
+      { householdId: demoHousehold.id, financialAccountId: rothIra.id, date: day(5, monthOffset), amount: 450, source: "EMPLOYEE_ROTH" as const, scheduleId: scheduleRoth.id },
     ]),
   });
 
@@ -284,7 +313,7 @@ async function main() {
   // the next 2%.
   await prisma.employerMatch.create({
     data: {
-      userId: demoUser.id, financialAccountId: retirement401k.id,
+      householdId: demoHousehold.id, financialAccountId: retirement401k.id,
       tiers: [{ matchPercent: 100, upToPercentOfSalary: 3 }, { matchPercent: 50, upToPercentOfSalary: 2 }],
     },
   });

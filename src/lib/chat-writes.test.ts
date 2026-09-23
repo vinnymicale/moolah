@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     category: { findFirst: vi.fn() },
-    account: { findFirst: vi.fn() },
+    financialAccount: { findFirst: vi.fn() },
     transaction: { create: vi.fn() },
     recurringRule: { create: vi.fn() },
     budget: { upsert: vi.fn() },
@@ -28,7 +28,7 @@ import {
 const categories = vi.mocked(getCategories);
 const accounts = vi.mocked(getAccounts);
 const findCategory = vi.mocked(prisma.category.findFirst);
-const findAccount = vi.mocked(prisma.account.findFirst);
+const findAccount = vi.mocked(prisma.financialAccount.findFirst);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -60,20 +60,20 @@ describe("stageWrite - create_transaction", () => {
   };
 
   it("resolves names to ids and writes nothing", async () => {
-    const { staged } = await stageWrite("create_transaction", args, "u1");
+    const { staged } = await stageWrite("create_transaction", args, "h1");
     expect(staged?.tool).toBe("create_transaction");
     expect(staged?.payload).toMatchObject({ categoryId: "c1", accountId: "a1", cleared: true });
     expect(prisma.transaction.create).not.toHaveBeenCalled();
   });
 
   it("describes the change for the confirm card", async () => {
-    const { staged } = await stageWrite("create_transaction", args, "u1");
+    const { staged } = await stageWrite("create_transaction", args, "h1");
     expect(staged?.summary).toContain("Market run");
     expect(staged?.fields).toContainEqual({ label: "Category", value: "Groceries" });
   });
 
   it("tells the model the write has not happened yet", async () => {
-    const { toolResult } = await stageWrite("create_transaction", args, "u1");
+    const { toolResult } = await stageWrite("create_transaction", args, "h1");
     const parsed = JSON.parse(toolResult);
     expect(parsed.staged).toBe(true);
     expect(parsed.message).toMatch(/NOT yet saved/);
@@ -83,19 +83,19 @@ describe("stageWrite - create_transaction", () => {
     const { staged } = await stageWrite(
       "create_transaction",
       { ...args, category_name: "nope", account_name: "nope" },
-      "u1",
+      "h1",
     );
     expect(staged?.payload).toMatchObject({ categoryId: null, accountId: null });
   });
 
   it("rejects arguments the model got wrong", async () => {
     await expect(
-      stageWrite("create_transaction", { ...args, amount: -5 }, "u1"),
+      stageWrite("create_transaction", { ...args, amount: -5 }, "h1"),
     ).rejects.toThrow();
   });
 
   it("produces a descriptor that survives the round trip", async () => {
-    const { staged } = await stageWrite("create_transaction", args, "u1");
+    const { staged } = await stageWrite("create_transaction", args, "h1");
     expect(stagedWriteSchema.parse(JSON.parse(JSON.stringify(staged)))).toEqual(staged);
   });
 });
@@ -111,13 +111,13 @@ describe("stageWrite - create_recurring_rule", () => {
   };
 
   it("defaults the interval to 1", async () => {
-    const { staged } = await stageWrite("create_recurring_rule", args, "u1");
+    const { staged } = await stageWrite("create_recurring_rule", args, "h1");
     expect(staged?.payload).toMatchObject({ interval: 1, dayOfMonth: null });
     expect(prisma.recurringRule.create).not.toHaveBeenCalled();
   });
 
   it("spells out a multi-cycle interval in the summary", async () => {
-    const { staged } = await stageWrite("create_recurring_rule", { ...args, interval: 3 }, "u1");
+    const { staged } = await stageWrite("create_recurring_rule", { ...args, interval: 3 }, "h1");
     expect(staged?.summary).toContain("every 3 monthly cycles");
   });
 });
@@ -127,7 +127,7 @@ describe("stageWrite - set_budget", () => {
     const { staged } = await stageWrite(
       "set_budget",
       { category_name: "grocer", limit: 500, month: "2026-06" },
-      "u1",
+      "h1",
     );
     expect(staged?.payload).toEqual({ categoryId: "c1", limit: 500, month: "2026-06" });
   });
@@ -136,14 +136,14 @@ describe("stageWrite - set_budget", () => {
     const { staged, toolResult } = await stageWrite(
       "set_budget",
       { category_name: "spaceships", limit: 500 },
-      "u1",
+      "h1",
     );
     expect(staged).toBeNull();
     expect(JSON.parse(toolResult).success).toBe(false);
   });
 
   it("falls back to the current month", async () => {
-    const { staged } = await stageWrite("set_budget", { category_name: "grocer", limit: 500 }, "u1");
+    const { staged } = await stageWrite("set_budget", { category_name: "grocer", limit: 500 }, "h1");
     expect(staged?.payload).toMatchObject({ month: expect.stringMatching(/^\d{4}-\d{2}$/) });
   });
 });
@@ -167,27 +167,27 @@ const txnWrite: StagedWrite = {
 
 describe("commitWrite", () => {
   it("creates the transaction once ownership checks out", async () => {
-    const message = await commitWrite(txnWrite, "u1");
+    const message = await commitWrite(txnWrite, "h1");
     expect(prisma.transaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ userId: "u1", categoryId: "c1", accountId: "a1" }),
+      data: expect.objectContaining({ householdId: "h1", categoryId: "c1", accountId: "a1" }),
     });
     expect(message).toContain("Market run");
   });
 
   it("refuses a category belonging to someone else", async () => {
     findCategory.mockResolvedValue(null as never);
-    await expect(commitWrite(txnWrite, "u1")).rejects.toThrow(/Unknown category/);
+    await expect(commitWrite(txnWrite, "h1")).rejects.toThrow(/Unknown category/);
     expect(prisma.transaction.create).not.toHaveBeenCalled();
   });
 
   it("refuses an account belonging to someone else", async () => {
     findAccount.mockResolvedValue(null as never);
-    await expect(commitWrite(txnWrite, "u1")).rejects.toThrow(/Unknown category or account/);
+    await expect(commitWrite(txnWrite, "h1")).rejects.toThrow(/Unknown category or account/);
     expect(prisma.transaction.create).not.toHaveBeenCalled();
   });
 
   it("skips the lookup when there is no id to check", async () => {
-    await commitWrite({ ...txnWrite, payload: { ...txnWrite.payload, categoryId: null, accountId: null } }, "u1");
+    await commitWrite({ ...txnWrite, payload: { ...txnWrite.payload, categoryId: null, accountId: null } }, "h1");
     expect(findCategory).not.toHaveBeenCalled();
     expect(findAccount).not.toHaveBeenCalled();
   });
@@ -211,7 +211,7 @@ describe("commitWrite", () => {
           accountId: null,
         },
       },
-      "u1",
+      "h1",
     );
     const arg = vi.mocked(prisma.recurringRule.create).mock.calls[0][0] as never as {
       data: { versions: { create: { amount: number }[] } };
@@ -229,13 +229,13 @@ describe("commitWrite", () => {
         tool: "set_budget",
         payload: { categoryId: "c1", limit: 500, month: "2026-06" },
       },
-      "u1",
+      "h1",
     );
     expect(prisma.budget.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          userId_categoryId_month: {
-            userId: "u1",
+          householdId_categoryId_month: {
+            householdId: "h1",
             categoryId: "c1",
             month: new Date("2026-06-01T00:00:00.000Z"),
           },
@@ -250,7 +250,7 @@ describe("commitWrite", () => {
     await expect(
       commitWrite(
         { id: "w4", summary: "b", fields: [], tool: "set_budget", payload: { categoryId: "cX", limit: 1, month: "2026-06" } },
-        "u1",
+        "h1",
       ),
     ).rejects.toThrow(/Unknown category/);
     expect(prisma.budget.upsert).not.toHaveBeenCalled();

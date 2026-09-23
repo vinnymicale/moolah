@@ -18,6 +18,7 @@ vi.mock("@/lib/calendar", () => ({ getUpcoming: vi.fn() }));
 
 const ctx = (over: Partial<TriggerContext> = {}): TriggerContext => ({
   userId: "u1",
+  householdId: "h1",
   params: {},
   todayISO: "2026-07-09",
   now: new Date("2026-07-09T12:00:00Z"),
@@ -39,7 +40,7 @@ describe("bill-due", () => {
         vars: { name: "Netflix", amount: "$15.49", due_date: "2026-07-11", days: "2" },
       },
     ]);
-    expect(getUpcoming).toHaveBeenCalledWith("u1", "2026-07-09", 3);
+    expect(getUpcoming).toHaveBeenCalledWith("h1", "2026-07-09", 3);
   });
 });
 

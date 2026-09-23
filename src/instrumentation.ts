@@ -9,6 +9,17 @@
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Bypass signs every visitor in as the same local account, which makes the
+  // household permission model meaningless. It's a development convenience, so
+  // say so loudly in case an instance reached a network with it still on.
+  if (process.env.AUTH_BYPASS === "true") {
+    console.warn(
+      "[moolah] AUTH_BYPASS=true - anyone who can reach this server is signed in as the local " +
+        "account, with that account's permissions. Set AUTH_BYPASS=false for any shared instance.",
+    );
+  }
+
   if (process.env.DEMO_MODE === "true") return;
 
   const { startScheduler } = await import("@/lib/backup/scheduler");

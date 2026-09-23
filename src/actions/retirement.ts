@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { parseISODay } from "@/lib/dates";
 import { moneyInput } from "@/lib/money";
 import { matchTiersSchema } from "@/lib/retirement-types";
@@ -104,9 +104,9 @@ export type EmployerMatchInput = z.input<typeof employerMatchSchema>;
 export type YtdContributionInput = z.input<typeof ytdContributionSchema>;
 
 /** Throws unless the account exists and belongs to the user. */
-async function assertOwnsAccount(userId: string, financialAccountId: string): Promise<void> {
+async function assertOwnsAccount(householdId: string, financialAccountId: string): Promise<void> {
   const found = await prisma.financialAccount.findFirst({
-    where: { id: financialAccountId, userId },
+    where: { id: financialAccountId, householdId },
     select: { id: true },
   });
   if (!found) throw new UserError("Account not found");
@@ -117,11 +117,11 @@ export async function saveRetirementPlanAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = planSchema.parse(input);
     await prisma.retirementPlan.upsert({
-      where: { userId },
-      create: { userId, ...data },
+      where: { householdId },
+      create: { householdId, ...data },
       update: data,
     });
     revalidatePaths();
@@ -132,9 +132,9 @@ export async function saveRetirementPlanAction(
 export async function completeWizardAction(): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     await prisma.retirementPlan.update({
-      where: { userId },
+      where: { householdId },
       data: { completedAt: new Date() },
     });
     revalidatePaths();
@@ -144,9 +144,9 @@ export async function completeWizardAction(): Promise<ActionResult> {
 export async function createContributionAction(input: ContributionInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = contributionSchema.parse(input);
-    await assertOwnsAccount(userId, data.financialAccountId);
+    await assertOwnsAccount(householdId, data.financialAccountId);
     const date = parseISODay(data.date);
 
     // Store the designation only when it actually differs from the deposit
@@ -162,7 +162,7 @@ export async function createContributionAction(input: ContributionInput): Promis
 
     await prisma.contribution.create({
       data: {
-        userId,
+        householdId,
         financialAccountId: data.financialAccountId,
         date,
         amount: data.amount,
@@ -179,8 +179,8 @@ export async function createContributionAction(input: ContributionInput): Promis
 export async function deleteContributionAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const existing = await prisma.contribution.findFirst({ where: { id, userId } });
+    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const existing = await prisma.contribution.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Contribution not found");
     await prisma.contribution.delete({ where: { id } });
     revalidatePaths();
@@ -190,12 +190,12 @@ export async function deleteContributionAction(id: string): Promise<ActionResult
 export async function createScheduleAction(input: ScheduleInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = scheduleSchema.parse(input);
-    await assertOwnsAccount(userId, data.financialAccountId);
+    await assertOwnsAccount(householdId, data.financialAccountId);
     await prisma.contributionSchedule.create({
       data: {
-        userId,
+        householdId,
         financialAccountId: data.financialAccountId,
         basis: data.basis,
         amount: data.basis === "PERCENT_OF_SALARY" ? null : data.amount,
@@ -224,11 +224,11 @@ export async function updateScheduleAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = scheduleSchema.parse(input);
-    const existing = await prisma.contributionSchedule.findFirst({ where: { id, userId } });
+    const existing = await prisma.contributionSchedule.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Schedule not found");
-    await assertOwnsAccount(userId, data.financialAccountId);
+    await assertOwnsAccount(householdId, data.financialAccountId);
     await prisma.contributionSchedule.update({
       where: { id },
       data: {
@@ -253,8 +253,8 @@ export async function updateScheduleAction(
 export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    const existing = await prisma.contributionSchedule.findFirst({ where: { id, userId } });
+    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const existing = await prisma.contributionSchedule.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Schedule not found");
     await prisma.contributionSchedule.update({ where: { id }, data: { archived: true } });
     revalidatePaths();
@@ -271,9 +271,9 @@ export async function saveYtdContributionsAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = ytdContributionSchema.parse(input);
-    await assertOwnsAccount(userId, data.financialAccountId);
+    await assertOwnsAccount(householdId, data.financialAccountId);
 
     const { financialAccountId, year } = data;
     await prisma.$transaction(
@@ -281,18 +281,18 @@ export async function saveYtdContributionsAction(
         amount > 0
           ? prisma.ytdContribution.upsert({
               where: {
-                userId_year_financialAccountId_source: {
-                  userId,
+                householdId_year_financialAccountId_source: {
+                  householdId,
                   year,
                   financialAccountId,
                   source,
                 },
               },
-              create: { userId, year, financialAccountId, source, amount },
+              create: { householdId, year, financialAccountId, source, amount },
               update: { amount },
             })
           : prisma.ytdContribution.deleteMany({
-              where: { userId, year, financialAccountId, source },
+              where: { householdId, year, financialAccountId, source },
             }),
       ),
     );
@@ -304,8 +304,8 @@ export async function saveYtdContributionsAction(
 export async function clearYtdContributionsAction(year: number): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await prisma.ytdContribution.deleteMany({ where: { userId, year } });
+    const { householdId } = await requireCapability("MANAGE_GOALS");
+    await prisma.ytdContribution.deleteMany({ where: { householdId, year } });
     revalidatePaths();
   });
 }
@@ -315,13 +315,13 @@ export async function saveEmployerMatchAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_GOALS");
     const data = employerMatchSchema.parse(input);
-    await assertOwnsAccount(userId, data.financialAccountId);
+    await assertOwnsAccount(householdId, data.financialAccountId);
     await prisma.employerMatch.upsert({
       where: { financialAccountId: data.financialAccountId },
       create: {
-        userId,
+        householdId,
         financialAccountId: data.financialAccountId,
         tiers: data.tiers,
         annualCap: data.annualCap ?? null,

@@ -21,14 +21,14 @@ beforeEach(() => {
 
 describe("normalizeSplits", () => {
   it("returns [] when fewer than two parts are given (means not split)", async () => {
-    expect(await normalizeSplits("u1", "EXPENSE", 100, null)).toEqual([]);
-    expect(await normalizeSplits("u1", "EXPENSE", 100, [{ categoryId: "a", amount: 100 }])).toEqual([]);
+    expect(await normalizeSplits("h1", "EXPENSE", 100, null)).toEqual([]);
+    expect(await normalizeSplits("h1", "EXPENSE", 100, [{ categoryId: "a", amount: 100 }])).toEqual([]);
     expect(count).not.toHaveBeenCalled();
   });
 
   it("rejects parts that don't sum to the total (delegates to validateSplits)", async () => {
     await expect(
-      normalizeSplits("u1", "EXPENSE", 100, [
+      normalizeSplits("h1", "EXPENSE", 100, [
         { categoryId: "a", amount: 40 },
         { categoryId: "b", amount: 40 },
       ]),
@@ -38,7 +38,7 @@ describe("normalizeSplits", () => {
 
   it("accepts valid splits whose categories all belong to the user and kind", async () => {
     count.mockResolvedValue(2);
-    const result = await normalizeSplits("u1", "EXPENSE", 100, [
+    const result = await normalizeSplits("h1", "EXPENSE", 100, [
       { categoryId: "a", amount: 60 },
       { categoryId: "b", amount: 40 },
     ]);
@@ -48,14 +48,14 @@ describe("normalizeSplits", () => {
     ]);
     // Looked up exactly the named categories, scoped to user + kind.
     expect(count).toHaveBeenCalledWith({
-      where: { id: { in: ["a", "b"] }, userId: "u1", kind: "EXPENSE" },
+      where: { id: { in: ["a", "b"] }, householdId: "h1", kind: "EXPENSE" },
     });
   });
 
   it("rejects a split category the user doesn't own (count short of expected)", async () => {
     count.mockResolvedValue(1); // only one of the two ids matched for this user
     await expect(
-      normalizeSplits("u1", "EXPENSE", 100, [
+      normalizeSplits("h1", "EXPENSE", 100, [
         { categoryId: "mine", amount: 60 },
         { categoryId: "someone-elses", amount: 40 },
       ]),
@@ -65,7 +65,7 @@ describe("normalizeSplits", () => {
   it("rejects a split category of the wrong kind (income cat on an expense)", async () => {
     count.mockResolvedValue(1); // the income-kind category is filtered out by kind: EXPENSE
     await expect(
-      normalizeSplits("u1", "EXPENSE", 100, [
+      normalizeSplits("h1", "EXPENSE", 100, [
         { categoryId: "groceries", amount: 60 },
         { categoryId: "paycheck", amount: 40 },
       ]),
@@ -73,7 +73,7 @@ describe("normalizeSplits", () => {
   });
 
   it("normalizes empty-string categoryId to null and skips the ownership query when all parts are uncategorized", async () => {
-    const result = await normalizeSplits("u1", "EXPENSE", 100, [
+    const result = await normalizeSplits("h1", "EXPENSE", 100, [
       { categoryId: "", amount: 60 },
       { categoryId: null, amount: 40 },
     ]);
@@ -87,7 +87,7 @@ describe("normalizeSplits", () => {
 
   it("deduplicates named categories before counting (mixed named + uncategorized)", async () => {
     count.mockResolvedValue(1);
-    await normalizeSplits("u1", "EXPENSE", 100, [
+    await normalizeSplits("h1", "EXPENSE", 100, [
       { categoryId: "a", amount: 30 },
       { categoryId: "a", amount: 30 }, // dup would be rejected by validateSplits first
       { categoryId: null, amount: 40 },

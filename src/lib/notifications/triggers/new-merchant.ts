@@ -32,7 +32,7 @@ export const newMerchant: TriggerDef = {
     const txns = await prisma.transaction.findMany({
       where: {
         id: { in: ctx.event.newTransactionIds },
-        userId: ctx.userId,
+        householdId: ctx.householdId,
         deletedAt: null,
         isTransfer: false,
         type: "EXPENSE",
@@ -44,7 +44,7 @@ export const newMerchant: TriggerDef = {
     for (const t of txns) {
       const prior = await prisma.transaction.count({
         where: {
-          userId: ctx.userId,
+          householdId: ctx.householdId,
           deletedAt: null,
           description: t.description,
           id: { notIn: ctx.event.newTransactionIds },

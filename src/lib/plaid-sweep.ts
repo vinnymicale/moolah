@@ -32,21 +32,21 @@ function emptyTotals(): SweepTotals {
 }
 
 /**
- * Pick the items due for a sync. `userId` scopes to one user (the HTTP path);
- * omit it to sweep every user's items (the scheduler). `force` takes everything
- * for that scope regardless of staleness or backoff.
+ * Pick the items due for a sync. `householdId` scopes to one household (the HTTP
+ * path); omit it to sweep every household's items (the scheduler). `force` takes
+ * everything for that scope regardless of staleness or backoff.
  */
 export async function findDueItems(opts: {
-  userId?: string;
+  householdId?: string;
   force?: boolean;
   now?: Date;
-}): Promise<{ id: string; userId: string }[]> {
+}): Promise<{ id: string; householdId: string }[]> {
   const now = opts.now ?? new Date();
-  const select = { id: true, userId: true } as const;
+  const select = { id: true, householdId: true } as const;
 
   if (opts.force) {
     return prisma.plaidItem.findMany({
-      where: { ...(opts.userId ? { userId: opts.userId } : {}) },
+      where: { ...(opts.householdId ? { householdId: opts.householdId } : {}) },
       select,
     });
   }
@@ -56,7 +56,7 @@ export async function findDueItems(opts: {
 
   return prisma.plaidItem.findMany({
     where: {
-      ...(opts.userId ? { userId: opts.userId } : {}),
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
       OR: [
         // Never synced - always due.
         { lastSyncedAt: null },
@@ -75,12 +75,12 @@ export async function findDueItems(opts: {
  * stop the others. A failure records the message and bumps failureCount so
  * findDueItems can back off; syncPlaidItem resets both on success.
  */
-export async function syncItems(items: { id: string; userId: string }[]): Promise<SweepTotals> {
+export async function syncItems(items: { id: string; householdId: string }[]): Promise<SweepTotals> {
   const totals = emptyTotals();
 
-  for (const { id, userId } of items) {
+  for (const { id, householdId } of items) {
     try {
-      const r = await syncPlaidItem(id, userId);
+      const r = await syncPlaidItem(id, householdId);
       totals.synced++;
       totals.added += r.added;
       totals.modified += r.modified;
@@ -104,7 +104,7 @@ export async function syncItems(items: { id: string; userId: string }[]): Promis
 
 /** Convenience: find the due items for a scope and sync them. */
 export async function sweepPlaid(opts: {
-  userId?: string;
+  householdId?: string;
   force?: boolean;
   now?: Date;
 }): Promise<SweepTotals> {

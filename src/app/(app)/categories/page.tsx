@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getCategories, getRules, getAccounts, getTags, type RuleDTO, type AccountDTO, type TagDTO } from "@/lib/queries";
 import { PageHeader } from "@/components/ui-bits";
 import { CategoriesManager } from "./CategoriesManager";
@@ -26,12 +26,12 @@ export default async function CategoriesPage({
     categories = DEMO_CATEGORIES;
     tags = DEMO_TAGS;
   } else {
-    const { userId } = await requireUser();
+    const { householdId } = await requirePageCapability("VIEW_CATEGORIES");
     [categories, rules, accounts, tags] = await Promise.all([
-      getCategories(userId),
-      getRules(userId),
-      getAccounts(userId),
-      getTags(userId),
+      getCategories(householdId),
+      getRules(householdId),
+      getAccounts(householdId),
+      getTags(householdId),
     ]);
   }
 

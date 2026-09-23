@@ -16,6 +16,24 @@ jobs:
     name: Lint & unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      # Only the backup round-trip check needs a database; it builds and drops
+      # throwaway ones of its own from this connection.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: finance
+          POSTGRES_DB: finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://finance:finance@localhost:5432/finance
     steps:
       - uses: actions/checkout@v7
 
@@ -38,6 +56,13 @@ jobs:
 
       - name: Unit tests
         run: npm run test:coverage
+
+      # Exports and restores against a real migrated schema, in throwaway
+      # databases of its own. Mocked unit tests can't catch a renamed column;
+      # this can, and a broken backup is the one failure with no recovery. Runs
+      # here rather than in e2e so a failing build can't skip it.
+      - name: Verify backup round-trip
+        run: npm run verify:backup
 
       - name: Upload coverage report
         if: always()
@@ -74,7 +99,7 @@ jobs:
           include-hidden-files: true
 
   e2e:
-    name: E2E tests (demo mode)
+    name: E2E tests
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 15
@@ -94,6 +119,10 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://finance:finance@localhost:5432/finance
+      # The household suite signs in for real instead of using AUTH_BYPASS, so
+      # Auth.js needs a secret to sign the session JWT. Throwaway value: the job
+      # only ever runs against seeded demo data.
+      AUTH_SECRET: e2e-ci-secret-not-used-anywhere-else
     steps:
       - uses: actions/checkout@v7
 

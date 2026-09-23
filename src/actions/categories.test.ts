@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -18,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    auditLog: { create: vi.fn() },
   },
 }));
 
@@ -27,15 +28,17 @@ import {
   deleteCategoryAction,
 } from "./categories";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const category = vi.mocked(prisma.category);
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
+  // The real client returns the created row; the audit call reads its id.
+  category.create.mockResolvedValue({ id: "c1", name: "Food" } as never);
 });
 
 describe("demo-mode guard", () => {
@@ -45,7 +48,7 @@ describe("demo-mode guard", () => {
 
   it("createCategoryAction is a no-op success in demo mode", async () => {
     expect(await createCategoryAction({ name: "Food", kind: "EXPENSE" })).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(category.create).not.toHaveBeenCalled();
   });
 
@@ -61,7 +64,7 @@ describe("createCategoryAction", () => {
     expect(result).toEqual({ ok: true });
     expect(category.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        userId: "u1",
+        householdId: "h1",
         name: "Food",
         kind: "EXPENSE",
         color: "#64748b",
@@ -94,7 +97,7 @@ describe("updateCategoryAction", () => {
     category.findFirst.mockResolvedValue(null);
     const result = await updateCategoryAction("c1", { name: "Food", kind: "EXPENSE" });
     expect(result).toEqual({ ok: false, error: "Category not found" });
-    expect(category.findFirst).toHaveBeenCalledWith({ where: { id: "c1", userId: "u1" } });
+    expect(category.findFirst).toHaveBeenCalledWith({ where: { id: "c1", householdId: "h1" } });
     expect(category.update).not.toHaveBeenCalled();
   });
 

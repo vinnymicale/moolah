@@ -18,7 +18,7 @@ export function normalizeTagName(raw: string): string {
  * Resolve tag names to ids for one user, matching existing tags
  * case-insensitively and creating any that are missing.
  */
-export async function resolveTagIds(userId: string, names: string[]): Promise<string[]> {
+export async function resolveTagIds(householdId: string, names: string[]): Promise<string[]> {
   const normalized: string[] = [];
   const seen = new Set<string>();
   for (const raw of names) {
@@ -31,7 +31,7 @@ export async function resolveTagIds(userId: string, names: string[]): Promise<st
   if (normalized.length === 0) return [];
 
   const existing = await prisma.tag.findMany({
-    where: { userId, name: { in: normalized, mode: "insensitive" } },
+    where: { householdId, name: { in: normalized, mode: "insensitive" } },
     select: { id: true, name: true },
   });
   const byLower = new Map(existing.map((t) => [t.name.toLowerCase(), t.id]));
@@ -43,7 +43,7 @@ export async function resolveTagIds(userId: string, names: string[]): Promise<st
       ids.push(found);
       continue;
     }
-    const created = await prisma.tag.create({ data: { userId, name }, select: { id: true } });
+    const created = await prisma.tag.create({ data: { householdId, name }, select: { id: true } });
     ids.push(created.id);
   }
   return ids;

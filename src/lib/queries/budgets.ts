@@ -41,7 +41,7 @@ function addMonths(d: Date, n: number): Date {
  * any day in the target month ("YYYY-MM-01" by convention). Categories without
  * a budget come back with limit 0 so the UI can offer to set one.
  */
-export async function getBudgetMonth(userId: string, monthISO: string): Promise<BudgetLineDTO[]> {
+export async function getBudgetMonth(householdId: string, monthISO: string): Promise<BudgetLineDTO[]> {
   const monthStart = parseISODay(`${monthISO.slice(0, 7)}-01`);
   const monthEnd = endOfUTCMonth(monthStart);
   // The chain can only reach back through months that exist in the window, so
@@ -51,15 +51,15 @@ export async function getBudgetMonth(userId: string, monthISO: string): Promise<
 
   const txnSelect = { categoryId: true, amount: true, splits: { select: { categoryId: true, amount: true } } } as const;
   const [cats, budgets, txns, priorBudgets, priorTxns] = await Promise.all([
-    prisma.category.findMany({ where: { userId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
-    prisma.budget.findMany({ where: { userId, month: monthStart } }),
+    prisma.category.findMany({ where: { householdId, kind: "EXPENSE" }, orderBy: { name: "asc" } }),
+    prisma.budget.findMany({ where: { householdId, month: monthStart } }),
     prisma.transaction.findMany({
-      where: { userId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
+      where: { householdId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: monthStart, lte: monthEnd } },
       select: txnSelect,
     }),
-    prisma.budget.findMany({ where: { userId, month: { gte: windowStart, lt: monthStart } } }),
+    prisma.budget.findMany({ where: { householdId, month: { gte: windowStart, lt: monthStart } } }),
     prisma.transaction.findMany({
-      where: { userId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: windowStart, lte: prevMonthEnd } },
+      where: { householdId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: windowStart, lte: prevMonthEnd } },
       select: { ...txnSelect, date: true },
     }),
   ]);
@@ -151,14 +151,14 @@ export interface BudgetMonthSummaryDTO {
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Budgeted vs. actual spending for each of the 12 months of `year`. */
-export async function getBudgetYear(userId: string, year: number): Promise<BudgetMonthSummaryDTO[]> {
+export async function getBudgetYear(householdId: string, year: number): Promise<BudgetMonthSummaryDTO[]> {
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const yearEnd = new Date(Date.UTC(year, 11, 31));
 
   const [budgets, txns] = await Promise.all([
-    prisma.budget.findMany({ where: { userId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
+    prisma.budget.findMany({ where: { householdId, month: { gte: yearStart, lte: new Date(Date.UTC(year, 11, 1)) } } }),
     prisma.transaction.findMany({
-      where: { userId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
+      where: { householdId, deletedAt: null, type: "EXPENSE", isTransfer: false, date: { gte: yearStart, lte: yearEnd } },
       select: { date: true, amount: true },
     }),
   ]);

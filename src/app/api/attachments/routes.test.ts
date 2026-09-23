@@ -1,9 +1,9 @@
-// Contract tests for the attachment route handlers. Session auth and prisma
+// Contract tests for the attachment route handlers. Household auth and prisma
 // are mocked; the validation logic itself is covered in lib/attachments.test.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ householdForRoute: vi.fn() }));
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: vi.fn(() => false) }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -12,13 +12,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { requireUser } from "@/lib/session";
+import { householdForRoute } from "@/lib/household";
 import { isDemoMode } from "@/lib/demo-guard";
 import { prisma } from "@/lib/prisma";
 import { POST } from "./route";
 import { GET, DELETE } from "./[id]/route";
 
-const user = vi.mocked(requireUser);
+const household = vi.mocked(householdForRoute);
 const demo = vi.mocked(isDemoMode);
 const txnFind = vi.mocked(prisma.transaction.findFirst);
 const attCreate = vi.mocked(prisma.attachment.create);
@@ -40,12 +40,16 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 beforeEach(() => {
   vi.clearAllMocks();
   demo.mockReturnValue(false);
-  user.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  household.mockResolvedValue({ ctx: { userId: "u1", householdId: "h1" } } as Awaited<
+    ReturnType<typeof householdForRoute>
+  >);
 });
 
 describe("POST /api/attachments", () => {
   it("401s when unauthenticated", async () => {
-    user.mockRejectedValue(new Error("no session"));
+    household.mockResolvedValue({
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    } as Awaited<ReturnType<typeof householdForRoute>>);
     const res = await POST(uploadReq({ transactionId: "t1", file: jpeg }));
     expect(res.status).toBe(401);
   });
@@ -55,7 +59,7 @@ describe("POST /api/attachments", () => {
     expect((await POST(uploadReq({ transactionId: "t1" }))).status).toBe(400);
   });
 
-  it("404s for a transaction the user does not own", async () => {
+  it("404s for a transaction the household does not own", async () => {
     txnFind.mockResolvedValue(null);
     const res = await POST(uploadReq({ transactionId: "t1", file: jpeg }));
     expect(res.status).toBe(404);
@@ -76,7 +80,7 @@ describe("POST /api/attachments", () => {
     expect(await res.json()).toEqual({ id: "a1", filename: "receipt.jpg", mimeType: "image/jpeg", size: 4 });
     expect(attCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ userId: "u1", transactionId: "t1", mimeType: "image/jpeg" }),
+        data: expect.objectContaining({ householdId: "h1", transactionId: "t1", mimeType: "image/jpeg" }),
       }),
     );
   });
@@ -114,11 +118,11 @@ describe("POST /api/attachments", () => {
 });
 
 describe("GET /api/attachments/[id]", () => {
-  it("404s for another user's attachment", async () => {
+  it("404s for another household's attachment", async () => {
     attFind.mockResolvedValue(null);
     const res = await GET(new NextRequest("http://localhost/api/attachments/a1"), params("a1"));
     expect(res.status).toBe(404);
-    expect(attFind).toHaveBeenCalledWith({ where: { id: "a1", userId: "u1" } });
+    expect(attFind).toHaveBeenCalledWith({ where: { id: "a1", householdId: "h1" } });
   });
 
   it("streams bytes with the stored content type", async () => {
@@ -149,11 +153,11 @@ describe("GET /api/attachments/[id]", () => {
 });
 
 describe("DELETE /api/attachments/[id]", () => {
-  it("deletes scoped to the user", async () => {
+  it("deletes scoped to the household", async () => {
     attDeleteMany.mockResolvedValue({ count: 1 });
     const res = await DELETE(new NextRequest("http://localhost/api/attachments/a1", { method: "DELETE" }), params("a1"));
     expect(res.status).toBe(200);
-    expect(attDeleteMany).toHaveBeenCalledWith({ where: { id: "a1", userId: "u1" } });
+    expect(attDeleteMany).toHaveBeenCalledWith({ where: { id: "a1", householdId: "h1" } });
   });
 
   it("404s when nothing was deleted", async () => {

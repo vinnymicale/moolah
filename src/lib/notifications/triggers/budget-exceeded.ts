@@ -30,7 +30,7 @@ export const budgetExceeded: TriggerDef = {
   async evaluate(ctx) {
     const { categoryId } = ctx.params as { categoryId?: string };
     const month = ctx.todayISO.slice(0, 7);
-    const lines = await getBudgetMonth(ctx.userId, ctx.todayISO);
+    const lines = await getBudgetMonth(ctx.householdId, ctx.todayISO);
     return lines
       .filter((l) => l.effectiveLimit > 0 && l.actual > l.effectiveLimit)
       .filter((l) => !categoryId || l.categoryId === categoryId)

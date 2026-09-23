@@ -27,7 +27,7 @@ export const accountStale: TriggerDef = {
   async evaluate(ctx) {
     const { days } = ctx.params as { days: number };
     const items = await prisma.plaidItem.findMany({
-      where: { userId: ctx.userId, lastSyncedAt: { not: null } },
+      where: { householdId: ctx.householdId, lastSyncedAt: { not: null } },
       select: { id: true, institutionName: true, lastSyncedAt: true },
     });
     const events = [];

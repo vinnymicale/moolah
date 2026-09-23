@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requirePageCapability } from "@/lib/household";
 import { getNetWorth } from "@/lib/queries";
 import { getInvestmentGrowthSeries } from "@/lib/queries/retirement";
 import { getNetWorthHistory } from "@/lib/snapshots";
@@ -6,7 +6,7 @@ import { forecastNetWorth } from "@/lib/networth-forecast";
 import { PageHeader, StatCard } from "@/components/ui-bits";
 import { TriangleAlert } from "lucide-react";
 import { NetWorthChart } from "./NetWorthChart";
-import { getDemoUserId } from "@/lib/demo-session";
+import { getDemoHouseholdId } from "@/lib/demo-session";
 import { userTodayISO } from "@/lib/user-tz";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -24,15 +24,15 @@ function formatShort(iso: string): string {
 }
 
 export default async function NetWorthPage() {
-  const userId = DEMO_MODE ? (await getDemoUserId()) ?? "" : (await requireUser()).userId;
+  const householdId = DEMO_MODE ? (await getDemoHouseholdId()) ?? "" : (await requirePageCapability("VIEW_ACCOUNTS")).householdId;
   const today = await userTodayISO();
 
   const [history, current, growthSeries] = await Promise.all([
-    getNetWorthHistory(userId, HISTORY_DAYS, today),
-    getNetWorth(userId),
-    getInvestmentGrowthSeries(userId, HISTORY_DAYS, today),
+    getNetWorthHistory(householdId, HISTORY_DAYS, today),
+    getNetWorth(householdId),
+    getInvestmentGrowthSeries(householdId, HISTORY_DAYS, today),
   ]);
-  const projection = await forecastNetWorth(userId, current.net, FORECAST_MONTHS, today);
+  const projection = await forecastNetWorth(householdId, current.net, FORECAST_MONTHS, today);
   const forecast = projection.points;
 
   // Year-to-date change: net now minus net on the first point of the year held.

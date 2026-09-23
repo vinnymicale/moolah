@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { unzipSync, strFromU8 } from "fflate";
 
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireHousehold: vi.fn() }));
 vi.mock("@/lib/user-tz", () => ({ userTodayISO: vi.fn(async () => "2026-07-23") }));
 vi.mock("@/lib/queries", () => ({
   getAccounts: vi.fn(async () => [{ id: "acc1", name: "Checking" }]),
@@ -18,7 +18,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { GET } from "./route";
-import { requireUser } from "@/lib/session";
+import { requireHousehold } from "@/lib/household";
 import { getTransactionsBetween } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -43,7 +43,7 @@ const txnWithAtt = {
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.DEMO_MODE;
-  (requireUser as never as ReturnType<typeof vi.fn>).mockResolvedValue({ userId: "u1" });
+  (requireHousehold as never as ReturnType<typeof vi.fn>).mockResolvedValue({ userId: "u1", householdId: "h1" });
   (prisma.attachment.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ data: Buffer.from("abc") });
 });
 
@@ -107,11 +107,11 @@ describe("attachments zip route", () => {
     expect(strFromU8(files[attName])).toBe("abc");
   });
 
-  it("scopes the byte fetch to the session user", async () => {
+  it("scopes the byte fetch to the household", async () => {
     (getTransactionsBetween as ReturnType<typeof vi.fn>).mockResolvedValue([txnWithAtt]);
     await GET(req());
     expect(prisma.attachment.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "att1", userId: "u1" } }),
+      expect.objectContaining({ where: { id: "att1", householdId: "h1" } }),
     );
   });
 

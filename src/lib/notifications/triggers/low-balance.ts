@@ -31,7 +31,7 @@ export const lowBalance: TriggerDef = {
   async evaluate(ctx) {
     const { amount, accountId } = ctx.params as { amount: number; accountId: string };
     const account = await prisma.financialAccount.findFirst({
-      where: { id: accountId, userId: ctx.userId, archived: false },
+      where: { id: accountId, householdId: ctx.householdId, archived: false },
       select: { id: true, name: true, currentBalance: true },
     });
     if (!account) return [];

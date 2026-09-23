@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -19,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    auditLog: { create: vi.fn() },
   },
 }));
 
@@ -29,15 +30,17 @@ import {
   deleteGoalAction,
 } from "./goals";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const goal = vi.mocked(prisma.savingsGoal);
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
+  // The real client returns the created row; the audit call reads its id.
+  goal.create.mockResolvedValue({ id: "g1", name: "Vacation", targetAmount: "1000.00" } as never);
 });
 
 describe("demo-mode guard", () => {
@@ -48,7 +51,7 @@ describe("demo-mode guard", () => {
   it("createGoalAction is a no-op success in demo mode", async () => {
     const result = await createGoalAction({ name: "Trip", targetAmount: 1000 });
     expect(result).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(goal.create).not.toHaveBeenCalled();
   });
 
@@ -74,7 +77,7 @@ describe("createGoalAction", () => {
     expect(result).toEqual({ ok: true });
     expect(goal.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        userId: "u1",
+        householdId: "h1",
         name: "Emergency",
         targetAmount: 5000,
         currentAmount: 0,
@@ -109,7 +112,7 @@ describe("updateGoalAction", () => {
     goal.findFirst.mockResolvedValue(null);
     const result = await updateGoalAction("g1", { name: "Trip", targetAmount: 100 });
     expect(result).toEqual({ ok: false, error: "Goal not found" });
-    expect(goal.findFirst).toHaveBeenCalledWith({ where: { id: "g1", userId: "u1" } });
+    expect(goal.findFirst).toHaveBeenCalledWith({ where: { id: "g1", householdId: "h1" } });
     expect(goal.update).not.toHaveBeenCalled();
   });
 

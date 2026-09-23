@@ -4,11 +4,11 @@ import { formatUSD, toNumber } from "@/lib/money";
 import { addUTCDays, parseISODay } from "@/lib/dates";
 import type { TriggerDef } from "../types";
 
-async function expenseSum(userId: string, start: Date, end: Date): Promise<number> {
+async function expenseSum(householdId: string, start: Date, end: Date): Promise<number> {
   const agg = await prisma.transaction.aggregate({
     _sum: { amount: true },
     where: {
-      userId, deletedAt: null, isTransfer: false, type: "EXPENSE",
+      householdId, deletedAt: null, isTransfer: false, type: "EXPENSE",
       date: { gte: start, lt: end },
     },
   });
@@ -39,8 +39,8 @@ export const spendingSpike: TriggerDef = {
     const today = parseISODay(ctx.todayISO);
     const weekStart = addUTCDays(today, -7);
     const priorStart = addUTCDays(today, -35);
-    const thisWeek = await expenseSum(ctx.userId, weekStart, today);
-    const priorTotal = await expenseSum(ctx.userId, priorStart, weekStart);
+    const thisWeek = await expenseSum(ctx.householdId, weekStart, today);
+    const priorTotal = await expenseSum(ctx.householdId, priorStart, weekStart);
     if (priorTotal <= 0) return [];
     const average = priorTotal / 4;
     const over = ((thisWeek - average) / average) * 100;

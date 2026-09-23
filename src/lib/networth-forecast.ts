@@ -74,7 +74,7 @@ const CASHFLOW_DAYS = 120;
  * to the rules projection where enough history exists; see the module header.
  */
 export async function forecastNetWorth(
-  userId: string,
+  householdId: string,
   currentNet: number,
   months: number,
   todayISO: string,
@@ -89,7 +89,7 @@ export async function forecastNetWorth(
   };
 
   const rules = await prisma.recurringRule.findMany({
-    where: { userId, archived: false },
+    where: { householdId, archived: false },
     include: versionsInclude,
   });
   if (rules.length === 0) return empty;
@@ -119,7 +119,7 @@ export async function forecastNetWorth(
   const cashflowStart = addUTCDays(today, -CASHFLOW_DAYS);
   const txns = await prisma.transaction.findMany({
     where: {
-      userId,
+      householdId,
       deletedAt: null,
       date: { gte: cashflowStart, lte: today },
     },

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { isDemoMode } from "@/lib/demo-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { commitWrite, stagedWriteSchema } from "@/lib/chat-writes";
@@ -9,17 +9,17 @@ import { commitWrite, stagedWriteSchema } from "@/lib/chat-writes";
 //
 // The descriptor arrives from the browser, so it gets the full validation
 // treatment: schema parse here, ownership checks on every id in commitWrite.
+// This is where an assistant write actually lands, so it needs the same
+// capability the equivalent hand-edit would - /api/chat only stages.
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
+  if (response) return response;
 
   if (isDemoMode()) {
     return NextResponse.json({ error: "This is a read-only demo. Changes are disabled." }, { status: 403 });
   }
 
-  const limit = checkRateLimit(`chat-confirm:${session.user.id}`, 30, 60_000);
+  const limit = checkRateLimit(`chat-confirm:${ctx.userId}`, 30, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Try again shortly." },
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const message = await commitWrite(staged, session.user.id);
+    const message = await commitWrite(staged, ctx.householdId);
     return NextResponse.json({ message });
   } catch (err) {
     console.error("[chat/confirm] commit failed:", err);

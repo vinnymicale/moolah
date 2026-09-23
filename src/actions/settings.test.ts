@@ -1,14 +1,16 @@
-// Action-layer tests for settings.ts. These cover the demo-mode and
-// signed-in guards, provider/env validation, the "only overwrite secrets when
-// a new value was typed" behavior, and the API-token lifecycle - by stubbing
-// the side-effecting imports (prisma, auth, crypto, api-auth, cache).
+// Action-layer tests for settings.ts. These cover the demo-mode and admin
+// guards, provider/env validation, the "only overwrite secrets when a new
+// value was typed" behavior, and the API-token lifecycle - by stubbing the
+// side-effecting imports (prisma, session, household, crypto, api-auth, cache).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const authMock = vi.fn();
-vi.mock("@/auth", () => ({ auth: () => authMock() }));
+vi.mock("@/lib/session", () => ({ requireUser: async () => ({ userId: "u1" }) }));
+
+const householdMock = vi.fn();
+vi.mock("@/lib/household", () => ({ getHouseholdContext: () => householdMock() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -30,7 +32,7 @@ vi.mock("@/lib/api-auth", () => ({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    user: {
+    household: {
       update: vi.fn(),
     },
   },
@@ -47,12 +49,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-const user = vi.mocked(prisma.user);
+const household = vi.mocked(prisma.household);
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  authMock.mockResolvedValue({ user: { id: "u1" } });
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1", isAdmin: true });
 });
 
 describe("demo-mode guard", () => {
@@ -66,30 +68,42 @@ describe("demo-mode guard", () => {
     expect(await clearPlaidConfigAction()).toEqual({ ok: true });
     expect(await clearAiConfigAction()).toEqual({ ok: true });
     expect(await revokeApiTokenAction()).toEqual({ ok: true });
-    expect(user.update).not.toHaveBeenCalled();
+    expect(household.update).not.toHaveBeenCalled();
   });
 
   it("generateApiTokenAction refuses in demo mode", async () => {
     const result = await generateApiTokenAction();
     expect(result).toEqual({ ok: false, error: "Not available in demo mode." });
-    expect(user.update).not.toHaveBeenCalled();
+    expect(household.update).not.toHaveBeenCalled();
   });
 });
 
-describe("signed-in guard", () => {
+describe("household guard", () => {
   beforeEach(() => {
-    authMock.mockResolvedValue(null);
+    householdMock.mockResolvedValue(null);
   });
 
-  it("every action errors when there is no session", async () => {
-    const expected = { ok: false, error: "Not signed in." };
+  it("every action errors when the user has no household", async () => {
+    const expected = { ok: false, error: "You don't belong to a household." };
     expect(await updateAiConfigAction("anthropic", "key")).toEqual(expected);
     expect(await updatePlaidConfigAction("id", "secret", "sandbox")).toEqual(expected);
     expect(await clearPlaidConfigAction()).toEqual(expected);
     expect(await clearAiConfigAction()).toEqual(expected);
     expect(await generateApiTokenAction()).toEqual(expected);
     expect(await revokeApiTokenAction()).toEqual(expected);
-    expect(user.update).not.toHaveBeenCalled();
+    expect(household.update).not.toHaveBeenCalled();
+  });
+
+  it("every action errors for a member who isn't an admin", async () => {
+    householdMock.mockResolvedValue({ userId: "u2", householdId: "h1", isAdmin: false });
+    const expected = { ok: false, error: "Only a household admin can change this." };
+    expect(await updateAiConfigAction("anthropic", "key")).toEqual(expected);
+    expect(await updatePlaidConfigAction("id", "secret", "sandbox")).toEqual(expected);
+    expect(await clearPlaidConfigAction()).toEqual(expected);
+    expect(await clearAiConfigAction()).toEqual(expected);
+    expect(await generateApiTokenAction()).toEqual(expected);
+    expect(await revokeApiTokenAction()).toEqual(expected);
+    expect(household.update).not.toHaveBeenCalled();
   });
 });
 
@@ -97,8 +111,8 @@ describe("updateAiConfigAction", () => {
   it("stores the provider and the encrypted key", async () => {
     const result = await updateAiConfigAction("anthropic", " sk-123 ");
     expect(result).toEqual({ ok: true });
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { aiProvider: "anthropic", aiApiKey: "enc(sk-123)", aiModel: null },
     });
     expect(revalidatePath).toHaveBeenCalledWith("/settings");
@@ -106,24 +120,24 @@ describe("updateAiConfigAction", () => {
 
   it("leaves the stored key untouched when the key field is blank", async () => {
     await updateAiConfigAction("openai", "   ");
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { aiProvider: "openai", aiModel: null },
     });
   });
 
   it("stores a model override when one is given", async () => {
     await updateAiConfigAction("gemini", "", " gemini-3.5-flash-lite ");
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { aiProvider: "gemini", aiModel: "gemini-3.5-flash-lite" },
     });
   });
 
   it("clears the model override when the field is blank", async () => {
     await updateAiConfigAction("gemini", "", "   ");
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { aiProvider: "gemini", aiModel: null },
     });
   });
@@ -131,7 +145,7 @@ describe("updateAiConfigAction", () => {
   it("rejects an unknown provider", async () => {
     const result = await updateAiConfigAction("skynet", "key");
     expect(result).toEqual({ ok: false, error: "Invalid provider." });
-    expect(user.update).not.toHaveBeenCalled();
+    expect(household.update).not.toHaveBeenCalled();
   });
 });
 
@@ -139,16 +153,16 @@ describe("updatePlaidConfigAction", () => {
   it("stores env, client id, and the encrypted secret", async () => {
     const result = await updatePlaidConfigAction(" client ", " shh ", "production");
     expect(result).toEqual({ ok: true });
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { plaidEnv: "production", plaidClientId: "client", plaidSecret: "enc(shh)" },
     });
   });
 
   it("leaves stored credentials untouched when the fields are blank", async () => {
     await updatePlaidConfigAction("  ", "  ", "sandbox");
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { plaidEnv: "sandbox" },
     });
   });
@@ -156,7 +170,7 @@ describe("updatePlaidConfigAction", () => {
   it("rejects an unknown environment", async () => {
     const result = await updatePlaidConfigAction("client", "shh", "development");
     expect(result).toEqual({ ok: false, error: "Invalid environment." });
-    expect(user.update).not.toHaveBeenCalled();
+    expect(household.update).not.toHaveBeenCalled();
   });
 });
 
@@ -164,8 +178,8 @@ describe("clear actions", () => {
   it("clearPlaidConfigAction nulls out all Plaid fields", async () => {
     const result = await clearPlaidConfigAction();
     expect(result).toEqual({ ok: true });
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { plaidClientId: null, plaidSecret: null, plaidEnv: null },
     });
   });
@@ -173,8 +187,8 @@ describe("clear actions", () => {
   it("clearAiConfigAction nulls out the AI fields", async () => {
     const result = await clearAiConfigAction();
     expect(result).toEqual({ ok: true });
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { aiProvider: null, aiApiKey: null, aiModel: null },
     });
   });
@@ -191,8 +205,8 @@ describe("generateApiTokenAction", () => {
     const result = await generateApiTokenAction();
     expect(result).toEqual({ ok: true, token: "moolah_sel_ver" });
     expect(apiAuth.hashApiTokenVerifier).toHaveBeenCalledWith("ver");
-    const args = user.update.mock.calls[0][0];
-    expect(args.where).toEqual({ id: "u1" });
+    const args = household.update.mock.calls[0][0];
+    expect(args.where).toEqual({ id: "h1" });
     expect(args.data.apiTokenSelector).toBe("sel");
     expect(args.data.apiTokenVerifierHash).toBe("hash(ver)");
     expect(args.data.apiTokenCreatedAt).toBeInstanceOf(Date);
@@ -204,7 +218,7 @@ describe("generateApiTokenAction", () => {
     apiAuth.parseApiToken.mockReturnValue(null);
     const result = await generateApiTokenAction();
     expect(result).toEqual({ ok: false, error: "Failed to generate token." });
-    expect(user.update).not.toHaveBeenCalled();
+    expect(household.update).not.toHaveBeenCalled();
   });
 });
 
@@ -212,8 +226,8 @@ describe("revokeApiTokenAction", () => {
   it("nulls out all token fields", async () => {
     const result = await revokeApiTokenAction();
     expect(result).toEqual({ ok: true });
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: "u1" },
+    expect(household.update).toHaveBeenCalledWith({
+      where: { id: "h1" },
       data: { apiTokenSelector: null, apiTokenVerifierHash: null, apiTokenCreatedAt: null },
     });
   });

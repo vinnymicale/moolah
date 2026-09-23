@@ -15,6 +15,7 @@ const line = (over: Partial<{ categoryId: string; name: string; limit: number; a
 
 const ctx = (over: Partial<TriggerContext> = {}): TriggerContext => ({
   userId: "u1",
+  householdId: "h1",
   params: {},
   todayISO: "2026-07-15",
   now: new Date("2026-07-15T12:00:00Z"),

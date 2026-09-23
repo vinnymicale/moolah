@@ -39,6 +39,7 @@ describe("latestSlot", () => {
 describe("digest trigger", () => {
   const ctx = (over: Partial<TriggerContext> = {}): TriggerContext => ({
     userId: "u1",
+    householdId: "h1",
     params: { frequency: "daily", weekday: 1, hour: 8, days: 3 },
     todayISO: "2026-07-09",
     now: new Date(2026, 6, 9, 12, 0),

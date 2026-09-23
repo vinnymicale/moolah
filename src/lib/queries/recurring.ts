@@ -52,12 +52,12 @@ export interface RecurringVersionDTO {
 }
 
 export async function getRecurringRules(
-  userId: string,
+  householdId: string,
   includeArchived = false,
   todayISO?: string,
 ): Promise<RecurringDTO[]> {
   const rows = await prisma.recurringRule.findMany({
-    where: { userId, ...(includeArchived ? {} : { archived: false }) },
+    where: { householdId, ...(includeArchived ? {} : { archived: false }) },
     orderBy: { createdAt: "asc" },
     include: versionsInclude,
   });
@@ -105,16 +105,16 @@ export async function getRecurringRules(
  * Suggest recurring rules by scanning the last ~8 months of transactions for
  * regularly-repeating charges that aren't already covered by a rule.
  */
-export async function getRecurringSuggestions(userId: string, todayISO: string): Promise<RecurringSuggestion[]> {
+export async function getRecurringSuggestions(householdId: string, todayISO: string): Promise<RecurringSuggestion[]> {
   const since = startOfUTCMonth(addUTCMonths(parseISODay(todayISO), -8));
 
   const [txns, rules] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: since } },
+      where: { householdId, deletedAt: null, date: { gte: since } },
       select: { date: true, description: true, amount: true, type: true, categoryId: true, accountId: true, recurringRuleId: true },
       orderBy: { date: "asc" },
     }),
-    prisma.recurringRule.findMany({ where: { userId }, select: { description: true } }),
+    prisma.recurringRule.findMany({ where: { householdId }, select: { description: true } }),
   ]);
 
   // Include both the user-named rule descriptions AND the raw bank descriptions

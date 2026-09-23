@@ -7,7 +7,7 @@
 //   ?tz=America/...    anchor "today" for the history/forecast windows.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
+import { requireApiHousehold, apiJson, readOnlyMethods } from "../_auth";
 import { getNetWorth } from "@/lib/queries";
 import { getNetWorthHistory } from "@/lib/snapshots";
 import { forecastNetWorth } from "@/lib/networth-forecast";
@@ -18,13 +18,13 @@ export const dynamic = "force-dynamic";
 const RANGE_DAYS: Record<string, number> = { "3m": 90, "1y": 366, all: 3660 };
 
 export async function GET(req: NextRequest) {
-  const auth = await requireApiUser(req);
+  const auth = await requireApiHousehold(req);
   if (!auth.ok) return auth.response;
 
   const sp = req.nextUrl.searchParams;
   const todayISO = todayInZone(sp.get("tz") ?? undefined);
 
-  const nw = await getNetWorth(auth.userId);
+  const nw = await getNetWorth(auth.householdId);
   const body: Record<string, unknown> = {
     asOf: todayISO,
     assets: nw.assets,
@@ -42,13 +42,13 @@ export async function GET(req: NextRequest) {
 
   const rangeKey = sp.get("range")?.toLowerCase();
   if (rangeKey && rangeKey in RANGE_DAYS) {
-    body.history = await getNetWorthHistory(auth.userId, RANGE_DAYS[rangeKey], todayISO);
+    body.history = await getNetWorthHistory(auth.householdId, RANGE_DAYS[rangeKey], todayISO);
   }
 
   const forecastRaw = Number(sp.get("forecast"));
   if (Number.isFinite(forecastRaw) && forecastRaw > 0) {
     const months = Math.min(24, Math.trunc(forecastRaw));
-    const projection = await forecastNetWorth(auth.userId, nw.net, months, todayISO);
+    const projection = await forecastNetWorth(auth.householdId, nw.net, months, todayISO);
     body.forecast = projection.points;
     body.forecastBasis = projection.basis;
     body.forecastRulesMonthly = projection.rulesMonthly;

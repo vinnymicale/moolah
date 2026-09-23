@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
+import { formatUSD } from "@/lib/money";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -29,23 +31,31 @@ const FORWARD_MONTHS = 24;
 export async function setBudgetAction(input: BudgetInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId, userId } = await requireCapability("MANAGE_BUDGETS");
     const data = budgetSchema.parse(input);
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId } });
+    const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId } });
     if (!category) throw new UserError("Category not found");
     const month = parseISODay(data.month);
 
     if (data.scope === "forward") {
-      await applyForward(userId, data.categoryId, month, data.limit);
+      await applyForward(householdId, data.categoryId, month, data.limit);
     } else if (data.limit <= 0) {
-      await prisma.budget.deleteMany({ where: { userId, categoryId: data.categoryId, month } });
+      await prisma.budget.deleteMany({ where: { householdId, categoryId: data.categoryId, month } });
     } else {
       await prisma.budget.upsert({
-        where: { userId_categoryId_month: { userId, categoryId: data.categoryId, month } },
+        where: { householdId_categoryId_month: { householdId, categoryId: data.categoryId, month } },
         update: { limit: data.limit },
-        create: { userId, categoryId: data.categoryId, month, limit: data.limit },
+        create: { householdId, categoryId: data.categoryId, month, limit: data.limit },
       });
     }
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "budget.set",
+      entityType: "Budget",
+      entityId: data.categoryId,
+      summary: `${category.name} ${data.month} ${formatUSD(data.limit)}`,
+    });
     revalidatePath("/trends");
     revalidatePath("/budgets");
     revalidatePath("/");
@@ -59,12 +69,12 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
  * stale limit sitting three months out would quietly contradict it. A limit of
  * zero clears the whole span instead.
  */
-async function applyForward(userId: string, categoryId: string, month: Date, limit: number): Promise<void> {
+async function applyForward(householdId: string, categoryId: string, month: Date, limit: number): Promise<void> {
   const months = Array.from({ length: FORWARD_MONTHS }, (_, i) =>
     new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + i, 1)),
   );
   if (limit <= 0) {
-    await prisma.budget.deleteMany({ where: { userId, categoryId, month: { in: months } } });
+    await prisma.budget.deleteMany({ where: { householdId, categoryId, month: { in: months } } });
     return;
   }
   // Rollover is deliberately not touched: it is a per-month preference about
@@ -72,9 +82,9 @@ async function applyForward(userId: string, categoryId: string, month: Date, lim
   await prisma.$transaction(
     months.map((m) =>
       prisma.budget.upsert({
-        where: { userId_categoryId_month: { userId, categoryId, month: m } },
+        where: { householdId_categoryId_month: { householdId, categoryId, month: m } },
         update: { limit },
-        create: { userId, categoryId, month: m, limit },
+        create: { householdId, categoryId, month: m, limit },
       }),
     ),
   );
@@ -92,12 +102,12 @@ export type BudgetRolloverInput = z.input<typeof rolloverSchema>;
 export async function setBudgetRolloverAction(input: BudgetRolloverInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_BUDGETS");
     const data = rolloverSchema.parse(input);
     const month = parseISODay(data.month);
 
     const updated = await prisma.budget.updateMany({
-      where: { userId, categoryId: data.categoryId, month },
+      where: { householdId, categoryId: data.categoryId, month },
       data: { rollover: data.rollover },
     });
     if (updated.count === 0) throw new UserError("Set a budget for this month first.");
@@ -118,10 +128,10 @@ export type ClearMonthBudgetsInput = z.input<typeof clearMonthSchema>;
 export async function clearMonthBudgetsAction(input: ClearMonthBudgetsInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_BUDGETS");
     const month = parseISODay(clearMonthSchema.parse(input).month);
 
-    const deleted = await prisma.budget.deleteMany({ where: { userId, month } });
+    const deleted = await prisma.budget.deleteMany({ where: { householdId, month } });
     if (deleted.count === 0) throw new UserError("No budgets set for this month.");
 
     revalidatePath("/trends");
@@ -141,20 +151,20 @@ export type CopyBudgetsInput = z.input<typeof copySchema>;
 export async function copyBudgetsAction(input: CopyBudgetsInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("MANAGE_BUDGETS");
     const { fromMonth, toMonth } = copySchema.parse(input);
     const from = parseISODay(fromMonth);
     const to = parseISODay(toMonth);
 
-    const prior = await prisma.budget.findMany({ where: { userId, month: from } });
+    const prior = await prisma.budget.findMany({ where: { householdId, month: from } });
     if (prior.length === 0) throw new UserError("No budgets in that month to copy.");
 
     await prisma.$transaction(
       prior.map((b) =>
         prisma.budget.upsert({
-          where: { userId_categoryId_month: { userId, categoryId: b.categoryId, month: to } },
+          where: { householdId_categoryId_month: { householdId, categoryId: b.categoryId, month: to } },
           update: { limit: b.limit, rollover: b.rollover },
-          create: { userId, categoryId: b.categoryId, month: to, limit: b.limit, rollover: b.rollover },
+          create: { householdId, categoryId: b.categoryId, month: to, limit: b.limit, rollover: b.rollover },
         }),
       ),
     );

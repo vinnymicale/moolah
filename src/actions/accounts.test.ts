@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -36,16 +36,16 @@ import {
   deleteSnapshotAction,
 } from "./accounts";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const account = vi.mocked(prisma.financialAccount);
 const snapshot = vi.mocked(prisma.accountSnapshot);
 
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
 });
 
 describe("demo-mode guard", () => {
@@ -56,7 +56,7 @@ describe("demo-mode guard", () => {
   it("createAccountAction is a no-op success in demo mode", async () => {
     const result = await createAccountAction({ name: "Checking", type: "CHECKING", currentBalance: 100 });
     expect(result).toEqual({ ok: true });
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(account.create).not.toHaveBeenCalled();
   });
 
@@ -192,7 +192,7 @@ describe("deleteSnapshotAction", () => {
     snapshot.findFirst.mockResolvedValue({ id: "s1" } as never);
     const result = await deleteSnapshotAction("s1");
     expect(result).toEqual({ ok: true });
-    expect(snapshot.findFirst).toHaveBeenCalledWith({ where: { id: "s1", account: { userId: "u1" } } });
+    expect(snapshot.findFirst).toHaveBeenCalledWith({ where: { id: "s1", account: { householdId: "h1" } } });
     expect(snapshot.delete).toHaveBeenCalledWith({ where: { id: "s1" } });
   });
 

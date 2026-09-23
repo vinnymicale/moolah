@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { normalizeTagName, DEFAULT_TAG_COLOR } from "@/lib/tags";
@@ -18,16 +18,16 @@ function revalidateTagPages() {
   revalidatePath("/");
 }
 
-async function findOwnedTag(userId: string, id: string) {
-  const tag = await prisma.tag.findFirst({ where: { id, userId } });
+async function findOwnedTag(householdId: string, id: string) {
+  const tag = await prisma.tag.findFirst({ where: { id, householdId } });
   if (!tag) throw new UserError("Tag not found");
   return tag;
 }
 
-async function assertNameFree(userId: string, name: string, excludeId?: string) {
+async function assertNameFree(householdId: string, name: string, excludeId?: string) {
   const clash = await prisma.tag.findFirst({
     where: {
-      userId,
+      householdId,
       name: { equals: name, mode: "insensitive" },
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
@@ -41,11 +41,11 @@ export async function createTagAction(input: {
 }): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
   try {
     if (isDemoMode()) return { ok: true, id: "demo-tag", name: normalizeTagName(input.name) };
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
     const name = normalizeTagName(input.name);
     const color = colorSchema.parse(input.color ?? DEFAULT_TAG_COLOR);
-    await assertNameFree(userId, name);
-    const tag = await prisma.tag.create({ data: { userId, name, color }, select: { id: true } });
+    await assertNameFree(householdId, name);
+    const tag = await prisma.tag.create({ data: { householdId, name, color }, select: { id: true } });
     revalidateTagPages();
     return { ok: true, id: tag.id, name };
   } catch (e) {
@@ -58,10 +58,10 @@ export async function createTagAction(input: {
 export async function renameTagAction(id: string, name: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await findOwnedTag(userId, id);
+    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    await findOwnedTag(householdId, id);
     const normalized = normalizeTagName(name);
-    await assertNameFree(userId, normalized, id);
+    await assertNameFree(householdId, normalized, id);
     await prisma.tag.update({ where: { id }, data: { name: normalized } });
     revalidateTagPages();
   });
@@ -70,8 +70,8 @@ export async function renameTagAction(id: string, name: string): Promise<ActionR
 export async function setTagColorAction(id: string, color: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await findOwnedTag(userId, id);
+    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    await findOwnedTag(householdId, id);
     await prisma.tag.update({ where: { id }, data: { color: colorSchema.parse(color) } });
     revalidateTagPages();
   });
@@ -80,8 +80,8 @@ export async function setTagColorAction(id: string, color: string): Promise<Acti
 export async function deleteTagAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
-    await findOwnedTag(userId, id);
+    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    await findOwnedTag(householdId, id);
     await prisma.tag.delete({ where: { id } });
     revalidateTagPages();
   });
@@ -94,13 +94,13 @@ export async function deleteTagAction(id: string): Promise<ActionResult> {
 export async function mergeTagsAction(sourceId: string, targetId: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { userId } = await requireUser();
+    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
     if (sourceId === targetId) throw new UserError("Pick two different tags");
-    await findOwnedTag(userId, sourceId);
-    await findOwnedTag(userId, targetId);
+    await findOwnedTag(householdId, sourceId);
+    await findOwnedTag(householdId, targetId);
 
     const toRepoint = await prisma.transaction.findMany({
-      where: { userId, tags: { some: { id: sourceId } }, NOT: { tags: { some: { id: targetId } } } },
+      where: { householdId, tags: { some: { id: sourceId } }, NOT: { tags: { some: { id: targetId } } } },
       select: { id: true },
     });
     await prisma.$transaction([
@@ -113,7 +113,7 @@ export async function mergeTagsAction(sourceId: string, targetId: string): Promi
       prisma.tag.delete({ where: { id: sourceId } }),
     ]);
 
-    const rules = await prisma.rule.findMany({ where: { userId } });
+    const rules = await prisma.rule.findMany({ where: { householdId } });
     for (const r of rules) {
       const actions = r.actions as unknown as RuleAction[];
       if (!actions.some((a) => a.type === "addTag" && a.tagId === sourceId)) continue;

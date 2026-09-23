@@ -48,10 +48,10 @@ export async function syncPlaidAccounts(args: {
   plaidClient: PlaidApi;
   accessToken: string;
   plaidItemRowId: string;
-  userId: string;
+  householdId: string;
   institutionName: string | null;
 }): Promise<SyncAccountsResult> {
-  const { plaidClient, accessToken, plaidItemRowId, userId, institutionName } = args;
+  const { plaidClient, accessToken, plaidItemRowId, householdId, institutionName } = args;
 
   const accountsRes = await plaidClient.accountsGet({ access_token: accessToken });
 
@@ -89,7 +89,7 @@ export async function syncPlaidAccounts(args: {
     } else {
       const finAcct = await prisma.financialAccount.create({
         data: {
-          userId,
+          householdId,
           name: acct.name,
           type: accountType as never,
           institution: institutionName,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { plaidCategoryToName } from "@/lib/plaid-sync";
 
@@ -8,17 +8,17 @@ import { plaidCategoryToName } from "@/lib/plaid-sync";
 // transaction using the stored plaidPrimaryCategory / plaidDetailedCategory
 // fields. No Plaid API call is needed.
 export async function POST() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id;
+  const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
+  if (response) return response;
+  const { householdId } = ctx;
 
-  const categories = await prisma.category.findMany({ where: { userId } });
+  const categories = await prisma.category.findMany({ where: { householdId } });
   const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
 
   // All uncategorized transactions that have Plaid category data stored.
   const uncategorized = await prisma.transaction.findMany({
     where: {
-      userId,
+      householdId,
       deletedAt: null,
       categoryId: null,
       plaidPrimaryCategory: { not: null },

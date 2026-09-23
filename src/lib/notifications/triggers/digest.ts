@@ -25,17 +25,17 @@ export function latestSlot(
   return slot;
 }
 
-async function buildSummary(userId: string, todayISO: string, days: number): Promise<string | null> {
+async function buildSummary(householdId: string, todayISO: string, days: number): Promise<string | null> {
   const today = parseISODay(todayISO);
   const horizon = addUTCDays(today, days);
 
   const [upcomingAll, cards, budgetLines] = await Promise.all([
-    getUpcoming(userId, todayISO, days),
+    getUpcoming(householdId, todayISO, days),
     prisma.financialAccount.findMany({
-      where: { userId, archived: false, type: "CREDIT_CARD", nextPaymentDueDate: { not: null } },
+      where: { householdId, archived: false, type: "CREDIT_CARD", nextPaymentDueDate: { not: null } },
       select: { name: true, nextPaymentDueDate: true, lastStatementBalance: true, isOverdue: true },
     }),
-    getBudgetMonth(userId, todayISO),
+    getBudgetMonth(householdId, todayISO),
   ]);
 
   const bills = upcomingAll.filter((u) => u.type === "EXPENSE");
@@ -124,7 +124,7 @@ export const digest: TriggerDef = {
     };
     const slot = latestSlot(ctx.now, frequency, hour, weekday);
     const slotKey = `${slot.getFullYear()}-${String(slot.getMonth() + 1).padStart(2, "0")}-${String(slot.getDate()).padStart(2, "0")}`;
-    const summary = await buildSummary(ctx.userId, ctx.todayISO, days);
+    const summary = await buildSummary(ctx.householdId, ctx.todayISO, days);
     if (summary === null) return [];
     return [{ dedupeKey: `digest:${frequency}:${slotKey}`, vars: { summary } }];
   },

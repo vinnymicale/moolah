@@ -28,7 +28,7 @@ export const budgetPace: TriggerDef = {
     const [year, monthNum] = ctx.todayISO.split("-").map(Number);
     const daysInMonth = new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
     const month = ctx.todayISO.slice(0, 7);
-    const lines = await getBudgetMonth(ctx.userId, ctx.todayISO);
+    const lines = await getBudgetMonth(ctx.householdId, ctx.todayISO);
     const events = [];
     for (const l of lines) {
       if (l.effectiveLimit <= 0) continue;

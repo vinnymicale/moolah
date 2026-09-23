@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 
 vi.mock("./_auth", async (orig) => {
   const actual = await orig<typeof import("./_auth")>();
-  return { ...actual, requireApiUser: vi.fn(async () => ({ ok: true, userId: "u1" })) };
+  return { ...actual, requireApiHousehold: vi.fn(async () => ({ ok: true, householdId: "h1" })) };
 });
 vi.mock("@/lib/queries", () => ({
   getNetWorth: vi.fn(),
@@ -20,13 +20,13 @@ vi.mock("@/lib/user-tz", () => ({ todayInZone: vi.fn(() => "2026-06-13") }));
 vi.mock("@/lib/snapshots", () => ({ getNetWorthHistory: vi.fn() }));
 vi.mock("@/lib/networth-forecast", () => ({ forecastNetWorth: vi.fn() }));
 
-import { requireApiUser } from "./_auth";
+import { requireApiHousehold } from "./_auth";
 import { getNetWorth, getBudgetMonth, getAccounts } from "@/lib/queries";
 import { getUpcoming } from "@/lib/calendar";
 import { getNetWorthHistory } from "@/lib/snapshots";
 import { forecastNetWorth } from "@/lib/networth-forecast";
 
-const auth = vi.mocked(requireApiUser);
+const auth = vi.mocked(requireApiHousehold);
 const netWorth = vi.mocked(getNetWorth);
 const history = vi.mocked(getNetWorthHistory);
 const forecast = vi.mocked(forecastNetWorth);
@@ -40,7 +40,7 @@ function req(url = "http://localhost/api/v1/x", headers: Record<string, string> 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  auth.mockResolvedValue({ ok: true, userId: "u1" });
+  auth.mockResolvedValue({ ok: true, householdId: "h1" });
 });
 
 describe("GET /api/v1/net-worth", () => {
@@ -95,8 +95,8 @@ describe("GET /api/v1/net-worth", () => {
     const { GET } = await import("./net-worth/route");
     const body = await (await GET(req("http://localhost/api/v1/net-worth?range=1y&forecast=6"))).json();
 
-    expect(history).toHaveBeenCalledWith("u1", 366, "2026-06-13");
-    expect(forecast).toHaveBeenCalledWith("u1", 750, 6, "2026-06-13");
+    expect(history).toHaveBeenCalledWith("h1", 366, "2026-06-13");
+    expect(forecast).toHaveBeenCalledWith("h1", 750, 6, "2026-06-13");
     expect(body.history).toEqual([{ date: "2026-06-13", assets: 1000, liabilities: 250, net: 750 }]);
     expect(body.forecast).toEqual([{ date: "2026-07-13", net: 800 }]);
   });
@@ -169,7 +169,7 @@ describe("GET /api/v1/upcoming", () => {
       { date: "2026-06-15", description: "Rent", amount: -1200, type: "EXPENSE", recurring: true },
     ]);
     // getUpcoming was asked for the clamped window.
-    expect(upcoming).toHaveBeenCalledWith("u1", "2026-06-13", 90);
+    expect(upcoming).toHaveBeenCalledWith("h1", "2026-06-13", 90);
   });
 });
 

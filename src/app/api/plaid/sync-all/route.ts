@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { changedCount, sweepPlaid } from "@/lib/plaid-sweep";
 
 /**
@@ -12,11 +12,11 @@ import { changedCount, sweepPlaid } from "@/lib/plaid-sweep";
  * every bank regardless of staleness (the manual sync button - see SyncButton).
  */
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { ctx, response } = await householdForRoute("RUN_SYNC");
+  if (response) return response;
 
   const force = new URL(req.url).searchParams.get("force") === "1";
-  const totals = await sweepPlaid({ userId: session.user.id, force });
+  const totals = await sweepPlaid({ householdId: ctx.householdId, force });
 
   return NextResponse.json({ ok: true, ...totals, changed: changedCount(totals) });
 }

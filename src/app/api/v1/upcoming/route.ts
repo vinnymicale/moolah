@@ -2,14 +2,14 @@
 // Optional ?days=14 (1-90) and ?tz= to anchor "today".
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
+import { requireApiHousehold, apiJson, readOnlyMethods } from "../_auth";
 import { getUpcoming } from "@/lib/calendar";
 import { todayInZone } from "@/lib/user-tz";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const auth = await requireApiUser(req);
+  const auth = await requireApiHousehold(req);
   if (!auth.ok) return auth.response;
 
   const sp = req.nextUrl.searchParams;
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const days = Number.isFinite(daysRaw) ? Math.min(90, Math.max(1, Math.trunc(daysRaw))) : 14;
   const todayISO = todayInZone(sp.get("tz") ?? undefined);
 
-  const items = await getUpcoming(auth.userId, todayISO, days);
+  const items = await getUpcoming(auth.householdId, todayISO, days);
   return apiJson({
     asOf: todayISO,
     days,

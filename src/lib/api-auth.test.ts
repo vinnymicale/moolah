@@ -11,10 +11,10 @@ import {
 import { prisma } from "@/lib/prisma";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { user: { findUnique: vi.fn() } },
+  prisma: { household: { findUnique: vi.fn() } },
 }));
 
-const findUnique = vi.mocked(prisma.user.findUnique);
+const findUnique = vi.mocked(prisma.household.findUnique);
 
 describe("generateApiToken", () => {
   it("produces a prefixed selector.verifier token", () => {
@@ -105,16 +105,16 @@ describe("bearerFromHeader", () => {
 describe("authenticateApiRequest", () => {
   beforeEach(() => findUnique.mockReset());
 
-  it("returns the user for a valid token", async () => {
+  it("returns the household for a valid token", async () => {
     const token = generateApiToken();
     const { selector, verifier } = parseApiToken(token)!;
     findUnique.mockResolvedValue({
-      id: "u1",
+      id: "h1",
       apiTokenVerifierHash: hashApiTokenVerifier(verifier),
     } as never);
 
     const result = await authenticateApiRequest(`Bearer ${token}`);
-    expect(result).toEqual({ userId: "u1" });
+    expect(result).toEqual({ householdId: "h1" });
     // Looked up by the non-secret selector, never the raw token.
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { apiTokenSelector: selector } }),
@@ -124,13 +124,13 @@ describe("authenticateApiRequest", () => {
   it("returns null when the verifier doesn't match the stored hash", async () => {
     const token = generateApiToken();
     findUnique.mockResolvedValue({
-      id: "u1",
+      id: "h1",
       apiTokenVerifierHash: hashApiTokenVerifier("a-different-verifier"),
     } as never);
     expect(await authenticateApiRequest(`Bearer ${token}`)).toBeNull();
   });
 
-  it("returns null when no user matches the selector", async () => {
+  it("returns null when no household matches the selector", async () => {
     findUnique.mockResolvedValue(null);
     expect(await authenticateApiRequest(`Bearer ${generateApiToken()}`)).toBeNull();
   });

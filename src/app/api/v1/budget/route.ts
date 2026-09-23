@@ -3,7 +3,7 @@
 // in UTC.
 
 import { NextRequest } from "next/server";
-import { requireApiUser, apiJson, readOnlyMethods } from "../_auth";
+import { requireApiHousehold, apiJson, readOnlyMethods } from "../_auth";
 import { getBudgetMonth } from "@/lib/queries";
 import { todayInZone } from "@/lib/user-tz";
 import { sumMoney } from "@/lib/money";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 const MONTH = /^\d{4}-\d{2}$/;
 
 export async function GET(req: NextRequest) {
-  const auth = await requireApiUser(req);
+  const auth = await requireApiHousehold(req);
   if (!auth.ok) return auth.response;
 
   const sp = req.nextUrl.searchParams;
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     ? `${monthParam}-01`
     : `${todayInZone(sp.get("tz") ?? undefined).slice(0, 7)}-01`;
 
-  const lines = await getBudgetMonth(auth.userId, month);
+  const lines = await getBudgetMonth(auth.householdId, month);
   const limit = sumMoney(lines.map((b) => b.limit));
   const effectiveLimit = sumMoney(lines.map((b) => b.effectiveLimit));
   const spent = sumMoney(lines.map((b) => b.actual));

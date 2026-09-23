@@ -25,7 +25,7 @@ export interface SpendingAnomalyDTO {
  * there are fewer than 2 prior months of data for a category.
  */
 export async function getSpendingAnomalies(
-  userId: string,
+  householdId: string,
   monthISO: string,
 ): Promise<SpendingAnomalyDTO[]> {
   const monthStart = parseISODay(`${monthISO.slice(0, 7)}-01`);
@@ -36,7 +36,7 @@ export async function getSpendingAnomalies(
   // per-category bucketing has to happen in JS after expanding each row's parts.
   const currentTxns = await prisma.transaction.findMany({
     where: {
-      userId,
+      householdId,
       deletedAt: null,
       type: "EXPENSE",
       cleared: true,
@@ -56,7 +56,7 @@ export async function getSpendingAnomalies(
     const me = endOfUTCMonth(ms);
     const hist = await prisma.transaction.findMany({
       where: {
-        userId,
+        householdId,
         deletedAt: null,
         type: "EXPENSE",
         cleared: true,
@@ -74,7 +74,7 @@ export async function getSpendingAnomalies(
   }
 
   const cats = await prisma.category.findMany({
-    where: { id: { in: [...currentByCat.keys()] }, userId },
+    where: { id: { in: [...currentByCat.keys()] }, householdId },
     select: { id: true, name: true, color: true, icon: true },
   });
   const catMap = new Map(cats.map((c) => [c.id, c]));
@@ -121,7 +121,7 @@ export interface TopMerchantDTO {
  * is used for display.
  */
 export async function getTopMerchants(
-  userId: string,
+  householdId: string,
   monthISO: string,
   limit = 6,
 ): Promise<TopMerchantDTO[]> {
@@ -130,7 +130,7 @@ export async function getTopMerchants(
 
   const txns = await prisma.transaction.findMany({
     where: {
-      userId,
+      householdId,
       deletedAt: null,
       type: "EXPENSE",
       cleared: true,

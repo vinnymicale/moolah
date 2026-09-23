@@ -30,7 +30,7 @@ export const duplicateCharge: TriggerDef = {
     const txns = await prisma.transaction.findMany({
       where: {
         id: { in: ctx.event.newTransactionIds },
-        userId: ctx.userId, deletedAt: null, isTransfer: false, type: "EXPENSE",
+        householdId: ctx.householdId, deletedAt: null, isTransfer: false, type: "EXPENSE",
         dedupIgnored: false,
       },
       select: { id: true, description: true, amount: true, date: true, account: { select: { name: true } } },
@@ -39,7 +39,7 @@ export const duplicateCharge: TriggerDef = {
     for (const t of txns) {
       const prior = await prisma.transaction.findFirst({
         where: {
-          userId: ctx.userId, deletedAt: null, isTransfer: false, dedupIgnored: false,
+          householdId: ctx.householdId, deletedAt: null, isTransfer: false, dedupIgnored: false,
           description: t.description, amount: t.amount,
           id: { notIn: ctx.event.newTransactionIds },
           date: { gte: addUTCDays(t.date, -withinDays), lte: t.date },

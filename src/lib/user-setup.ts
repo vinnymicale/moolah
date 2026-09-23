@@ -11,10 +11,10 @@ export function nameToEmail(name: string): string {
  * user record is first created (sign-up or auto-signin), and safe to call
  * again - it does nothing once the user has any categories.
  */
-export async function ensureDefaultCategories(userId: string) {
-  const existing = await prisma.category.count({ where: { userId } });
+export async function ensureDefaultCategories(householdId: string) {
+  const existing = await prisma.category.count({ where: { householdId } });
   if (existing > 0) return;
   await prisma.category.createMany({
-    data: DEFAULT_CATEGORIES.map((c) => ({ ...c, userId, isSystem: true })),
+    data: DEFAULT_CATEGORIES.map((c) => ({ ...c, householdId, isSystem: true })),
   });
 }

@@ -33,7 +33,7 @@ export const ccDue: TriggerDef = {
     const today = parseISODay(ctx.todayISO);
     const horizon = addUTCDays(today, days);
     const cards = await prisma.financialAccount.findMany({
-      where: { userId: ctx.userId, archived: false, type: "CREDIT_CARD", nextPaymentDueDate: { not: null } },
+      where: { householdId: ctx.householdId, archived: false, type: "CREDIT_CARD", nextPaymentDueDate: { not: null } },
       select: { id: true, name: true, nextPaymentDueDate: true, lastStatementBalance: true, isOverdue: true },
     });
     const events: TriggerEvent[] = [];

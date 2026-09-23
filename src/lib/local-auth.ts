@@ -9,6 +9,19 @@ import { ensureDefaultCategories, nameToEmail } from "@/lib/user-setup";
 const SIGNIN_MAX_ATTEMPTS = 10;
 const SIGNIN_WINDOW_MS = 60_000;
 
+/**
+ * True while no account has a password yet, i.e. nobody has claimed this
+ * instance. The sign-in page uses it to decide whether to offer sign-up at all;
+ * authorizeLocalUser re-checks it, because the page is only the UI.
+ */
+export async function isOpenSignupAllowed(): Promise<boolean> {
+  const founder = await prisma.user.findFirst({
+    where: { passwordHash: { not: null } },
+    select: { id: true },
+  });
+  return !founder;
+}
+
 export interface AuthorizedUser {
   id: string;
   email: string;
@@ -58,6 +71,10 @@ export async function authorizeLocalUser(
   }
 
   if (isSignup) {
+    // Sign-up exists to create the founder, and nothing else. Once any account
+    // has a password, membership is handed out by an admin from Settings, so an
+    // open form would be a way around the permission model.
+    if (!(await isOpenSignupAllowed())) return null;
     const existing = await prisma.user.findUnique({ where: { email }, select: { passwordHash: true } });
     if (existing?.passwordHash) return null;
     const passwordHash = await hash(password, 12);

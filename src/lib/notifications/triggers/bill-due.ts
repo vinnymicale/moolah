@@ -31,7 +31,7 @@ export const billDue: TriggerDef = {
   async evaluate(ctx) {
     const { days } = ctx.params as { days: number };
     const today = parseISODay(ctx.todayISO);
-    const upcoming = await getUpcoming(ctx.userId, ctx.todayISO, days);
+    const upcoming = await getUpcoming(ctx.householdId, ctx.todayISO, days);
     return upcoming
       .filter((u) => u.type === "EXPENSE")
       .map((u) => ({

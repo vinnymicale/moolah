@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/household", () => ({ requireCapability: vi.fn() }));
 
 const demoMode = { value: false };
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: () => demoMode.value }));
@@ -21,9 +21,9 @@ vi.mock("@/lib/prisma", () => ({
 
 import { getBudgetSuggestionsAction, applyBudgetSuggestionsAction } from "./budget-suggestions";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireCapability } from "@/lib/household";
 
-const requireUserMock = vi.mocked(requireUser);
+const householdMock = vi.mocked(requireCapability);
 const category = vi.mocked(prisma.category);
 const budget = vi.mocked(prisma.budget);
 const recurringRule = vi.mocked(prisma.recurringRule);
@@ -32,7 +32,7 @@ const transaction = vi.mocked(prisma.transaction);
 beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
-  requireUserMock.mockResolvedValue({ userId: "u1" } as Awaited<ReturnType<typeof requireUser>>);
+  householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
   category.findMany.mockResolvedValue([]);
   budget.findMany.mockResolvedValue([]);
   recurringRule.findMany.mockResolvedValue([]);
@@ -48,7 +48,7 @@ describe("demo mode", () => {
     const res = await getBudgetSuggestionsAction({ month: "2026-07-01" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.data.categories.length).toBeGreaterThan(0);
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
     expect(recurringRule.findMany).not.toHaveBeenCalled();
   });
 
@@ -197,9 +197,9 @@ describe("applyBudgetSuggestionsAction", () => {
     expect(budget.upsert).toHaveBeenCalledTimes(2);
     expect(budget.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId_categoryId_month: { userId: "u1", categoryId: "c1", month: expect.any(Date) } },
+        where: { householdId_categoryId_month: { householdId: "h1", categoryId: "c1", month: expect.any(Date) } },
         update: { limit: 120 },
-        create: expect.objectContaining({ userId: "u1", categoryId: "c1", limit: 120 }),
+        create: expect.objectContaining({ householdId: "h1", categoryId: "c1", limit: 120 }),
       }),
     );
   });
@@ -220,7 +220,7 @@ describe("applyBudgetSuggestionsAction", () => {
   it("rejects an empty entries list", async () => {
     const res = await applyBudgetSuggestionsAction({ month: "2026-07-01", entries: [] });
     expect(res.ok).toBe(false);
-    expect(requireUserMock).not.toHaveBeenCalled();
+    expect(householdMock).not.toHaveBeenCalled();
   });
 
   it("rejects non-positive limits", async () => {
