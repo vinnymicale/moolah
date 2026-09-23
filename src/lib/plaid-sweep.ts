@@ -32,9 +32,9 @@ function emptyTotals(): SweepTotals {
 }
 
 /**
- * Pick the items due for a sync. `householdId` scopes to one user (the HTTP path);
- * omit it to sweep every user's items (the scheduler). `force` takes everything
- * for that scope regardless of staleness or backoff.
+ * Pick the items due for a sync. `householdId` scopes to one household (the HTTP
+ * path); omit it to sweep every household's items (the scheduler). `force` takes
+ * everything for that scope regardless of staleness or backoff.
  */
 export async function findDueItems(opts: {
   householdId?: string;
