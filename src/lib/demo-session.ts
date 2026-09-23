@@ -4,8 +4,13 @@
  * email and resolves its household, so it works even if the DB was re-seeded.
  */
 import { prisma } from "@/lib/prisma";
+import { nameToEmail } from "@/lib/user-setup";
 
-const DEMO_EMAIL = "demo@example.com";
+// Derived the same way the seed derives it. A literal here went stale once when
+// sign-in moved to name-derived identities, and every demo page silently fell
+// back to an empty household.
+export const DEMO_NAME = "Demo User";
+export const DEMO_EMAIL = nameToEmail(DEMO_NAME);
 
 let cachedId: string | null = null;
 

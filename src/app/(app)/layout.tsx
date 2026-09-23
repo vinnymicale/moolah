@@ -8,6 +8,7 @@ import { AppChrome } from "@/components/AppChrome";
 import { allowedNavHrefs } from "@/components/app-nav";
 import { AutoPlaidSync } from "./AutoPlaidSync";
 import { DemoStoreProvider } from "@/components/DemoStore";
+import { DEMO_EMAIL, DEMO_NAME } from "@/lib/demo-session";
 import {
   DEMO_ACCOUNTS, DEMO_CATEGORIES, DEMO_TRANSACTIONS, DEMO_RECURRING,
   DEMO_BUDGETS, DEMO_GOALS, DEMO_SUGGESTIONS, buildDemoSnapshots,
@@ -31,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         }}
       >
         <AppChrome
-          user={{ name: "Demo User", email: "demo@example.com", image: null }}
+          user={{ name: DEMO_NAME, email: DEMO_EMAIL, image: null }}
           accounts={DEMO_ACCOUNTS}
           categories={DEMO_CATEGORIES}
           authBypass
