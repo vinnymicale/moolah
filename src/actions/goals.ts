@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
 import { parseISODay } from "@/lib/dates";
-import { toNumber } from "@/lib/money";
+import { formatUSD, toNumber } from "@/lib/money";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 
@@ -25,9 +26,9 @@ export type GoalInput = z.input<typeof goalSchema>;
 export async function createGoalAction(input: GoalInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId, userId } = await requireCapability("MANAGE_GOALS");
     const data = goalSchema.parse(input);
-    await prisma.savingsGoal.create({
+    const created = await prisma.savingsGoal.create({
       data: {
         householdId,
         name: data.name,
@@ -37,6 +38,14 @@ export async function createGoalAction(input: GoalInput): Promise<ActionResult> 
         color: data.color || "#16a34a",
         icon: data.icon || "piggy-bank",
       },
+    });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "goal.create",
+      entityType: "SavingsGoal",
+      entityId: created.id,
+      summary: `${created.name} - ${formatUSD(created.targetAmount)}`,
     });
     revalidatePaths();
   });
@@ -81,10 +90,18 @@ export async function contributeGoalAction(id: string, delta: number): Promise<A
 export async function deleteGoalAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId, userId } = await requireCapability("MANAGE_GOALS");
     const existing = await prisma.savingsGoal.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Goal not found");
     await prisma.savingsGoal.delete({ where: { id } });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "goal.delete",
+      entityType: "SavingsGoal",
+      entityId: id,
+      summary: existing.name,
+    });
     revalidatePaths();
   });
 }

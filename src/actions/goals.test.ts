@@ -19,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    auditLog: { create: vi.fn() },
   },
 }));
 
@@ -38,6 +39,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
   householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
+  // The real client returns the created row; the audit call reads its id.
+  goal.create.mockResolvedValue({ id: "g1", name: "Vacation", targetAmount: "1000.00" } as never);
 });
 
 describe("demo-mode guard", () => {

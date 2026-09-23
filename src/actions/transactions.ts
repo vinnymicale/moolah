@@ -14,6 +14,8 @@ import {
   type DedupScan,
 } from "@/lib/dedup-transactions";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
+import { formatUSD } from "@/lib/money";
 import { flattenAsOf, versionsInclude } from "@/lib/recurring-versions";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
@@ -81,7 +83,7 @@ export async function createTransactionAction(
   if (isDemoMode()) return { ok: true };
   let createdId: string | undefined;
   const res = await run(async () => {
-    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    const { householdId, userId } = await requireCapability("EDIT_TRANSACTIONS");
     const data = txnSchema.parse(input);
     await assertOwnership(householdId, data.accountId, data.categoryId, data.type);
     const splits = await normalizeSplits(householdId, data.type, data.amount, data.splits);
@@ -136,6 +138,14 @@ export async function createTransactionAction(
       });
       createdId = created.id;
     });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "transaction.create",
+      entityType: "Transaction",
+      entityId: createdId,
+      summary: `${data.description} ${formatUSD(data.amount)}`,
+    });
     revalidateAll();
   });
   return res.ok ? { ...res, id: createdId } : res;
@@ -144,7 +154,7 @@ export async function createTransactionAction(
 export async function updateTransactionAction(id: string, input: TransactionInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    const { householdId, userId } = await requireCapability("EDIT_TRANSACTIONS");
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Transaction not found");
     const data = txnSchema.parse(input);
@@ -173,6 +183,14 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
         },
       });
     });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "transaction.update",
+      entityType: "Transaction",
+      entityId: id,
+      summary: `${data.description} ${formatUSD(data.amount)}`,
+    });
     revalidateAll();
   });
 }
@@ -180,13 +198,21 @@ export async function updateTransactionAction(id: string, input: TransactionInpu
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    const { householdId, userId } = await requireCapability("EDIT_TRANSACTIONS");
     const existing = await prisma.transaction.findFirst({ where: { id, householdId, deletedAt: null } });
     if (!existing) throw new UserError("Transaction not found");
     // Soft delete: keep the row so it can be restored from the trash and so a
     // re-imported Plaid charge matches on plaidTransactionId instead of
     // duplicating.
     await prisma.transaction.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "transaction.delete",
+      entityType: "Transaction",
+      entityId: id,
+      summary: `${existing.description} ${formatUSD(existing.amount)}`,
+    });
     revalidateAll();
   });
 }
@@ -363,11 +389,20 @@ export async function bulkSetClearedAction(ids: string[], cleared: boolean): Pro
 export async function bulkDeleteTransactionsAction(ids: string[]): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("EDIT_TRANSACTIONS");
+    const { householdId, userId } = await requireCapability("EDIT_TRANSACTIONS");
     const list = idsSchema.parse(ids);
-    await prisma.transaction.updateMany({
+    const { count } = await prisma.transaction.updateMany({
       where: { householdId, id: { in: list }, deletedAt: null },
       data: { deletedAt: new Date() },
+    });
+    // One entry for the whole batch: a hundred per-row entries would bury
+    // everything else in the log.
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "transaction.bulkDelete",
+      entityType: "Transaction",
+      summary: `${count} transaction(s) deleted`,
     });
     revalidateAll();
   });

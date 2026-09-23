@@ -18,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    auditLog: { create: vi.fn() },
   },
 }));
 
@@ -36,6 +37,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   demoMode.value = false;
   householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
+  // The real client returns the created row; the audit call reads its id.
+  category.create.mockResolvedValue({ id: "c1", name: "Food" } as never);
 });
 
 describe("demo-mode guard", () => {

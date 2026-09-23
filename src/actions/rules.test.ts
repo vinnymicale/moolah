@@ -34,6 +34,7 @@ vi.mock("@/lib/prisma", () => ({
     tag: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     transaction: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     transactionSplit: { createMany: vi.fn(), deleteMany: vi.fn() },
+    auditLog: { create: vi.fn() },
     ruleRun: {
       create: vi.fn(async () => ({ id: "run1" })),
       findFirst: vi.fn(),
@@ -78,6 +79,8 @@ beforeEach(() => {
   householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
   evaluateRulesMock.mockReturnValue({});
   ruleRun.create.mockResolvedValue({ id: "run1" } as never);
+  // The real client returns the created row; the audit call reads its id.
+  rule.create.mockResolvedValue({ id: "r1", name: "Groceries" } as never);
 });
 
 describe("demo-mode guard", () => {

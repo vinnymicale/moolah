@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { CategoryKind } from "@/generated/prisma/enums";
@@ -21,9 +22,9 @@ export type CategoryInput = z.input<typeof categorySchema>;
 export async function createCategoryAction(input: CategoryInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_CATEGORIES");
+    const { householdId, userId } = await requireCapability("MANAGE_CATEGORIES");
     const data = categorySchema.parse(input);
-    await prisma.category.create({
+    const created = await prisma.category.create({
       data: {
         householdId,
         name: data.name,
@@ -32,6 +33,14 @@ export async function createCategoryAction(input: CategoryInput): Promise<Action
         icon: data.icon || "tag",
         parentId: data.parentId || null,
       },
+    });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "category.create",
+      entityType: "Category",
+      entityId: created.id,
+      summary: created.name,
     });
     revalidatePath("/categories");
   });
@@ -61,10 +70,18 @@ export async function updateCategoryAction(id: string, input: CategoryInput): Pr
 export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_CATEGORIES");
+    const { householdId, userId } = await requireCapability("MANAGE_CATEGORIES");
     const existing = await prisma.category.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Category not found");
     await prisma.category.delete({ where: { id } });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "category.delete",
+      entityType: "Category",
+      entityId: id,
+      summary: existing.name,
+    });
     revalidatePath("/categories");
     revalidatePath("/transactions");
   });

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
 import { parseISODay, isoDay } from "@/lib/dates";
 import { toCents } from "@/lib/money";
 import { expandVersioned } from "@/lib/recurrence";
@@ -211,6 +212,15 @@ export async function commitImportAction(input: CommitImportInput): Promise<Acti
 
     // Imported CC payments pair up the same way Plaid-synced ones do.
     await matchTransfers(householdId);
+
+    // A CSV can carry hundreds of rows; the audit records the import once.
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "transaction.import",
+      entityType: "Transaction",
+      summary: `${created.length} transaction(s) imported`,
+    });
 
     // Fire event-mode notification rules with the imported ids. Non-fatal.
     try {

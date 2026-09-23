@@ -41,6 +41,7 @@ vi.mock("@/lib/prisma", () => {
     recurringRule: { create: vi.fn(), findFirst: vi.fn() },
     financialAccount: { findFirst: vi.fn() },
     category: { findFirst: vi.fn(), count: vi.fn() },
+    auditLog: { create: vi.fn() },
     $transaction: vi.fn(),
   };
   // Interactive transactions get the same client; array form just awaits all.
@@ -89,6 +90,8 @@ beforeEach(() => {
   householdMock.mockResolvedValue({ userId: "u1", householdId: "h1" } as Awaited<ReturnType<typeof requireCapability>>);
   recurring.create.mockResolvedValue({ id: "rr1" } as never);
   txn.create.mockResolvedValue({ id: "t1" } as never);
+  // updateMany returns a count; the bulk audit entry reports it.
+  txn.updateMany.mockResolvedValue({ count: 1 } as never);
 });
 
 describe("createTransactionAction", () => {

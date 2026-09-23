@@ -8,6 +8,7 @@ import { isDemoMode } from "@/lib/demo-guard";
 import { encryptSecret } from "@/lib/crypto";
 import { generateApiToken, parseApiToken, hashApiTokenVerifier } from "@/lib/api-auth";
 import { isAiProvider } from "@/lib/ai-models";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * Credentials (Plaid, AI, API token) belong to the household, so only an admin
@@ -19,7 +20,7 @@ async function requireCredentialAdmin() {
   const ctx = await getHouseholdContext(userId);
   if (!ctx) return { ok: false as const, error: "You don't belong to a household." };
   if (!ctx.isAdmin) return { ok: false as const, error: "Only a household admin can change this." };
-  return { householdId: ctx.householdId };
+  return { householdId: ctx.householdId, userId };
 }
 
 export async function updateAiConfigAction(provider: string, apiKey: string, model?: string) {
@@ -37,6 +38,14 @@ export async function updateAiConfigAction(provider: string, apiKey: string, mod
       // than pinning whatever the box happened to show.
       aiModel: model?.trim() || null,
     },
+  });
+  await recordAudit({
+    householdId: admin.householdId,
+    actorId: admin.userId,
+    action: "credential.ai.update",
+    entityType: "Household",
+    entityId: admin.householdId,
+    summary: "AI provider settings updated",
   });
   revalidatePath("/settings");
   return { ok: true as const };
@@ -56,6 +65,14 @@ export async function updatePlaidConfigAction(clientId: string, secret: string, 
       ...(secret.trim() ? { plaidSecret: encryptSecret(secret.trim()) } : {}),
     },
   });
+  await recordAudit({
+    householdId: admin.householdId,
+    actorId: admin.userId,
+    action: "credential.plaid.update",
+    entityType: "Household",
+    entityId: admin.householdId,
+    summary: "Plaid credentials updated",
+  });
   revalidatePath("/settings");
   return { ok: true as const };
 }
@@ -68,6 +85,14 @@ export async function clearPlaidConfigAction() {
     where: { id: admin.householdId },
     data: { plaidClientId: null, plaidSecret: null, plaidEnv: null },
   });
+  await recordAudit({
+    householdId: admin.householdId,
+    actorId: admin.userId,
+    action: "credential.plaid.clear",
+    entityType: "Household",
+    entityId: admin.householdId,
+    summary: "Plaid credentials cleared",
+  });
   revalidatePath("/settings");
   return { ok: true as const };
 }
@@ -79,6 +104,14 @@ export async function clearAiConfigAction() {
   await prisma.household.update({
     where: { id: admin.householdId },
     data: { aiProvider: null, aiApiKey: null, aiModel: null },
+  });
+  await recordAudit({
+    householdId: admin.householdId,
+    actorId: admin.userId,
+    action: "credential.ai.clear",
+    entityType: "Household",
+    entityId: admin.householdId,
+    summary: "AI credentials cleared",
   });
   revalidatePath("/settings");
   return { ok: true as const };
@@ -104,6 +137,14 @@ export async function generateApiTokenAction() {
       apiTokenCreatedAt: new Date(),
     },
   });
+  await recordAudit({
+    householdId: admin.householdId,
+    actorId: admin.userId,
+    action: "credential.apiToken.generate",
+    entityType: "Household",
+    entityId: admin.householdId,
+    summary: "API token generated",
+  });
   revalidatePath("/settings");
   return { ok: true as const, token };
 }
@@ -115,6 +156,14 @@ export async function revokeApiTokenAction() {
   await prisma.household.update({
     where: { id: admin.householdId },
     data: { apiTokenSelector: null, apiTokenVerifierHash: null, apiTokenCreatedAt: null },
+  });
+  await recordAudit({
+    householdId: admin.householdId,
+    actorId: admin.userId,
+    action: "credential.apiToken.revoke",
+    entityType: "Household",
+    entityId: admin.householdId,
+    summary: "API token revoked",
   });
   revalidatePath("/settings");
   return { ok: true as const };

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -64,9 +65,9 @@ async function ownedAccount(id: string, householdId: string) {
 export async function createAccountAction(input: AccountInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
+    const { householdId, userId } = await requireCapability("MANAGE_ACCOUNTS");
     const data = accountSchema.parse(input);
-    await prisma.financialAccount.create({
+    const created = await prisma.financialAccount.create({
       data: {
         householdId,
         name: data.name,
@@ -79,6 +80,14 @@ export async function createAccountAction(input: AccountInput): Promise<ActionRe
         color: data.color || "#64748b",
         ...debtFields(data.type, data),
       },
+    });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "account.create",
+      entityType: "FinancialAccount",
+      entityId: created.id,
+      summary: created.name,
     });
     revalidatePath("/accounts");
     revalidatePath("/");
@@ -148,9 +157,17 @@ export async function updateDebtTermsAction(id: string, input: DebtTermsInput): 
 export async function archiveAccountAction(id: string, archived = true): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
-    await ownedAccount(id, householdId);
+    const { householdId, userId } = await requireCapability("MANAGE_ACCOUNTS");
+    const account = await ownedAccount(id, householdId);
     await prisma.financialAccount.update({ where: { id }, data: { archived } });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: archived ? "account.archive" : "account.unarchive",
+      entityType: "FinancialAccount",
+      entityId: id,
+      summary: account.name,
+    });
     revalidatePath("/accounts");
   });
 }
@@ -158,9 +175,17 @@ export async function archiveAccountAction(id: string, archived = true): Promise
 export async function deleteAccountAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_ACCOUNTS");
-    await ownedAccount(id, householdId);
+    const { householdId, userId } = await requireCapability("MANAGE_ACCOUNTS");
+    const account = await ownedAccount(id, householdId);
     await prisma.financialAccount.delete({ where: { id } });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "account.delete",
+      entityType: "FinancialAccount",
+      entityId: id,
+      summary: account.name,
+    });
     revalidatePath("/accounts");
     revalidatePath("/");
   });

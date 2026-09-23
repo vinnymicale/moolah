@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
 import { toCents } from "@/lib/money";
@@ -90,11 +91,11 @@ async function assertReferencesOwned(
 export async function createRuleAction(input: RuleInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_RULES");
+    const { householdId, userId } = await requireCapability("MANAGE_RULES");
     const data = ruleSchema.parse(input);
     await assertReferencesOwned(householdId, data.conditions, data.actions);
     const last = await prisma.rule.findFirst({ where: { householdId }, orderBy: { priority: "desc" } });
-    await prisma.rule.create({
+    const created = await prisma.rule.create({
       data: {
         householdId,
         name: data.name ?? null,
@@ -103,6 +104,14 @@ export async function createRuleAction(input: RuleInput): Promise<ActionResult> 
         conditions: data.conditions,
         actions: data.actions,
       },
+    });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "rule.create",
+      entityType: "Rule",
+      entityId: created.id,
+      summary: created.name ?? "Untitled rule",
     });
     revalidatePath("/categories");
   });
@@ -132,10 +141,18 @@ export async function updateRuleAction(id: string, input: RuleInput): Promise<Ac
 export async function deleteRuleAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_RULES");
+    const { householdId, userId } = await requireCapability("MANAGE_RULES");
     const rule = await prisma.rule.findFirst({ where: { id, householdId } });
     if (!rule) throw new UserError("Rule not found");
     await prisma.rule.delete({ where: { id } });
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "rule.delete",
+      entityType: "Rule",
+      entityId: id,
+      summary: rule.name ?? "Untitled rule",
+    });
     revalidatePath("/categories");
   });
 }
@@ -415,7 +432,7 @@ type PriorState = {
 export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | { ok: false; error: string }> {
   if (isDemoMode()) return EMPTY_APPLY;
   try {
-    const { householdId } = await requireCapability("MANAGE_RULES");
+    const { householdId, userId } = await requireCapability("MANAGE_RULES");
     const rules = await loadRulesForRun(householdId, ruleId);
     if (rules.length === 0) return EMPTY_APPLY;
 
@@ -554,6 +571,17 @@ export async function applyRulesAction(ruleId?: string): Promise<ApplyResult | {
       });
       runId = run.id;
     }
+
+    // A run touches many rows; the audit records the run once with its totals
+    // rather than one entry per transaction.
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "rule.run",
+      entityType: "RuleRun",
+      entityId: runId,
+      summary: `${priors.length} transaction(s) changed`,
+    });
 
     revalidatePath("/categories");
     revalidatePath("/transactions");

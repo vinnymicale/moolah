@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/household";
+import { recordAudit } from "@/lib/audit";
+import { formatUSD } from "@/lib/money";
 import { parseISODay } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/demo-guard";
@@ -29,7 +31,7 @@ const FORWARD_MONTHS = 24;
 export async function setBudgetAction(input: BudgetInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_BUDGETS");
+    const { householdId, userId } = await requireCapability("MANAGE_BUDGETS");
     const data = budgetSchema.parse(input);
     const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId } });
     if (!category) throw new UserError("Category not found");
@@ -46,6 +48,14 @@ export async function setBudgetAction(input: BudgetInput): Promise<ActionResult>
         create: { householdId, categoryId: data.categoryId, month, limit: data.limit },
       });
     }
+    await recordAudit({
+      householdId,
+      actorId: userId,
+      action: "budget.set",
+      entityType: "Budget",
+      entityId: data.categoryId,
+      summary: `${category.name} ${data.month} ${formatUSD(data.limit)}`,
+    });
     revalidatePath("/trends");
     revalidatePath("/budgets");
     revalidatePath("/");
