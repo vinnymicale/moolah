@@ -14,10 +14,14 @@ import { describe, expect, it } from "vitest";
 
 const MIGRATIONS = join(process.cwd(), "prisma", "migrations");
 
-function migrationSql(suffix: string): string {
+function migrationDir(suffix: string): string {
   const dir = readdirSync(MIGRATIONS).find((d) => d.endsWith(suffix));
   if (!dir) throw new Error(`no migration ending in ${suffix}`);
-  return readFileSync(join(MIGRATIONS, dir, "migration.sql"), "utf8");
+  return dir;
+}
+
+function migrationSql(suffix: string): string {
+  return readFileSync(join(MIGRATIONS, migrationDir(suffix), "migration.sql"), "utf8");
 }
 
 const scope = migrationSql("_scope_data_to_household");
@@ -119,6 +123,14 @@ describe("household backfill", () => {
         new RegExp(`UPDATE "${table}"\\s+t SET "createdById" = h\\."ownerId" FROM "Household" h`),
       );
     }
+  });
+
+  // migrate deploy applies migrations in directory-name order, not creation
+  // order, so the backfill below is only safe if the DDL sorts ahead of it. A
+  // dev database migrated incrementally hides this; a container upgrade does
+  // not, and fails with relation "Household" does not exist.
+  it("creates the household tables in a migration that sorts before the backfill", () => {
+    expect(migrationDir("_add_households") < migrationDir("_scope_data_to_household")).toBe(true);
   });
 
   it("keeps attribution nullable so deleting a user does not delete their rows", () => {
