@@ -11,7 +11,7 @@ import { syncPlaidAccounts } from "@/lib/plaid-accounts";
 import { encryptSecret } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("MANAGE_ACCOUNTS");
   if (response) return response;
 
   const { public_token } = (await req.json()) as { public_token: string };

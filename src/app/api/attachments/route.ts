@@ -8,7 +8,7 @@ import { validateAttachmentUpload, sniffAttachmentType } from "@/lib/attachments
 // A route handler rather than a server action: uploads can exceed the 1MB
 // server-action body cap, and downloads need a GET sibling anyway.
 export async function POST(req: NextRequest) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
   if (response) return response;
 
   const form = await req.formData();

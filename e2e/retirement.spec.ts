@@ -27,9 +27,10 @@ import { test, expect } from "@playwright/test";
 test.describe("retirement page", () => {
   test("renders the populated page, not the wizard or empty state", async ({ page }) => {
     await page.goto("/retirement");
-    await expect(page.getByRole("heading", { name: "Retirement" })).toBeVisible();
-    await expect(page.getByText("No retirement or investment accounts yet")).not.toBeVisible();
-    await expect(page.getByRole("button", { name: /finish setup/i })).not.toBeVisible();
+    const main = page.getByRole("main");
+    await expect(main.getByRole("heading", { name: "Retirement" })).toBeVisible();
+    await expect(main.getByText("No retirement or investment accounts yet")).not.toBeVisible();
+    await expect(main.getByRole("button", { name: /finish setup/i })).not.toBeVisible();
   });
 
   test("shows the verdict header", async ({ page }) => {
@@ -41,44 +42,48 @@ test.describe("retirement page", () => {
 
   test("shows all four stat cards", async ({ page }) => {
     await page.goto("/retirement");
-    await expect(page.getByText("Retirement balance")).toBeVisible();
-    await expect(page.getByText(/^Projected at \d+$/)).toBeVisible();
+    const main = page.getByRole("main");
+    await expect(main.getByText("Retirement balance")).toBeVisible();
+    await expect(main.getByText(/^Projected at \d+$/)).toBeVisible();
     // Scoped to the stat card: "Target" also appears as the projection chart's
     // reference-line label, which would trip strict mode.
-    await expect(page.locator("span", { hasText: /^Target$/ })).toBeVisible();
-    await expect(page.getByText("Monthly contribution")).toBeVisible();
+    await expect(main.locator("span", { hasText: /^Target$/ })).toBeVisible();
+    await expect(main.getByText("Monthly contribution")).toBeVisible();
   });
 
   test("renders the projection chart with the projection and Coast FIRE lines", async ({ page }) => {
     await page.goto("/retirement");
-    await expect(page.getByText("Projected balance")).toBeVisible();
-    await expect(page.locator(".recharts-legend-item").filter({ hasText: "Projected" })).toBeVisible();
-    await expect(page.locator(".recharts-legend-item").filter({ hasText: "Coast FIRE" })).toBeVisible();
-    await expect(page.locator(".recharts-line")).toHaveCount(2);
+    const main = page.getByRole("main");
+    await expect(main.getByText("Projected balance")).toBeVisible();
+    await expect(main.locator(".recharts-legend-item").filter({ hasText: "Projected" })).toBeVisible();
+    await expect(main.locator(".recharts-legend-item").filter({ hasText: "Coast FIRE" })).toBeVisible();
+    await expect(main.locator(".recharts-line")).toHaveCount(2);
   });
 
   test("renders the remaining panels", async ({ page }) => {
     await page.goto("/retirement");
-    await expect(page.getByText(/^Contribution limits/)).toBeVisible();
-    await expect(page.getByText("Growth, last 12 months")).toBeVisible();
-    await expect(page.getByRole("heading", { name: /^Contributions counting toward/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Assumptions" })).toBeVisible();
+    const main = page.getByRole("main");
+    await expect(main.getByText(/^Contribution limits/)).toBeVisible();
+    await expect(main.getByText("Growth, last 12 months")).toBeVisible();
+    await expect(main.getByRole("heading", { name: /^Contributions counting toward/ })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Assumptions" })).toBeVisible();
   });
 
   test("expands the YTD totals form with a box per source", async ({ page }) => {
     await page.goto("/retirement");
-    await expect(page.getByText("Totals come from your logged contributions.")).toBeVisible();
+    const main = page.getByRole("main");
+    await expect(main.getByText("Totals come from your logged contributions.")).toBeVisible();
 
     // The labels carry the selected tax year, so match around it.
-    const save = page.getByRole("button", { name: /^Save \d{4} totals$/ });
+    const save = main.getByRole("button", { name: /^Save \d{4} totals$/ });
 
-    await page.getByRole("button", { name: /^Enter \d{4} totals$/ }).click();
+    await main.getByRole("button", { name: /^Enter \d{4} totals$/ }).click();
     for (const label of ["Pre-tax", "Roth", "Employer match", "After-tax"]) {
-      await expect(page.getByLabel(label, { exact: true })).toBeVisible();
+      await expect(main.getByLabel(label, { exact: true })).toBeVisible();
     }
     await expect(save).toBeVisible();
 
-    await page.getByRole("button", { name: "Cancel" }).click();
+    await main.getByRole("button", { name: "Cancel" }).click();
     await expect(save).not.toBeVisible();
   });
 });

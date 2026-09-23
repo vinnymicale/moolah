@@ -5,7 +5,7 @@ import { getPlaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "@/lib/plaid
 import { decryptSecret } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("MANAGE_ACCOUNTS");
   if (response) return response;
 
   // Optional: reconnect an existing item in Plaid update mode.

@@ -10,7 +10,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> },
 ) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("RUN_SYNC");
   if (response) return response;
 
   const { itemId } = await params;

@@ -35,7 +35,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ itemId: string }> },
 ) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("MANAGE_ACCOUNTS");
   if (response) return response;
 
   const { itemId } = await params;

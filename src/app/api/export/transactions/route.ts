@@ -8,7 +8,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 // GET /api/export/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD&account=ID&category=ID
 // Streams the full (filtered) transaction history as a CSV download.
 export async function GET(req: NextRequest) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("EXPORT_DATA");
   if (response) return response;
 
   const sp = req.nextUrl.searchParams;

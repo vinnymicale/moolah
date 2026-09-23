@@ -72,7 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       authBypass={process.env.AUTH_BYPASS === "true"}
       unreadCount={unreadCount}
     >
-      <AutoPlaidSync />
+      {household.can("RUN_SYNC") && <AutoPlaidSync />}
       {children}
     </AppChrome>
   );

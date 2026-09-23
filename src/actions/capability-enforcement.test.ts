@@ -87,6 +87,43 @@ describe("notifications stay per-user", () => {
   });
 });
 
+// account.ts is deliberately ungated - changing your own password is not a
+// household action. That exemption is only safe while everything in the file
+// works on the caller's own row, so pin both halves of it here rather than
+// leaving the file silently outside the sweep.
+describe("self-service account actions stay self-scoped", () => {
+  const source = read("account.ts");
+
+  it("resolves the caller with requireUser and no capability gate", () => {
+    expect(source).toContain("requireUser");
+    expect(source).not.toMatch(/requireCapability\(|requireAdmin\(/);
+  });
+
+  for (const { name, body } of exportedActions(source)) {
+    it(`${name} only ever writes the caller's own row`, () => {
+      const writes = [...body.matchAll(/where:\s*\{([^}]*)\}/g)].map((m) => m[1]);
+      expect(writes.length).toBeGreaterThan(0);
+      for (const clause of writes) {
+        expect(clause).toContain("id: userId");
+      }
+    });
+  }
+});
+
+// A new file dropped into src/actions is ungated until someone maps it. Fail
+// loudly on that rather than letting it slip past every describe above.
+describe("no action file escapes this suite", () => {
+  it("every action file is gated, admin-only, or explicitly exempt", () => {
+    const EXEMPT = ["notifications.ts", "account.ts"];
+    const ADMIN_ONLY = ["settings.ts", "backup.ts", "household.ts"];
+    const known = new Set([...Object.keys(GATES), ...ADMIN_ONLY, ...EXEMPT]);
+    const files = readdirSync(ACTIONS_DIR).filter(
+      (f) => f.endsWith(".ts") && !f.includes(".test."),
+    );
+    expect(files.filter((f) => !known.has(f))).toEqual([]);
+  });
+});
+
 describe("admin-only actions require an admin", () => {
   for (const file of ["settings.ts", "backup.ts", "household.ts"]) {
     const source = read(file);

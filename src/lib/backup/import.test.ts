@@ -31,14 +31,19 @@ function ran(fragment: string): boolean {
 // table/column the fixtures below reference.
 const SCHEMA_ROWS = [
   { table_name: "User", column_name: "id" },
-  { table_name: "User", column_name: "name" },
+  { table_name: "Household", column_name: "id" },
+  { table_name: "Household", column_name: "name" },
   { table_name: "Transaction", column_name: "id" },
-  { table_name: "Transaction", column_name: "userId" },
+  { table_name: "Transaction", column_name: "householdId" },
   { table_name: "Transaction", column_name: "amount" },
 ];
 
 // The live tables the importer checks unknown-table names against.
-const LIVE_TABLES = [{ tablename: "User" }, { tablename: "Transaction" }];
+const LIVE_TABLES = [
+  { tablename: "User" },
+  { tablename: "Household" },
+  { tablename: "Transaction" },
+];
 
 // Make the User COUNT(*) return `userCount`; the schema lookup returns
 // SCHEMA_ROWS; the superuser probe returns `isSuper` (default true, the
@@ -66,8 +71,8 @@ const payload: BackupPayload = {
   version: 1,
   exportedAt: "2026-06-14T00:00:00.000Z",
   tables: [
-    { table: "User", rows: [{ id: "u1", name: "vinny" }] },
-    { table: "Transaction", rows: [{ id: "t1", userId: "u1", amount: 5 }] },
+    { table: "Household", rows: [{ id: "hh1", name: "Test House" }] },
+    { table: "Transaction", rows: [{ id: "t1", householdId: "hh1", amount: 5 }] },
   ],
 };
 
@@ -94,13 +99,13 @@ describe("importAllData", () => {
   });
 
   it("falls back to dependency-ordered inserts when not a superuser", async () => {
-    // Transaction depends on User (Transaction.userId -> User.id).
+    // Transaction depends on Household (Transaction.householdId -> Household.id).
     query.mockImplementation((sql: string) => {
       if (sql.includes("information_schema.columns")) return Promise.resolve({ rows: SCHEMA_ROWS });
       if (sql.includes("pg_tables")) return Promise.resolve({ rows: LIVE_TABLES });
       if (sql.includes("usesuper")) return Promise.resolve({ rows: [{ super: false }] });
       if (sql.includes("constraint_type")) {
-        return Promise.resolve({ rows: [{ child: "Transaction", parent: "User" }] });
+        return Promise.resolve({ rows: [{ child: "Transaction", parent: "Household" }] });
       }
       if (sql.includes('COUNT(*)') && sql.includes('"User"')) return Promise.resolve({ rows: [{ n: 0 }] });
       return Promise.resolve({ rows: [] });
@@ -118,10 +123,10 @@ describe("importAllData", () => {
     // Parent (User) inserted before child (Transaction), even though the backup
     // and a naive order wouldn't guarantee it.
     const order = sqls().filter((s) => s.startsWith("INSERT INTO"));
-    const userAt = order.findIndex((s) => s.includes('"User"'));
+    const householdAt = order.findIndex((s) => s.includes('"Household"'));
     const txAt = order.findIndex((s) => s.includes('"Transaction"'));
-    expect(userAt).toBeGreaterThanOrEqual(0);
-    expect(txAt).toBeGreaterThan(userAt);
+    expect(householdAt).toBeGreaterThanOrEqual(0);
+    expect(txAt).toBeGreaterThan(householdAt);
   });
 
   it("refuses a non-empty database unless force is set", async () => {
@@ -142,7 +147,7 @@ describe("importAllData", () => {
 
     const truncate = sqls().find((s) => s.startsWith("TRUNCATE"));
     expect(truncate).toBeDefined();
-    expect(truncate).toContain('"User"');
+    expect(truncate).toContain('"Household"');
     expect(truncate).toContain('"Transaction"');
     expect(truncate).toContain("RESTART IDENTITY CASCADE");
   });
@@ -165,22 +170,22 @@ describe("importAllData", () => {
     );
     expect(insert).toBeDefined();
     expect(insert![0]).toContain("ON CONFLICT DO NOTHING");
-    expect(insert![0]).toContain('("id","userId","amount")');
+    expect(insert![0]).toContain('("id","householdId","amount")');
     // Values are bound, never interpolated into the SQL text.
-    expect(insert![1]).toEqual(["t1", "u1", 5]);
+    expect(insert![1]).toEqual(["t1", "hh1", 5]);
   });
 
   it("skips rows that have no columns", async () => {
     wireCount(0);
 
     const res = await importAllData(
-      { ...payload, tables: [{ table: "User", rows: [{}, { id: "u1" }] }] },
+      { ...payload, tables: [{ table: "Household", rows: [{}, { id: "hh1" }] }] },
       "postgres://test",
     );
 
     // Only the row with columns is counted/inserted.
     expect(res.imported).toBe(1);
-    const inserts = sqls().filter((s) => s.startsWith('INSERT INTO "User"'));
+    const inserts = sqls().filter((s) => s.startsWith('INSERT INTO "Household"'));
     expect(inserts).toHaveLength(1);
   });
 
@@ -247,12 +252,12 @@ describe("importAllData", () => {
 
     await expect(
       importAllData(
-        { ...payload, tables: [{ table: "User", rows: [{ id: "u1", "evil\" --": 1 }] }] },
+        { ...payload, tables: [{ table: "Household", rows: [{ id: "hh1", "evil\" --": 1 }] }] },
         "postgres://test",
       ),
     ).rejects.toThrow(/unknown column/i);
 
-    expect(ran('INSERT INTO "User"')).toBe(false);
+    expect(ran('INSERT INTO "Household"')).toBe(false);
   });
 
   it("accepts a bare table array as well as a full payload", async () => {

@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // DELETE /api/attachments/:id - remove one attachment, scoped to the household.
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
   if (response) return response;
   if (isDemoMode()) return NextResponse.json({ ok: true });
   const { id } = await params;

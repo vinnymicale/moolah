@@ -1,7 +1,9 @@
-// Tests for exportUserData's scoping: every table dumped must be constrained to
-// the one user, and any table with no path back to a user must be skipped
-// (never dumped whole). We mock the pg Client and inspect the SQL it's asked to
-// run plus the bound $1 parameter.
+// Tests for exportAllData: the backup download has to carry the whole database,
+// because a restore has to land on another machine with every member's login and
+// the household's Plaid credentials intact. A dump that quietly scoped itself to
+// one user would restore into a household missing its other members, so what's
+// pinned here is that nothing gets filtered out except Prisma's own bookkeeping.
+// We mock the pg Client and inspect the SQL it's asked to run.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -17,36 +19,25 @@ vi.mock("pg", () => ({
   },
 }));
 
-import { exportUserData, encodeBackupRow, decodeBackupValue } from "./index";
+import { exportAllData, encodeBackupRow, decodeBackupValue } from "./index";
 
-// pg_tables and information_schema lookups come first, in source order. The
-// per-table SELECTs follow. We drive responses by matching on the SQL text so
-// the test doesn't depend on call ordering of the data queries.
-function wireSchema(opts: {
-  tables: string[];
-  userIdTables: string[];
-  rowsByTable?: Record<string, Record<string, unknown>[]>;
-}) {
+// The pg_tables lookup comes first, then one SELECT per table. We drive
+// responses by matching on the SQL text rather than on call order.
+function wireSchema(tables: string[], rowsByTable: Record<string, Record<string, unknown>[]> = {}) {
   query.mockImplementation((sql: string) => {
     if (sql.includes("FROM pg_tables")) {
-      return Promise.resolve({ rows: opts.tables.map((t) => ({ tablename: t })) });
+      return Promise.resolve({ rows: tables.map((t) => ({ tablename: t })) });
     }
-    if (sql.includes("information_schema.columns")) {
-      return Promise.resolve({ rows: opts.userIdTables.map((t) => ({ table_name: t })) });
-    }
-    // A data SELECT for one table.
-    const m = sql.match(/FROM "([^"]+)"/);
-    const table = m?.[1] ?? "";
-    return Promise.resolve({ rows: opts.rowsByTable?.[table] ?? [] });
+    const table = sql.match(/FROM "([^"]+)"/)?.[1] ?? "";
+    return Promise.resolve({ rows: rowsByTable[table] ?? [] });
   });
 }
 
-// Pull out just the data SELECTs (those with a WHERE userId binding), keyed by table.
-function dataSelects() {
+function dumpedTables() {
   return query.mock.calls
     .map((c) => c[0] as string)
     .filter((sql) => /^SELECT \* FROM/.test(sql))
-    .map((sql) => ({ sql, table: sql.match(/FROM "([^"]+)"/)?.[1] ?? "" }));
+    .map((sql) => sql.match(/FROM "([^"]+)"/)?.[1] ?? "");
 }
 
 beforeEach(() => {
@@ -55,82 +46,72 @@ beforeEach(() => {
   end.mockResolvedValue(undefined);
 });
 
-describe("exportUserData", () => {
-  it("scopes a userId-bearing table by its userId column", async () => {
-    wireSchema({ tables: ["Transaction"], userIdTables: ["Transaction"] });
+describe("exportAllData", () => {
+  it("dumps every table whole, with no WHERE clause to scope it to one user", async () => {
+    wireSchema(["Account", "Transaction", "User"]);
+    await exportAllData("postgresql://u:p@localhost:5432/db");
 
-    await exportUserData("u1", "postgres://test");
-
-    const sel = dataSelects();
-    expect(sel).toHaveLength(1);
-    expect(sel[0].sql).toContain('"userId" = $1');
-    // The bound parameter is the user id, never interpolated into the string.
-    const dataCall = query.mock.calls.find((c) => /^SELECT \* FROM "Transaction"/.test(c[0] as string));
-    expect(dataCall?.[1]).toEqual(["u1"]);
+    const selects = query.mock.calls
+      .map((c) => c[0] as string)
+      .filter((sql) => /^SELECT \* FROM/.test(sql));
+    expect(selects).toHaveLength(3);
+    for (const sql of selects) {
+      expect(sql).not.toMatch(/WHERE/i);
+    }
+    // No bound parameters either - a scoped dump would have to pass a user id.
+    for (const call of query.mock.calls) {
+      expect(call[1]).toBeUndefined();
+    }
   });
 
-  it("scopes the User table by id, not userId", async () => {
-    wireSchema({ tables: ["User"], userIdTables: [] });
-
-    await exportUserData("u1", "postgres://test");
-
-    const sel = dataSelects();
-    expect(sel[0].sql).toContain("WHERE id = $1");
-    expect(sel[0].sql).not.toContain("userId");
-  });
-
-  it("scopes child tables through their user-owned parent subquery", async () => {
-    wireSchema({
-      tables: ["AccountSnapshot", "PlaidLinkedAccount"],
-      userIdTables: [],
+  it("carries every household table, including members and their roles", async () => {
+    wireSchema(["Household", "HouseholdMember", "Transaction", "User"], {
+      User: [{ id: "u_own" }, { id: "u_mem" }],
+      HouseholdMember: [
+        { id: "hm_own", userId: "u_own", role: "OWNER" },
+        { id: "hm_mem", userId: "u_mem", role: "MEMBER" },
+      ],
     });
+    const payload = await exportAllData("postgresql://u:p@localhost:5432/db");
 
-    await exportUserData("u1", "postgres://test");
-
-    const byTable = Object.fromEntries(dataSelects().map((s) => [s.table, s.sql]));
-    expect(byTable.AccountSnapshot).toContain('"accountId" IN (SELECT id FROM "FinancialAccount" WHERE "userId" = $1)');
-    expect(byTable.PlaidLinkedAccount).toContain('"plaidItemId" IN (SELECT id FROM "PlaidItem" WHERE "userId" = $1)');
-  });
-
-  it("skips tables with no relationship to a user", async () => {
-    wireSchema({
-      tables: ["Transaction", "VerificationToken"],
-      userIdTables: ["Transaction"],
-    });
-
-    const payload = await exportUserData("u1", "postgres://test");
-
-    // VerificationToken has no userId, isn't a known child - it must not be queried or included.
-    const tablesQueried = dataSelects().map((s) => s.table);
-    expect(tablesQueried).toContain("Transaction");
-    expect(tablesQueried).not.toContain("VerificationToken");
-    expect(payload.tables.map((t) => t.table)).not.toContain("VerificationToken");
+    expect(dumpedTables()).toEqual(["Household", "HouseholdMember", "Transaction", "User"]);
+    const members = payload.tables.find((t) => t.table === "HouseholdMember");
+    expect(members?.rows).toHaveLength(2);
+    expect(members?.rows.map((r) => r.role)).toEqual(["OWNER", "MEMBER"]);
+    expect(payload.tables.find((t) => t.table === "User")?.rows).toHaveLength(2);
   });
 
   it("skips Prisma's migration bookkeeping table", async () => {
-    wireSchema({
-      tables: ["_prisma_migrations", "Transaction"],
-      userIdTables: ["Transaction"],
-    });
+    wireSchema(["Transaction", "_prisma_migrations"]);
+    const payload = await exportAllData("postgresql://u:p@localhost:5432/db");
 
-    await exportUserData("u1", "postgres://test");
-
-    expect(dataSelects().map((s) => s.table)).not.toContain("_prisma_migrations");
+    expect(dumpedTables()).toEqual(["Transaction"]);
+    expect(payload.tables.map((t) => t.table)).toEqual(["Transaction"]);
   });
 
-  it("carries the matched rows into the payload and closes the connection", async () => {
-    wireSchema({
-      tables: ["Transaction"],
-      userIdTables: ["Transaction"],
-      rowsByTable: { Transaction: [{ id: "t1", userId: "u1" }] },
-    });
-
-    const payload = await exportUserData("u1", "postgres://test");
+  it("stamps the payload envelope and closes the connection", async () => {
+    wireSchema(["Transaction"], { Transaction: [{ id: "t1" }] });
+    const payload = await exportAllData("postgresql://u:p@localhost:5432/db");
 
     expect(payload.app).toBe("moolah");
     expect(payload.version).toBe(1);
-    expect(payload.tables).toEqual([{ table: "Transaction", rows: [{ id: "t1", userId: "u1" }] }]);
-    expect(end).toHaveBeenCalledOnce();
+    expect(Number.isNaN(Date.parse(payload.exportedAt))).toBe(false);
+    expect(payload.tables).toEqual([{ table: "Transaction", rows: [{ id: "t1" }] }]);
+    expect(end).toHaveBeenCalled();
+  });
+
+  it("closes the connection even when a table read fails", async () => {
+    query.mockImplementation((sql: string) => {
+      if (sql.includes("FROM pg_tables")) {
+        return Promise.resolve({ rows: [{ tablename: "Transaction" }] });
+      }
+      return Promise.reject(new Error("permission denied"));
+    });
+
+    await expect(exportAllData("postgresql://u:p@localhost:5432/db")).rejects.toThrow(
+      "permission denied",
+    );
+    expect(end).toHaveBeenCalled();
   });
 });
 

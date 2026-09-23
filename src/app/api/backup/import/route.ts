@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
+import { getHouseholdContext } from "@/lib/household";
 import { prisma } from "@/lib/prisma";
 import { compare } from "bcryptjs";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -14,8 +15,9 @@ import { importAllData, type BackupPayload } from "@/lib/backup";
 // out and the user logs back in with the credentials from the backup.
 //
 // Because it destroys everything in the instance, a valid session isn't enough:
-// the caller re-enters their password here. A borrowed session (a shared
-// machine, a stolen JWT) then can't wipe the database on its own.
+// the caller must be a household admin and re-enters their password here. A
+// borrowed session (a shared machine, a stolen JWT) then can't wipe the
+// database on its own.
 //
 // The /api/backup prefix is already blocked in demo mode by proxy.ts.
 
@@ -56,6 +58,14 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // A restore replaces every member's data, not just the caller's, so it stays
+  // with the admins who already hold the household's credentials.
+  const ctx = await getHouseholdContext(userId);
+  if (!ctx) return NextResponse.json({ error: "No household" }, { status: 403 });
+  if (!ctx.isAdmin) {
+    return NextResponse.json({ error: "Only a household admin can import data." }, { status: 403 });
+  }
 
   // Reject oversized uploads from the declared length before buffering the
   // body; the byte-size check after reading covers requests that lie about or

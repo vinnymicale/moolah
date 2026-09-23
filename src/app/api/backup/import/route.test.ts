@@ -12,12 +12,14 @@ vi.mock("@/lib/backup", () => ({ importAllData: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { user: { findUnique: vi.fn() } } }));
 vi.mock("bcryptjs", () => ({ compare: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
+vi.mock("@/lib/household", () => ({ getHouseholdContext: vi.fn() }));
 
 import { auth } from "@/auth";
 import { importAllData } from "@/lib/backup";
 import { prisma } from "@/lib/prisma";
 import { compare } from "bcryptjs";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getHouseholdContext } from "@/lib/household";
 import { POST } from "./route";
 
 const authMock = vi.mocked(auth);
@@ -25,6 +27,7 @@ const importMock = vi.mocked(importAllData);
 const findUser = vi.mocked(prisma.user.findUnique);
 const compareMock = vi.mocked(compare);
 const rateLimit = vi.mocked(checkRateLimit);
+const householdCtx = vi.mocked(getHouseholdContext);
 
 function post(body: string): NextRequest {
   return new NextRequest("http://localhost/api/backup/import", { method: "POST", body });
@@ -45,6 +48,7 @@ beforeEach(() => {
   findUser.mockResolvedValue({ passwordHash: "hashed" } as never);
   compareMock.mockResolvedValue(true as never);
   rateLimit.mockReturnValue({ allowed: true } as never);
+  householdCtx.mockResolvedValue({ isAdmin: true } as never);
 });
 
 describe("POST /api/backup/import", () => {
@@ -53,6 +57,25 @@ describe("POST /api/backup/import", () => {
     const res = await POST(post(validBody));
     expect(res.status).toBe(401);
     expect(importMock).not.toHaveBeenCalled();
+  });
+
+  it("403s when the caller has no household", async () => {
+    householdCtx.mockResolvedValue(null as never);
+    const res = await POST(post(validBody));
+    expect(res.status).toBe(403);
+    expect(importMock).not.toHaveBeenCalled();
+  });
+
+  it("403s a non-admin member, without importing", async () => {
+    householdCtx.mockResolvedValue({ isAdmin: false } as never);
+    const res = await POST(post(validBody));
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({
+      error: "Only a household admin can import data.",
+    });
+    expect(importMock).not.toHaveBeenCalled();
+    // The gate comes before the password check, so a member can't even probe it.
+    expect(compareMock).not.toHaveBeenCalled();
   });
 
   it("400s on invalid JSON", async () => {

@@ -12,7 +12,7 @@ import { changedCount, sweepPlaid } from "@/lib/plaid-sweep";
  * every bank regardless of staleness (the manual sync button - see SyncButton).
  */
 export async function POST(req: Request) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("RUN_SYNC");
   if (response) return response;
 
   const force = new URL(req.url).searchParams.get("force") === "1";

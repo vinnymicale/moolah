@@ -116,7 +116,7 @@ export async function requirePageAdmin(): Promise<HouseholdContext> {
  * with JSON rather than redirect, so this returns either the context or the
  * response to send back.
  */
-export async function householdForRoute(): Promise<
+export async function householdForRoute(capability?: Capability): Promise<
   { ctx: HouseholdContext; response?: undefined } | { ctx?: undefined; response: Response }
 > {
   const session = await getSession();
@@ -126,6 +126,12 @@ export async function householdForRoute(): Promise<
   const ctx = await getHouseholdContext(session.user.id);
   if (!ctx) {
     return { response: Response.json({ error: "No household" }, { status: 403 }) };
+  }
+  // Membership alone only proves the caller belongs here. A route that writes or
+  // hands out the whole ledger names the capability it needs, so a viewer can't
+  // reach it just by being in the household.
+  if (capability && !ctx.can(capability)) {
+    return { response: Response.json({ error: "Forbidden" }, { status: 403 }) };
   }
   return { ctx };
 }

@@ -23,10 +23,6 @@ dataset, and anything you change stays in your browser only.
 
 Planned improvements, roughly in priority order:
 
-- **Household / multi-user support** *(in progress)* - share one dataset with a partner: invite
-  codes, per-member attribution on transactions, and a shared calendar. Local name+password
-  accounts with per-user data and Plaid keys already landed; the shared-household layer is next.
-
 - **Plaid webhooks** - let Plaid push `SYNC_UPDATES_AVAILABLE` to a verified `/api/plaid/webhook`
   endpoint so new transactions land the moment the bank reports them, instead of waiting for the
   next scheduled sweep. Needs a public HTTPS entry point (Cloudflare Tunnel, Tailscale Funnel, or a
@@ -35,6 +31,11 @@ Planned improvements, roughly in priority order:
 
 ### Recently shipped
 
+- **Household / multi-user support** - one shared ledger for everyone in the house. The admin
+  creates each member's account directly (name + temporary password, no invites or email) and picks
+  what they can reach: per-page view access plus named permissions like editing transactions or
+  running a Plaid sync. Plaid, AI and API credentials belong to the household and stay admin-only,
+  every write is attributed to whoever made it, and notifications stay per-user.
 - **Versioned recurring rules** - editing a recurring bill's amount keeps the old amount attached
   to past occurrences instead of rewriting history.
 - **Background Plaid sync** - a cron sweep (default every 30 minutes) refreshes bank data on
@@ -436,6 +437,11 @@ A Plaid access token is tied to your `PLAID_CLIENT_ID` + `PLAID_SECRET` + `PLAID
 computer or database, so you can move it to another machine and keep the same connections.
 **Restoring a saved token never costs a new Plaid item - only clicking "Connect a bank" does.**
 
+**Backup and restore are admin-only.** The file holds every member's login and the household's
+Plaid access tokens, so only an owner or admin can download or restore one - members and viewers
+get a 403. What comes out is the whole database, not just the caller's rows: a partial dump would
+restore into a household missing its members.
+
 ### Two things have to travel together
 
 Preserving your Plaid connections across a move takes **both** pieces below. Move the backup but
@@ -444,15 +450,16 @@ can't decrypt the credentials it needs to actually call Plaid.
 
 1. **The data** - the backup file (or `.pgdata/`). It carries each bank's `accessToken` in **plain
    text**, so the tokens themselves restore fine on any machine, under any key.
-2. **The encryption key** - your per-user **Plaid API keys** (`PLAID_CLIENT_ID` / `PLAID_SECRET`)
-   and AI keys are stored **encrypted**, keyed off `ENCRYPTION_KEY` (or `AUTH_SECRET` if you never
-   set one). The app decrypts your Plaid secret on every sync, so if the new host can't decrypt it,
-   the access tokens are useless and Plaid pages fail. The key must match the source instance.
+2. **The encryption key** - the household's **Plaid API keys** (`PLAID_CLIENT_ID` /
+   `PLAID_SECRET`) and AI keys are stored **encrypted**, keyed off `ENCRYPTION_KEY` (or
+   `AUTH_SECRET` if you never set one). The app decrypts the Plaid secret on every sync, so if the
+   new host can't decrypt it, the access tokens are useless and Plaid pages fail. The key must
+   match the source instance.
 
 So the rule is: **copy the backup *and* set the same `ENCRYPTION_KEY` / `AUTH_SECRET` on the new
 host before you restore.** (If your Plaid keys live only in `.env` as an instance-wide fallback,
-rather than per-user in Settings, they aren't encrypted in the database - just copy that `.env` and
-the key question is moot.) The full step-by-step is in the ⚠️ callout under Option A.
+rather than in the household's Settings, they aren't encrypted in the database - just copy that
+`.env` and the key question is moot.) The full step-by-step is in the ⚠️ callout under Option A.
 
 ### Option A - one-command backup (recommended)
 
@@ -467,7 +474,8 @@ file in your browser. Copy it somewhere safe (external drive / cloud folder).
 
 **To restore in the app:** go to **Settings → Restore from a backup**, pick a backup file, and
 confirm. This overwrites the current database with the backup's contents, so you're signed out
-afterward and log back in with the restored account. Ideal for the export → spin up Docker →
+afterward and log back in with a restored account - every member's login comes back with the role
+and permissions they had. Ideal for the export → spin up Docker →
 import-without-reconfiguring workflow.
 
 **To restore from the CLI** (e.g. into a fresh clone):

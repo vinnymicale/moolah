@@ -62,6 +62,9 @@ test.describe("navigation", () => {
 test.describe("chrome interactions", () => {
   test("command palette opens with the keyboard shortcut", async ({ page }) => {
     await page.goto("/transactions");
+    // The shortcut is bound by a client component, so a keypress sent before
+    // hydration lands on nothing. Wait for interactive chrome to settle first.
+    await expect(page.getByRole("button", { name: "Toggle theme" })).toBeVisible();
     await page.keyboard.press("ControlOrMeta+k");
     await expect(page.getByPlaceholder(/run an action, or search transactions/)).toBeVisible();
     await page.keyboard.press("Escape");

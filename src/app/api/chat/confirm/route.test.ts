@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/household", () => ({ householdForRoute: vi.fn() }));
 vi.mock("@/lib/demo-guard", () => ({ isDemoMode: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/chat-writes", async (importOriginal) => ({
@@ -12,13 +12,13 @@ vi.mock("@/lib/chat-writes", async (importOriginal) => ({
   commitWrite: vi.fn(),
 }));
 
-import { auth } from "@/auth";
+import { householdForRoute } from "@/lib/household";
 import { isDemoMode } from "@/lib/demo-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { commitWrite } from "@/lib/chat-writes";
 import { POST } from "./route";
 
-const authMock = vi.mocked(auth);
+const forRoute = vi.mocked(householdForRoute);
 const demoMock = vi.mocked(isDemoMode);
 const rateLimit = vi.mocked(checkRateLimit);
 const commit = vi.mocked(commitWrite);
@@ -49,7 +49,7 @@ function post(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  authMock.mockResolvedValue({ user: { id: "u1" } } as never);
+  forRoute.mockResolvedValue({ ctx: { userId: "u1", householdId: "h1" } } as never);
   demoMock.mockReturnValue(false);
   rateLimit.mockReturnValue({ allowed: true, retryAfterSec: 0 } as never);
   commit.mockResolvedValue("Saved Market run for $42.50.");
@@ -60,14 +60,23 @@ describe("POST /api/chat/confirm", () => {
     const res = await POST(post({ staged }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: "Saved Market run for $42.50." });
-    expect(commit).toHaveBeenCalledWith(expect.objectContaining({ id: "w1" }), "u1");
+    // The second argument scopes the write, and commitWrite checks ownership
+    // against householdId - passing a user id here would fail every lookup.
+    expect(commit).toHaveBeenCalledWith(expect.objectContaining({ id: "w1" }), "h1");
   });
 
-  it("rejects an unauthenticated caller", async () => {
-    authMock.mockResolvedValue(null as never);
+  it("passes the gate's rejection straight through", async () => {
+    forRoute.mockResolvedValue({
+      response: new Response(null, { status: 401 }),
+    } as never);
     const res = await POST(post({ staged }));
     expect(res.status).toBe(401);
     expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("asks for the capability a hand-edit would need", async () => {
+    await POST(post({ staged }));
+    expect(forRoute).toHaveBeenCalledWith("EDIT_TRANSACTIONS");
   });
 
   it("refuses to write in demo mode", async () => {

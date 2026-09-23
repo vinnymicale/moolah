@@ -8,7 +8,7 @@ import { plaidCategoryToName } from "@/lib/plaid-sync";
 // transaction using the stored plaidPrimaryCategory / plaidDetailedCategory
 // fields. No Plaid API call is needed.
 export async function POST() {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
   if (response) return response;
   const { householdId } = ctx;
 

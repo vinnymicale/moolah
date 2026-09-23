@@ -15,7 +15,7 @@ import { syncPlaidItem } from "@/lib/plaid-sync";
  * re-created. Nothing is duplicated.
  */
 export async function POST() {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("RUN_SYNC");
   if (response) return response;
   const { householdId } = ctx;
 
