@@ -642,7 +642,7 @@ async function callGemini(
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  const { ctx, response } = await householdForRoute();
+  const { ctx, response } = await householdForRoute("USE_CHAT");
   if (response) return response;
 
   // Each request can fan out into many paid model calls - keep a per-user lid on it.

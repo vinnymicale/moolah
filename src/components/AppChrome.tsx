@@ -49,6 +49,7 @@ export function AppChrome({
   unreadCount = 0,
   allowedHrefs,
   canSync = false,
+  canUseChat = false,
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -63,6 +64,8 @@ export function AppChrome({
   /** RUN_SYNC. The sync buttons hit an already-gated route, so without it they
    *  would only ever return a 403. */
   canSync?: boolean;
+  /** USE_CHAT. Same reasoning as canSync - /api/chat rejects without it. */
+  canUseChat?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -85,6 +88,9 @@ export function AppChrome({
   const [collapsed, setCollapsed] = usePersistentState(NAV_COLLAPSED_KEY, false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // The assistant has four ways in - button, palette, shortcut, panel - and they
+  // all hang off this so none of them can drift out of step with the route gate.
+  const chatEnabled = !demoMode && canUseChat;
 
   const toggleCollapsed = () => setCollapsed(!collapsed);
 
@@ -101,7 +107,7 @@ export function AppChrome({
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       if (e.key === "n") { e.preventDefault(); setAddOpen(true); }
-      else if (e.key === "c") { e.preventDefault(); setChatOpen((v) => !v); }
+      else if (e.key === "c" && chatEnabled) { e.preventDefault(); setChatOpen((v) => !v); }
       else if (e.key === "i") { e.preventDefault(); fileInputRef.current?.click(); }
       else if (e.key === "?") { e.preventDefault(); setShortcutsOpen(true); }
       else if (e.key === "/") {
@@ -111,7 +117,7 @@ export function AppChrome({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [chatEnabled]);
 
   // Drop hrefs that no longer exist and append any new ones before display/reorder.
   const mergedOrder = mergeNavOrder(navOrder);
@@ -204,12 +210,12 @@ export function AppChrome({
       { id: "act:add", label: "New transaction", keywords: "add create expense income", icon: Plus, run: () => setAddOpen(true) },
       { id: "act:import", label: "Import CSV", keywords: "upload bank statement", icon: Upload, run: () => fileInputRef.current?.click() },
       { id: "act:shortcuts", label: "Keyboard shortcuts", keywords: "help keys hotkeys", icon: Keyboard, run: () => setShortcutsOpen(true) },
-      ...(demoMode
-        ? []
-        : [{ id: "act:chat", label: "Finance assistant", keywords: "chat ai ask bot", icon: Bot, run: () => setChatOpen(true) } as Command]),
+      ...(chatEnabled
+        ? [{ id: "act:chat", label: "Finance assistant", keywords: "chat ai ask bot", icon: Bot, run: () => setChatOpen(true) } as Command]
+        : []),
     ];
     return [...actions, ...nav];
-  }, [router, demoMode, allowedHrefs]);
+  }, [router, chatEnabled, allowedHrefs]);
 
   const sidebarProps = {
     user,
@@ -325,10 +331,10 @@ export function AppChrome({
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {demoMode && <DemoWelcomeModal initialPath={initialPath} />}
-      {!demoMode && <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />}
+      {chatEnabled && <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />}
 
-      {/* Floating chat button — hidden in demo mode */}
-      {!demoMode && !chatOpen && (
+      {/* Floating chat button - hidden in demo mode and without USE_CHAT */}
+      {chatEnabled && !chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
           className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-brand-fg shadow-floating transition-transform duration-200 hover:scale-105 active:scale-95 md:bottom-5 md:right-5"

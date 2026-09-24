@@ -111,6 +111,21 @@ describe("POST /api/chat guards", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // Reading a page and interrogating the whole ledger through a paid model are
+  // separate rights, so a member without USE_CHAT never reaches the provider.
+  it("403s a member without USE_CHAT", async () => {
+    findMembership.mockResolvedValue({
+      householdId: "h1",
+      role: "VIEWER",
+      capabilities: [],
+      deniedCapabilities: [],
+    } as never);
+    const fetchMock = queueFetch();
+    const res = await POST(post(hello));
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rate-limits per user and reports how long to wait", async () => {
     rateLimit.mockReturnValue({ allowed: false, retryAfterSec: 42 } as never);
     const res = await POST(post(hello));

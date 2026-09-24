@@ -10,8 +10,12 @@ import { commitWrite, stagedWriteSchema } from "@/lib/chat-writes";
 // The descriptor arrives from the browser, so it gets the full validation
 // treatment: schema parse here, ownership checks on every id in commitWrite.
 // This is where an assistant write actually lands, so it needs the same
-// capability the equivalent hand-edit would - /api/chat only stages.
+// capability the equivalent hand-edit would - /api/chat only stages. It needs
+// USE_CHAT as well: committing a write you were never allowed to stage would
+// route around the assistant gate.
 export async function POST(request: Request) {
+  const chat = await householdForRoute("USE_CHAT");
+  if (chat.response) return chat.response;
   const { ctx, response } = await householdForRoute("EDIT_TRANSACTIONS");
   if (response) return response;
 
