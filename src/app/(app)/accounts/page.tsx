@@ -27,7 +27,7 @@ export default async function AccountsPage() {
     );
   }
 
-  const { householdId } = await requirePageCapability("VIEW_ACCOUNTS");
+  const { householdId, can } = await requirePageCapability("VIEW_ACCOUNTS");
   const [netWorth, snapshots, plaidItems, hasPlaid] = await Promise.all([
     getNetWorth(householdId, true),
     getSnapshots(householdId),
@@ -40,7 +40,7 @@ export default async function AccountsPage() {
       <PageHeader
         title="Accounts & Net Worth"
         subtitle="Everything you own and owe, in one place."
-        action={hasPlaid ? <PlaidConnectButton /> : undefined}
+        action={hasPlaid && can("MANAGE_ACCOUNTS") ? <PlaidConnectButton /> : undefined}
       />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
@@ -51,7 +51,14 @@ export default async function AccountsPage() {
 
       <AccountsManager accounts={netWorth.accounts} snapshots={snapshots} />
 
-      {hasPlaid && <PlaidItemsList items={plaidItems} />}
+      {hasPlaid && (
+        <PlaidItemsList
+          items={plaidItems}
+          canManageAccounts={can("MANAGE_ACCOUNTS")}
+          canSync={can("RUN_SYNC")}
+          canDedup={can("EDIT_TRANSACTIONS")}
+        />
+      )}
     </div>
   );
 }

@@ -48,6 +48,7 @@ export function AppChrome({
   demoMode = false,
   unreadCount = 0,
   allowedHrefs,
+  canSync = false,
 }: {
   children: React.ReactNode;
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -59,6 +60,9 @@ export function AppChrome({
   /** Hrefs this member may open, from the server. Undefined means show everything
    *  (demo mode, where there is no household to ask). */
   allowedHrefs?: string[];
+  /** RUN_SYNC. The sync buttons hit an already-gated route, so without it they
+   *  would only ever return a 403. */
+  canSync?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -212,6 +216,7 @@ export function AppChrome({
     authBypass,
     demoMode,
     unreadCount,
+    canSync,
     nav: orderedNav,
     isActive,
     customized,
@@ -254,7 +259,7 @@ export function AppChrome({
             <span className="font-display text-[15px] font-semibold">Moolah</span>
           </div>
           <div className="flex-1" />
-          {!demoMode && <SyncButton variant="icon" />}
+          {!demoMode && canSync && <SyncButton variant="icon" />}
           <button onClick={() => setSearchOpen(true)} className="btn-ghost h-9 w-9 p-0!" aria-label="Search">
             <Search size={18} />
           </button>

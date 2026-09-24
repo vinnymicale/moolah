@@ -22,6 +22,8 @@ export interface SidebarProps {
   user: { name?: string | null; email?: string | null; image?: string | null };
   authBypass: boolean;
   demoMode?: boolean;
+  /** RUN_SYNC. Hidden without it, since the sync route refuses the call. */
+  canSync?: boolean;
   /** Unread notification count for the /notifications badge. */
   unreadCount?: number;
   nav: NavItem[];
@@ -44,6 +46,7 @@ export function Sidebar({
   user,
   authBypass,
   demoMode = false,
+  canSync = false,
   unreadCount = 0,
   nav,
   isActive,
@@ -183,7 +186,7 @@ export function Sidebar({
         >
           <Upload size={15} /> {!compact && "Import CSV"}
         </button>
-        {!demoMode && <SyncButton variant="sidebar" compact={compact} />}
+        {!demoMode && canSync && <SyncButton variant="sidebar" compact={compact} />}
       </div>
       <nav className={`flex flex-1 flex-col overflow-y-auto py-2 ${compact ? "px-2" : "px-3"}`}>
         {NAV_GROUPS.map((group) => {
