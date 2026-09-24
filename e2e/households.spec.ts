@@ -33,7 +33,7 @@ test("an admin adds a member and denies them a page", async ({ page, browser }) 
   await expect(main.getByText("Household members")).toBeVisible();
 
   // 1. Add the member with a temporary password.
-  await main.getByRole("button", { name: "Add member" }).click();
+  await main.getByRole("button", { name: "New member" }).click();
   await main.getByPlaceholder("Name").fill(MEMBER_NAME);
   await main.getByPlaceholder("Temporary password").fill(MEMBER_TEMP_PASSWORD);
   await main.getByRole("button", { name: "Add member" }).click();
@@ -43,10 +43,13 @@ test("an admin adds a member and denies them a page", async ({ page, browser }) 
   const row = main.locator("li").filter({ has: page.getByTitle("Permissions") }).filter({ hasText: MEMBER_NAME });
   await expect(row).toBeVisible();
 
-  // 2. Block their view of budgets.
+  // 2. Block their view of budgets and their use of the assistant. A member gets
+  // the assistant by default, so blocking it proves the override, not the role.
   await row.getByTitle("Permissions").click();
   const budgets = row.locator("li").filter({ hasText: "View budgets" });
   await budgets.getByRole("button", { name: "Block" }).click();
+  const chat = row.locator("li").filter({ hasText: "Use the finance assistant" });
+  await chat.getByRole("button", { name: "Block" }).click();
   await main.getByRole("button", { name: "Save permissions" }).click();
   await expect(main.getByText("Saved.")).toBeVisible();
 
@@ -70,13 +73,17 @@ test("an admin adds a member and denies them a page", async ({ page, browser }) 
   await memberPage.goto("/budgets");
   await expect(memberPage).toHaveURL(/localhost:3101\/$/);
 
-  // 5. What they still have works.
+  // 5. No way into the assistant - the route would 403 anyway, so the button
+  // going missing is the point.
+  await expect(memberPage.getByRole("button", { name: "Open finance assistant" })).toHaveCount(0);
+
+  // 6. What they still have works.
   await expect(memberNav.getByRole("link", { name: "Transactions" })).toBeVisible();
   await memberPage.goto("/transactions");
   await expect(memberPage).toHaveURL(/\/transactions/);
   await expect(memberPage.locator("main")).toBeVisible();
 
-  // 6. The admin's own session survived all of that untouched.
+  // 7. The admin's own session survived all of that untouched.
   await page.goto("/settings");
   await expect(main.getByText("Household members")).toBeVisible();
   const activity = main.locator("li").filter({ hasText: MEMBER_NAME }).filter({ hasText: "member." });

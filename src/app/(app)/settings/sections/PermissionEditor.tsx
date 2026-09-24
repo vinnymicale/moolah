@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { setMemberCapabilitiesAction } from "@/actions/household";
-import { CAPABILITIES, roleDefaults, type Capability, type HouseholdRoleName } from "@/lib/capabilities";
+import {
+  CAPABILITIES,
+  CAPABILITY_GROUPS,
+  CAPABILITY_LABELS,
+  roleDefaults,
+  type Capability,
+  type HouseholdRoleName,
+} from "@/lib/capabilities";
 
 /**
  * Three states per capability, because a member's effective permission is the
@@ -12,28 +19,11 @@ import { CAPABILITIES, roleDefaults, type Capability, type HouseholdRoleName } f
  */
 type Setting = "default" | "grant" | "deny";
 
-const LABELS: Record<Capability, string> = {
-  VIEW_DASHBOARD: "View dashboard",
-  VIEW_TRANSACTIONS: "View transactions",
-  VIEW_ACCOUNTS: "View accounts",
-  VIEW_BUDGETS: "View budgets",
-  VIEW_GOALS: "View goals",
-  VIEW_DEBT: "View debt",
-  VIEW_RETIREMENT: "View retirement",
-  VIEW_TRENDS: "View trends",
-  VIEW_CALENDAR: "View calendar",
-  VIEW_CATEGORIES: "View categories",
-  VIEW_RULES: "View rules",
-  EDIT_TRANSACTIONS: "Edit transactions",
-  MANAGE_BUDGETS: "Create and edit budgets",
-  MANAGE_CATEGORIES: "Manage categories",
-  MANAGE_RULES: "Manage rules",
-  MANAGE_GOALS: "Manage goals",
-  MANAGE_RECURRING: "Manage recurring items",
-  MANAGE_ACCOUNTS: "Add and edit accounts",
-  RUN_SYNC: "Run bank sync",
-  EXPORT_DATA: "Export data",
-};
+const OPTIONS = ["default", "grant", "deny"] as const;
+
+function optionLabel(option: Setting): string {
+  return option === "default" ? "Default" : option === "grant" ? "Allow" : "Block";
+}
 
 function initialSettings(granted: string[], denied: string[]): Record<string, Setting> {
   const out: Record<string, Setting> = {};
@@ -41,6 +31,35 @@ function initialSettings(granted: string[], denied: string[]): Record<string, Se
     out[c] = denied.includes(c) ? "deny" : granted.includes(c) ? "grant" : "default";
   }
   return out;
+}
+
+function SettingButtons({
+  value,
+  onPick,
+  subtle = false,
+}: {
+  value: Setting | null;
+  onPick: (option: Setting) => void;
+  subtle?: boolean;
+}) {
+  return (
+    <div className="flex shrink-0 gap-1">
+      {OPTIONS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onPick(option)}
+          className={`rounded px-2 py-1 text-xs ${
+            value === option && !subtle
+              ? "bg-surface2 font-medium text-text"
+              : "text-muted hover:text-text"
+          }`}
+        >
+          {optionLabel(option)}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function PermissionEditor({
@@ -61,6 +80,16 @@ export function PermissionEditor({
 
   const defaults = roleDefaults(role);
 
+  const setOne = (cap: Capability, option: Setting) =>
+    setSettings((s) => ({ ...s, [cap]: option }));
+
+  const setGroup = (capabilities: readonly Capability[], option: Setting) =>
+    setSettings((s) => {
+      const next = { ...s };
+      for (const cap of capabilities) next[cap] = option;
+      return next;
+    });
+
   const save = () =>
     start(async () => {
       setError(null);
@@ -76,41 +105,45 @@ export function PermissionEditor({
     });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-xs text-muted">
         Default follows the {role.toLowerCase()} role. Allow or block to override it for this person.
       </p>
 
-      <ul className="divide-y divide-line rounded-lg border border-line">
-        {CAPABILITIES.map((cap) => {
-          const setting = settings[cap];
-          const inherited = defaults.has(cap) ? "allowed" : "blocked";
-          return (
-            <li key={cap} className="flex items-center justify-between gap-3 px-3 py-2">
-              <span className="text-sm">
-                {LABELS[cap]}
-                {setting === "default" && (
-                  <span className="ml-2 text-xs text-muted">({inherited} by role)</span>
-                )}
-              </span>
-              <div className="flex shrink-0 gap-1">
-                {(["default", "grant", "deny"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setSettings((s) => ({ ...s, [cap]: option }))}
-                    className={`rounded px-2 py-1 text-xs ${
-                      setting === option ? "bg-surface2 font-medium text-text" : "text-muted hover:text-text"
-                    }`}
-                  >
-                    {option === "default" ? "Default" : option === "grant" ? "Allow" : "Block"}
-                  </button>
-                ))}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {CAPABILITY_GROUPS.map((group) => {
+        // Only light the group buttons up when the whole group already agrees,
+        // otherwise a mixed group would look like it had been set in bulk.
+        const uniform = group.capabilities.every((c) => settings[c] === settings[group.capabilities[0]]);
+        return (
+          <section key={group.id} className="space-y-1">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-xs font-medium uppercase tracking-wide text-muted">{group.label}</h4>
+              <SettingButtons
+                value={uniform ? settings[group.capabilities[0]] : null}
+                onPick={(option) => setGroup(group.capabilities, option)}
+                subtle={!uniform}
+              />
+            </div>
+            <ul className="divide-y divide-line rounded-lg border border-line">
+              {group.capabilities.map((cap) => {
+                const setting = settings[cap];
+                const inherited = defaults.has(cap) ? "allowed" : "blocked";
+                return (
+                  <li key={cap} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <span className="text-sm">
+                      {CAPABILITY_LABELS[cap]}
+                      {setting === "default" && (
+                        <span className="ml-2 text-xs text-muted">({inherited} by role)</span>
+                      )}
+                    </span>
+                    <SettingButtons value={setting} onPick={(option) => setOne(cap, option)} />
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
 
       <div className="flex items-center gap-3">
         <button onClick={save} disabled={pending} className="btn-primary">

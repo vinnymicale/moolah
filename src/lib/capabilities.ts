@@ -22,8 +22,10 @@ export const CAPABILITIES = [
   "MANAGE_GOALS",
   "MANAGE_RECURRING",
   "MANAGE_ACCOUNTS",
+  "MANAGE_RETIREMENT",
   "RUN_SYNC",
   "EXPORT_DATA",
+  "USE_CHAT",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -42,6 +44,10 @@ const MEMBER_EXTRAS: Capability[] = [
   "MANAGE_BUDGETS",
   "MANAGE_GOALS",
   "MANAGE_RECURRING",
+  "MANAGE_RETIREMENT",
+  // The assistant reads the whole ledger and spends the household's API key, so
+  // a viewer does not get it by virtue of being able to see the same numbers.
+  "USE_CHAT",
 ];
 
 export function isCapability(value: string): value is Capability {
@@ -81,3 +87,55 @@ export function resolveCapabilities(
   for (const c of denied) if (isCapability(c)) caps.delete(c);
   return caps;
 }
+
+export const CAPABILITY_LABELS: Record<Capability, string> = {
+  VIEW_DASHBOARD: "View dashboard",
+  VIEW_TRANSACTIONS: "View transactions",
+  VIEW_ACCOUNTS: "View accounts",
+  VIEW_BUDGETS: "View budgets",
+  VIEW_GOALS: "View goals",
+  VIEW_DEBT: "View debt",
+  VIEW_RETIREMENT: "View retirement",
+  VIEW_TRENDS: "View trends",
+  VIEW_CALENDAR: "View calendar",
+  VIEW_CATEGORIES: "View categories",
+  VIEW_RULES: "View rules",
+  EDIT_TRANSACTIONS: "Edit transactions",
+  MANAGE_BUDGETS: "Create and edit budgets",
+  MANAGE_CATEGORIES: "Manage categories",
+  MANAGE_RULES: "Manage rules",
+  MANAGE_GOALS: "Manage goals",
+  MANAGE_RECURRING: "Manage recurring items",
+  MANAGE_ACCOUNTS: "Add and edit accounts",
+  MANAGE_RETIREMENT: "Edit the retirement plan",
+  RUN_SYNC: "Run bank sync",
+  EXPORT_DATA: "Export data",
+  USE_CHAT: "Use the finance assistant",
+};
+
+/**
+ * How the permission editor lays the capabilities out. Grouping keeps a list of
+ * twenty-odd toggles scannable, and it lives here rather than in the component
+ * so a capability added to CAPABILITIES without a home fails a test instead of
+ * quietly disappearing from the UI.
+ */
+export const CAPABILITY_GROUPS = [
+  { id: "view", label: "Pages", capabilities: VIEWS },
+  {
+    id: "track",
+    label: "Track",
+    capabilities: ["EDIT_TRANSACTIONS", "MANAGE_ACCOUNTS", "MANAGE_RECURRING", "RUN_SYNC"],
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    capabilities: ["MANAGE_BUDGETS", "MANAGE_GOALS", "MANAGE_RETIREMENT"],
+  },
+  { id: "organize", label: "Organize", capabilities: ["MANAGE_CATEGORIES", "MANAGE_RULES"] },
+  { id: "assistant", label: "Assistant", capabilities: ["USE_CHAT"] },
+  { id: "data", label: "Data", capabilities: ["EXPORT_DATA"] },
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  capabilities: readonly Capability[];
+}[];

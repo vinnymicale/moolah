@@ -74,6 +74,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       authBypass={process.env.AUTH_BYPASS === "true"}
       unreadCount={unreadCount}
       canSync={household.can("RUN_SYNC")}
+      canUseChat={household.can("USE_CHAT")}
     >
       {household.can("RUN_SYNC") && <AutoPlaidSync />}
       {children}

@@ -74,8 +74,11 @@ describe("POST /api/chat/confirm", () => {
     expect(commit).not.toHaveBeenCalled();
   });
 
-  it("asks for the capability a hand-edit would need", async () => {
+  // Both, because there is no sense in letting someone commit an AI write they
+  // were never allowed to stage.
+  it("asks for the capabilities staging and hand-editing would need", async () => {
     await POST(post({ staged }));
+    expect(forRoute).toHaveBeenCalledWith("USE_CHAT");
     expect(forRoute).toHaveBeenCalledWith("EDIT_TRANSACTIONS");
   });
 

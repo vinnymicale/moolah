@@ -117,7 +117,7 @@ export async function saveRetirementPlanAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const data = planSchema.parse(input);
     await prisma.retirementPlan.upsert({
       where: { householdId },
@@ -132,7 +132,7 @@ export async function saveRetirementPlanAction(
 export async function completeWizardAction(): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     await prisma.retirementPlan.update({
       where: { householdId },
       data: { completedAt: new Date() },
@@ -144,7 +144,7 @@ export async function completeWizardAction(): Promise<ActionResult> {
 export async function createContributionAction(input: ContributionInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const data = contributionSchema.parse(input);
     await assertOwnsAccount(householdId, data.financialAccountId);
     const date = parseISODay(data.date);
@@ -179,7 +179,7 @@ export async function createContributionAction(input: ContributionInput): Promis
 export async function deleteContributionAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const existing = await prisma.contribution.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Contribution not found");
     await prisma.contribution.delete({ where: { id } });
@@ -190,7 +190,7 @@ export async function deleteContributionAction(id: string): Promise<ActionResult
 export async function createScheduleAction(input: ScheduleInput): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const data = scheduleSchema.parse(input);
     await assertOwnsAccount(householdId, data.financialAccountId);
     await prisma.contributionSchedule.create({
@@ -224,7 +224,7 @@ export async function updateScheduleAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const data = scheduleSchema.parse(input);
     const existing = await prisma.contributionSchedule.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Schedule not found");
@@ -253,7 +253,7 @@ export async function updateScheduleAction(
 export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const existing = await prisma.contributionSchedule.findFirst({ where: { id, householdId } });
     if (!existing) throw new UserError("Schedule not found");
     await prisma.contributionSchedule.update({ where: { id }, data: { archived: true } });
@@ -271,7 +271,7 @@ export async function saveYtdContributionsAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const data = ytdContributionSchema.parse(input);
     await assertOwnsAccount(householdId, data.financialAccountId);
 
@@ -304,7 +304,7 @@ export async function saveYtdContributionsAction(
 export async function clearYtdContributionsAction(year: number): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     await prisma.ytdContribution.deleteMany({ where: { householdId, year } });
     revalidatePaths();
   });
@@ -315,7 +315,7 @@ export async function saveEmployerMatchAction(
 ): Promise<ActionResult> {
   if (isDemoMode()) return { ok: true };
   return run(async () => {
-    const { householdId } = await requireCapability("MANAGE_GOALS");
+    const { householdId } = await requireCapability("MANAGE_RETIREMENT");
     const data = employerMatchSchema.parse(input);
     await assertOwnsAccount(householdId, data.financialAccountId);
     await prisma.employerMatch.upsert({

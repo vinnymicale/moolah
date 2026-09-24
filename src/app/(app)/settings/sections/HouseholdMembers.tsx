@@ -176,7 +176,9 @@ export function HouseholdMembers({ members, viewerIsOwner }: { members: MemberRo
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} className="btn-ghost">
+        /* Its own accessible name, not "Add member": sharing one with the submit
+           button inside the form made either of them ambiguous to reach. */
+        <button onClick={() => setAdding(true)} className="btn-ghost" aria-label="New member">
           <Plus size={14} /> Add member
         </button>
       )}

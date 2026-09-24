@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPABILITIES,
+  CAPABILITY_GROUPS,
+  CAPABILITY_LABELS,
   isCapability,
   resolveCapabilities,
   roleDefaults,
@@ -19,6 +21,12 @@ describe("roleDefaults", () => {
     expect(caps.every((c) => c.startsWith("VIEW_"))).toBe(true);
   });
 
+  // The assistant reads the whole ledger and spends the household's API key, so
+  // looking at a page and interrogating it are deliberately not the same right.
+  it("withholds the assistant from VIEWER", () => {
+    expect(roleDefaults("VIEWER").has("USE_CHAT")).toBe(false);
+  });
+
   it("gives MEMBER views plus everyday edits but not structural management", () => {
     const caps = roleDefaults("MEMBER");
     expect(caps.has("VIEW_TRANSACTIONS")).toBe(true);
@@ -26,6 +34,8 @@ describe("roleDefaults", () => {
     expect(caps.has("MANAGE_BUDGETS")).toBe(true);
     expect(caps.has("MANAGE_GOALS")).toBe(true);
     expect(caps.has("MANAGE_RECURRING")).toBe(true);
+    expect(caps.has("MANAGE_RETIREMENT")).toBe(true);
+    expect(caps.has("USE_CHAT")).toBe(true);
     expect(caps.has("MANAGE_CATEGORIES")).toBe(false);
     expect(caps.has("MANAGE_RULES")).toBe(false);
     expect(caps.has("MANAGE_ACCOUNTS")).toBe(false);
@@ -68,5 +78,17 @@ describe("isCapability", () => {
   it("accepts a known capability and rejects anything else", () => {
     expect(isCapability("VIEW_DASHBOARD")).toBe(true);
     expect(isCapability("VIEW_NONSENSE")).toBe(false);
+  });
+});
+
+describe("CAPABILITY_GROUPS", () => {
+  it("places every capability in exactly one group", () => {
+    const seen = CAPABILITY_GROUPS.flatMap((g) => [...g.capabilities]);
+    expect([...seen].sort()).toEqual([...CAPABILITIES].sort());
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  it("labels every capability", () => {
+    for (const cap of CAPABILITIES) expect(CAPABILITY_LABELS[cap]).toBeTruthy();
   });
 });
