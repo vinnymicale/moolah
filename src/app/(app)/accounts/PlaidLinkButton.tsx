@@ -272,7 +272,20 @@ function ManageAccountsButton({
 
 // ── Connected banks list ─────────────────────────────────────────────────────
 
-export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
+export function PlaidItemsList({
+  items,
+  canManageAccounts,
+  canSync,
+  canDedup,
+}: {
+  items: PlaidItemDTO[];
+  /** MANAGE_ACCOUNTS: add accounts, reconnect, disconnect. */
+  canManageAccounts: boolean;
+  /** RUN_SYNC: per-bank sync and re-import all. */
+  canSync: boolean;
+  /** EDIT_TRANSACTIONS: the duplicate finder removes transactions. */
+  canDedup: boolean;
+}) {
   const router = useRouter();
   const [syncing, setSyncing] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -346,23 +359,27 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <Building2 size={18} className="text-brand" />
         <h2 className="font-semibold">Connected banks</h2>
-        <button
-          onClick={() => setDedupOpen(true)}
-          className="btn-ghost ml-auto h-8 text-xs"
-          title="Find and remove duplicate transactions"
-        >
-          <Copy size={14} />
-          Find duplicates
-        </button>
-        <button
-          onClick={() => setConfirmReimport(true)}
-          disabled={reimporting}
-          className="btn-ghost h-8 text-xs"
-          title="Re-pull all transactions from your connected banks"
-        >
-          {reimporting ? <Loader2 size={14} className="animate-spin" /> : <DownloadCloud size={14} />}
-          Re-import all
-        </button>
+        {canDedup && (
+          <button
+            onClick={() => setDedupOpen(true)}
+            className="btn-ghost ml-auto h-8 text-xs"
+            title="Find and remove duplicate transactions"
+          >
+            <Copy size={14} />
+            Find duplicates
+          </button>
+        )}
+        {canSync && (
+          <button
+            onClick={() => setConfirmReimport(true)}
+            disabled={reimporting}
+            className={`btn-ghost h-8 text-xs${canDedup ? "" : " ml-auto"}`}
+            title="Re-pull all transactions from your connected banks"
+          >
+            {reimporting ? <Loader2 size={14} className="animate-spin" /> : <DownloadCloud size={14} />}
+            Re-import all
+          </button>
+        )}
       </div>
 
       {error && (
@@ -389,16 +406,21 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <ManageAccountsButton
-                  itemId={item.id}
-                  disabled={syncing === item.id || disconnecting === item.id}
-                  onDone={(message) => toast({ message })}
-                />
-                <ReconnectButton
-                  itemId={item.id}
-                  disabled={syncing === item.id || disconnecting === item.id}
-                  onDone={(message) => toast({ message })}
-                />
+                {canManageAccounts && (
+                  <>
+                    <ManageAccountsButton
+                      itemId={item.id}
+                      disabled={syncing === item.id || disconnecting === item.id}
+                      onDone={(message) => toast({ message })}
+                    />
+                    <ReconnectButton
+                      itemId={item.id}
+                      disabled={syncing === item.id || disconnecting === item.id}
+                      onDone={(message) => toast({ message })}
+                    />
+                  </>
+                )}
+                {canSync && (
                 <button
                   onClick={() => void sync(item.id)}
                   disabled={syncing === item.id}
@@ -410,6 +432,8 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                     : <RefreshCw size={14} />}
                   Sync
                 </button>
+                )}
+                {canManageAccounts && (
                 <button
                   onClick={() => setConfirmDisconnect(item)}
                   disabled={disconnecting === item.id}
@@ -421,6 +445,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemDTO[] }) {
                     ? <Loader2 size={14} className="animate-spin" />
                     : <Trash2 size={14} />}
                 </button>
+                )}
               </div>
             </div>
 

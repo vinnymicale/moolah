@@ -37,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           categories={DEMO_CATEGORIES}
           authBypass
           demoMode
+          canSync
         >
           {children}
         </AppChrome>
@@ -72,6 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       categories={categories}
       authBypass={process.env.AUTH_BYPASS === "true"}
       unreadCount={unreadCount}
+      canSync={household.can("RUN_SYNC")}
     >
       {household.can("RUN_SYNC") && <AutoPlaidSync />}
       {children}
