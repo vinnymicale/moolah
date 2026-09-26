@@ -14,3 +14,4 @@ export * from "./plaid";
 export * from "./goals";
 export * from "./insights";
 export * from "./tags";
+export * from "./card-rewards";
