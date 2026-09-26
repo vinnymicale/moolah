@@ -1,0 +1,35 @@
+import {
+  CreditCard,
+  Fuel,
+  Hammer,
+  Package,
+  Pill,
+  Plane,
+  PlugZap,
+  ShoppingCart,
+  Ticket,
+  TrainFront,
+  Tv,
+  Utensils,
+  Warehouse,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+import type { RankCategory } from "@/lib/card-rewards/rank";
+
+export const CATEGORY_ICONS: Record<RankCategory, LucideIcon> = {
+  DINING: Utensils,
+  GROCERIES: ShoppingCart,
+  GAS: Fuel,
+  EV_CHARGING: PlugZap,
+  TRAVEL: Plane,
+  TRANSIT: TrainFront,
+  STREAMING: Tv,
+  DRUGSTORES: Pill,
+  ONLINE_SHOPPING: Package,
+  WAREHOUSE_CLUBS: Warehouse,
+  HOME_IMPROVEMENT: Hammer,
+  ENTERTAINMENT: Ticket,
+  UTILITIES: Zap,
+  EVERYTHING_ELSE: CreditCard,
+};
