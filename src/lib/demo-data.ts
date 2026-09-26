@@ -394,6 +394,8 @@ function txn(
     effectiveTransfer: false,
     recurringRuleId,
     plaidTransactionId: null,
+    merchantLogoUrl: null,
+    merchantWebsite: null,
     splits: [],
     tags: [],
     attachments: [],

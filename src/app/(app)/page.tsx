@@ -14,6 +14,7 @@ import { formatUSD } from "@/lib/money";
 import { categoryColor } from "@/lib/colors";
 import { budgetStatus } from "@/lib/reports";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { TxnAvatar } from "@/components/TxnAvatar";
 import { Amount } from "@/components/Amount";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { PageHeader, StatCard, toneTextClass, type Tone } from "@/components/ui-bits";
@@ -299,9 +300,7 @@ export default async function DashboardPage() {
                 const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
                 return (
                   <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}>
-                      <CategoryIcon name={cat?.icon ?? "tag"} size={15} />
-                    </span>
+                    <TxnAvatar logoUrl={t.merchantLogoUrl} cat={cat} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {t.description}

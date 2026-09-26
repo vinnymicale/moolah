@@ -418,6 +418,9 @@ model Transaction {
   plaidTransactionId    String? @unique
   plaidPrimaryCategory  String?
   plaidDetailedCategory String?
+  // Merchant branding from Plaid, shown in place of the category icon.
+  merchantLogoUrl       String?
+  merchantWebsite       String?
 
   // Transfer pairing: a CC payment leaving checking linked to the matching
   // credit on the card. Both sides are excluded from income/expense totals.
