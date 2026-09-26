@@ -108,3 +108,20 @@ test.describe("transaction modal", () => {
     await expect(page.getByRole("dialog")).toBeVisible();
   });
 });
+
+test.describe("card rewards", () => {
+  test("ranks cards by category and toggles raw rates", async ({ page }) => {
+    await page.goto("/accounts/rewards");
+    await dismissWelcome(page);
+    const main = page.getByRole("main");
+    await expect(main.getByRole("heading", { name: "Best card by category" })).toBeVisible();
+    await expect(main.getByText("Everything else", { exact: true })).toBeVisible();
+
+    const raw = main.getByRole("button", { name: "Raw", exact: true });
+    // Retry the click in case it lands before hydration.
+    await expect(async () => {
+      await raw.click();
+      await expect(raw).toHaveAttribute("aria-pressed", "true", { timeout: 1000 });
+    }).toPass();
+  });
+});
