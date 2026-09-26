@@ -107,6 +107,8 @@ model Household {
   contributionSchedules ContributionSchedule[]
   ytdContributions      YtdContribution[]
   employerMatches       EmployerMatch[]
+  cardRewardProfiles    CardRewardProfile[]
+  cardCapProgress       CardCapProgress[]
 
   @@index([ownerId])
 }
@@ -275,6 +277,7 @@ model FinancialAccount {
   contributionSchedules ContributionSchedule[]
   employerMatch         EmployerMatch?
   ytdContributions      YtdContribution[]
+  cardRewardProfile     CardRewardProfile?
 
   @@index([householdId])
 }
@@ -954,5 +957,57 @@ model EmployerMatch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([householdId])
+}
+
+enum RewardCurrency {
+  CASH
+  POINTS
+  MILES
+}
+
+// Reward rates for one credit card. rules and rotating are JSON validated by
+// the Zod schemas in src/lib/card-rewards/types.ts.
+model CardRewardProfile {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  financialAccountId String           @unique
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
+
+  catalogCardId String?
+  currency      RewardCurrency @default(CASH)
+  programName   String?
+  centsPerPoint Decimal        @default(1) @db.Decimal(6, 3)
+  baseRate      Decimal        @default(1) @db.Decimal(6, 3)
+  rules         Json           @default("[]")
+  rotating      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  capProgress CardCapProgress[]
+
+  @@index([householdId])
+}
+
+// Spend toward a cap in one period, typed in by hand. A new period has no row,
+// so progress starts over at zero on its own.
+model CardCapProgress {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  profileId String
+  profile   CardRewardProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  capKey      String
+  periodStart DateTime
+  spent       Decimal  @default(0) @db.Decimal(14, 2)
+  activated   Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([profileId, capKey, periodStart])
   @@index([householdId])
 }
