@@ -3,6 +3,7 @@ import { getNetWorth, getSnapshots, getPlaidItems } from "@/lib/queries";
 import { formatUSD } from "@/lib/money";
 import { PageHeader, StatCard } from "@/components/ui-bits";
 import { AccountsManager } from "./AccountsManager";
+import { AccountsTabs } from "./AccountsTabs";
 import { PlaidConnectButton, PlaidItemsList } from "./PlaidLinkButton";
 import { DEMO_ACCOUNTS, buildDemoSnapshots } from "@/lib/demo-data";
 import { hasPlaidConfig } from "@/lib/plaid";
@@ -17,6 +18,7 @@ export default async function AccountsPage() {
     return (
       <div className="mx-auto max-w-5xl">
         <PageHeader title="Accounts & Net Worth" subtitle="Everything you own and owe, in one place." />
+        <AccountsTabs active="accounts" />
         <div className="mb-5 grid gap-4 sm:grid-cols-3">
           <StatCard label="Net Worth" value={formatUSD(assets - liabilities)} tone="brand" />
           <StatCard label="Assets" value={formatUSD(assets)} tone="income" />
@@ -42,6 +44,7 @@ export default async function AccountsPage() {
         subtitle="Everything you own and owe, in one place."
         action={hasPlaid && can("MANAGE_ACCOUNTS") ? <PlaidConnectButton /> : undefined}
       />
+      <AccountsTabs active="accounts" />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <StatCard label="Net Worth" value={formatUSD(netWorth.net)} tone="brand" />
