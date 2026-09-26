@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Info } from "lucide-react";
+import { formatUSDWhole } from "@/lib/money";
 
 export type Tone = "default" | "income" | "expense" | "brand";
 
@@ -124,5 +125,34 @@ export function Dot({ color, size = 10 }: { color: string; size?: number }) {
       className="inline-block shrink-0 rounded-full"
       style={{ backgroundColor: color, width: size, height: size }}
     />
+  );
+}
+
+/** A labeled "used / limit" progress bar, shared by retirement limits and card reward caps. */
+export function CapBar({
+  label,
+  used,
+  limit,
+  hint,
+}: {
+  label: React.ReactNode;
+  used: number;
+  limit: number;
+  hint?: React.ReactNode;
+}) {
+  const percent = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span>{label}</span>
+        <span className="text-muted">
+          {formatUSDWhole(used)} / {formatUSDWhole(limit)}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-surface2">
+        <div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} />
+      </div>
+      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+    </div>
   );
 }

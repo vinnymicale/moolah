@@ -23,6 +23,7 @@ const GATES: Record<string, string[]> = {
   "import.ts": ["EDIT_TRANSACTIONS"],
   "tags.ts": ["EDIT_TRANSACTIONS"],
   "retirement.ts": ["MANAGE_RETIREMENT"],
+  "card-rewards.ts": ["MANAGE_ACCOUNTS"],
 };
 
 function read(file: string): string {

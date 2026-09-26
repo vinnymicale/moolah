@@ -1,4 +1,5 @@
 import { formatUSDWhole } from "@/lib/money";
+import { CapBar } from "@/components/ui-bits";
 import type { ContributionLimitReport, LimitUsage, MatchResult } from "@/lib/contribution-limits";
 import type { RetirementAccountDTO, YtdContributionDTO } from "@/lib/queries/retirement";
 import { YtdContributionForm } from "./YtdContributionForm";
@@ -28,22 +29,7 @@ function describeFormula(match: MatchResult): string {
 }
 
 function LimitBar({ usage }: { usage: LimitUsage }) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
-        <span>{usage.label}</span>
-        <span className="text-muted">
-          {formatUSDWhole(usage.used)} / {formatUSDWhole(usage.limit)}
-        </span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-surface2">
-        <div
-          className="h-full rounded-full bg-brand"
-          style={{ width: `${Math.min(100, usage.percentUsed)}%` }}
-        />
-      </div>
-    </div>
-  );
+  return <CapBar label={usage.label} used={usage.used} limit={usage.limit} />;
 }
 
 export function ContributionLimits({

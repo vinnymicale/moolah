@@ -16,6 +16,10 @@ import type {
 } from "@/lib/queries/notifications";
 import type { RecurringSuggestion } from "@/lib/recurring-suggestions";
 import type { BudgetSuggestionsDTO } from "@/lib/budget-suggestions";
+import type { RewardCardDTO } from "@/lib/queries/card-rewards";
+import { findCatalogCard } from "@/lib/card-rewards/catalog";
+import { isoDay, periodStart, type CapProgressDTO } from "@/lib/card-rewards/rank";
+import { ROTATING_CAP_KEY } from "@/lib/card-rewards/types";
 
 // ---------------------------------------------------------------------------
 // Date helpers (UTC)
@@ -144,6 +148,54 @@ export const DEMO_ACCOUNTS: AccountDTO[] = [
     lastPaymentAmount: 980,
     lastPaymentDate: day(18, -1),
     nextPaymentDueDate: day(18),
+    isOverdue: false,
+  },
+  {
+    id: "acct-cc-flex",
+    name: "Freedom Flex",
+    type: "CREDIT_CARD",
+    institution: "Chase",
+    currentBalance: 312.45,
+    isAsset: false,
+    includeInCash: false,
+    includeInNetWorth: true,
+    includeInDebtPlanner: true,
+    color: "#0ea5e9",
+    archived: false,
+    interestRate: 21.49,
+    minimumPayment: 25,
+    termMonths: null,
+    originationDate: null,
+    creditLimit: 5000,
+    lastStatementBalance: 268.1,
+    lastStatementDate: day(12, -1),
+    lastPaymentAmount: 268.1,
+    lastPaymentDate: day(8),
+    nextPaymentDueDate: day(8, 1),
+    isOverdue: false,
+  },
+  {
+    id: "acct-cc-dc",
+    name: "Double Cash",
+    type: "CREDIT_CARD",
+    institution: "Citi",
+    currentBalance: 187.9,
+    isAsset: false,
+    includeInCash: false,
+    includeInNetWorth: true,
+    includeInDebtPlanner: true,
+    color: "#64748b",
+    archived: false,
+    interestRate: 21.49,
+    minimumPayment: 25,
+    termMonths: null,
+    originationDate: null,
+    creditLimit: 6500,
+    lastStatementBalance: 142.75,
+    lastStatementDate: day(12, -1),
+    lastPaymentAmount: 142.75,
+    lastPaymentDate: day(8),
+    nextPaymentDueDate: day(8, 1),
     isOverdue: false,
   },
   {
@@ -632,6 +684,8 @@ export function buildDemoSnapshots(): SnapshotDTO[] {
     { id: "acct-savings", current: 18400, isAsset: true },
     { id: "acct-checking", current: 5240.5, isAsset: true },
     { id: "acct-cc", current: 1284.32, isAsset: false },
+    { id: "acct-cc-flex", current: 312.45, isAsset: false },
+    { id: "acct-cc-dc", current: 187.9, isAsset: false },
   ];
   const out: SnapshotDTO[] = [];
   for (const acc of snapshotAccounts) {
@@ -765,5 +819,47 @@ export const DEMO_NOTIFICATIONS: NotificationDTO[] = [
     readAt: agoISO(60 * 71),
     deliveryStatus: "in_app",
     deliveryError: null,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Card rewards
+// ---------------------------------------------------------------------------
+
+function demoRewardCard(accountId: string, catalogCardId: string): RewardCardDTO {
+  const account = DEMO_ACCOUNTS.find((a) => a.id === accountId)!;
+  const card = findCatalogCard(catalogCardId)!;
+  return {
+    accountId,
+    name: account.name,
+    color: account.color,
+    institution: account.institution,
+    officialName: `${card.issuer} ${card.name}`,
+    profile: {
+      id: `rewards-${accountId}`,
+      catalogCardId: card.id,
+      currency: card.currency,
+      programName: card.programName ?? null,
+      centsPerPoint: card.defaultCentsPerPoint,
+      baseRate: card.baseRate,
+      rules: card.rules,
+      rotating: card.rotating ?? null,
+    },
+  };
+}
+
+export const DEMO_REWARD_CARDS: RewardCardDTO[] = [
+  demoRewardCard("acct-cc-dc", "citi-double-cash"),
+  demoRewardCard("acct-cc-flex", "chase-freedom-flex"),
+  demoRewardCard("acct-cc", "chase-sapphire-preferred"),
+];
+
+export const DEMO_CAP_PROGRESS: CapProgressDTO[] = [
+  {
+    profileId: "rewards-acct-cc-flex",
+    capKey: ROTATING_CAP_KEY,
+    periodStart: isoDay(periodStart("QUARTER", new Date())),
+    spent: 600,
+    activated: true,
   },
 ];

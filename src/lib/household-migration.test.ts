@@ -55,7 +55,8 @@ describe("household backfill", () => {
   it("renames and rewrites userId for every household-scoped model", () => {
     // HouseholdMember and AuditLog are new tables, not renamed ones; the child
     // tables inherit scope through a parent relation and have no column here.
-    const exempt = new Set(["HouseholdMember", "AuditLog"]);
+    // Tables added after households shipped are born with householdId.
+    const exempt = new Set(["HouseholdMember", "AuditLog", "CardRewardProfile", "CardCapProgress"]);
     const missing = householdScopedModels()
       .filter((m) => !exempt.has(m))
       .filter(
