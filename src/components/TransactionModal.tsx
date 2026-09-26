@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Copy } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import { Modal } from "./Modal";
 import { RecurringLinkSection, type PendingLink } from "./RecurringLinkSection";
 import { SplitEditor, EMPTY_SPLITS, type SplitRow } from "./SplitEditor";
@@ -55,6 +55,7 @@ export function TransactionModal(props: TransactionModalProps) {
   const tagsManaged = tags !== undefined;
   const editing = !!transaction;
   const alreadyRecurring = !!transaction?.recurringRuleId;
+  const merchantSite = siteLink(transaction?.merchantWebsite);
 
   // Category splits, seeded from the existing transaction when it was split.
   const initialSplits: SplitRow[] = (transaction?.splits ?? []).map((s) => ({
@@ -269,6 +270,17 @@ export function TransactionModal(props: TransactionModalProps) {
             onChange={(e) => set("description", e.target.value)}
             placeholder={form.type === "EXPENSE" ? "e.g. Groceries at Costco" : "e.g. Paycheck"}
           />
+          {merchantSite && (
+            <a
+              href={merchantSite.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-muted hover:text-text"
+            >
+              <ExternalLink size={12} />
+              {merchantSite.host}
+            </a>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -415,4 +427,16 @@ export function TransactionModal(props: TransactionModalProps) {
       </div>
     </Modal>
   );
+}
+
+/** Plaid websites come as bare domains or full URLs; only http(s) ones are linked. */
+function siteLink(website: string | null | undefined): { href: string; host: string } | null {
+  if (!website) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(website) ? website : `https://${website}`);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return { href: url.href, host: url.hostname.replace(/^www\./, "") };
+  } catch {
+    return null;
+  }
 }

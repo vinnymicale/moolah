@@ -77,6 +77,30 @@ export function plaidCategoryToName(primaryCategory: string, detailCategory?: st
 const TOKEN_NOISE = new Set(["ach", "the", "and", "from", "purchase", "payment", "withdrawal", "autopay", "early", "pay"]);
 
 /** Tokenise a description to meaningful lowercase words (length >= 3). */
+type BrandingSource = {
+  logo_url?: string | null;
+  website?: string | null;
+  counterparties?: { type: string; logo_url: string | null; website: string | null }[] | null;
+};
+
+/**
+ * Merchant logo and website for a Plaid transaction. Plaid often leaves the
+ * top-level fields empty and puts them on a counterparty instead, so fall back
+ * to the merchant counterparty, then any counterparty that has branding. The
+ * logo ends up in an <img src>, so only https URLs are kept.
+ */
+export function merchantBranding(txn: BrandingSource): { merchantLogoUrl: string | null; merchantWebsite: string | null } {
+  const cps = txn.counterparties ?? [];
+  const cp =
+    cps.find((c) => c.type === "merchant" && (c.logo_url || c.website)) ??
+    cps.find((c) => c.logo_url || c.website);
+  const logo = txn.logo_url || cp?.logo_url || null;
+  return {
+    merchantLogoUrl: logo && logo.startsWith("https://") ? logo : null,
+    merchantWebsite: txn.website || cp?.website || null,
+  };
+}
+
 /** Plaid dates are bare YYYY-MM-DD strings; pin them to UTC midnight. */
 export function plaidDay(s: string | null | undefined): Date | null {
   return s ? new Date(`${s}T00:00:00Z`) : null;
@@ -313,6 +337,7 @@ export async function syncPlaidItem(
       const detailCat = txn.personal_finance_category?.detailed ?? "";
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const rawDescription = txn.merchant_name ?? txn.name;
+      const branding = merchantBranding(txn);
 
       const effect = evaluateRules(
         { description: rawDescription, amountDollars: amount, accountId: linked.financialAccountId, type },
@@ -369,8 +394,8 @@ export async function syncPlaidItem(
       const row = await prisma.transaction.upsert({
         where: { plaidTransactionId: txn.transaction_id },
         update: opts?.recategorizeOnly
-          ? { amount, description, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
-          : { amount, description, date: txnDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
+          ? { amount, description, date: txnDate, type, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null, ...branding }
+          : { amount, description, date: txnDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null, ...branding },
         create: {
           householdId: item.householdId,
           accountId: linked.financialAccountId,
@@ -385,6 +410,7 @@ export async function syncPlaidItem(
           recurringRuleId,
           plaidPrimaryCategory: primaryCat || null,
           plaidDetailedCategory: detailCat || null,
+          ...branding,
         },
       });
       if (!opts?.recategorizeOnly) newTxnIds.push(row.id);
@@ -443,6 +469,7 @@ export async function syncPlaidItem(
       const catName = plaidCategoryToName(primaryCat, detailCat);
       const modDate = parseISODay(txn.authorized_date ?? txn.date);
       const rawModDesc = txn.merchant_name ?? txn.name;
+      const modBranding = merchantBranding(txn);
       const modEffect = evaluateRules(
         { description: rawModDesc, amountDollars: amount, accountId: linked.financialAccountId, type },
         automationRules,
@@ -460,8 +487,8 @@ export async function syncPlaidItem(
       await prisma.transaction.updateMany({
         where: { plaidTransactionId: txn.transaction_id, householdId: item.householdId },
         data: opts?.recategorizeOnly
-          ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null }
-          : { amount, description: modDesc, date: modDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null },
+          ? { amount, description: modDesc, date: modDate, type, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null, ...modBranding }
+          : { amount, description: modDesc, date: modDate, type, categoryId, isTransfer, cleared: !txn.pending, recurringRuleId: modRuleId, plaidPrimaryCategory: primaryCat || null, plaidDetailedCategory: detailCat || null, ...modBranding },
       });
 
       const modTagIds = (modEffect.addTagIds ?? []).filter((id) => liveTagIds.has(id));

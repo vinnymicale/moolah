@@ -31,6 +31,8 @@ export interface TransactionDTO {
   effectiveTransfer: boolean;
   recurringRuleId: string | null;
   plaidTransactionId: string | null;
+  merchantLogoUrl: string | null;
+  merchantWebsite: string | null;
   /** Per-category split parts. Empty when the transaction has a single category. */
   splits: TransactionSplitDTO[];
   tags: { id: string; name: string; color: string }[];
@@ -164,6 +166,8 @@ function toTransactionDTO(t: TransactionRow): TransactionDTO {
     }),
     recurringRuleId: t.recurringRuleId,
     plaidTransactionId: t.plaidTransactionId,
+    merchantLogoUrl: t.merchantLogoUrl,
+    merchantWebsite: t.merchantWebsite,
     splits: t.splits.map((s) => ({ categoryId: s.categoryId, amount: toNumber(s.amount) })),
     tags: t.tags.map((x) => ({ id: x.id, name: x.name, color: x.color })),
     attachments: t.attachments.map((a) => ({ id: a.id, filename: a.filename, mimeType: a.mimeType, size: a.size })),

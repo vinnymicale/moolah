@@ -10,7 +10,7 @@ import {
 import { TransactionModal } from "@/components/TransactionModal";
 import { TrashDrawer } from "./TrashDrawer";
 import { DedupModal } from "../accounts/PlaidLinkButton";
-import { CategoryIcon } from "@/components/CategoryIcon";
+import { TxnAvatar } from "@/components/TxnAvatar";
 import { FilterSidebar, type FilterGroup } from "./FilterSidebar";
 import { formatUSD } from "@/lib/money";
 import { monthLabel, formatMonthDayYear } from "@/lib/dates";
@@ -23,7 +23,6 @@ import {
 } from "@/actions/transactions";
 import { createTagAction } from "@/actions/tags";
 import type { AccountDTO, CategoryDTO, TagDTO, TransactionDTO, TransactionsPageDTO } from "@/lib/queries";
-import { categoryColor } from "@/lib/colors";
 import { toggleInSet } from "@/lib/collections";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { Amount } from "@/components/Amount";
@@ -764,12 +763,7 @@ export function TransactionsList({
                     onClick={() => setEditing(t)}
                     className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 text-left"
                   >
-                    <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: `${categoryColor(cat)}22`, color: categoryColor(cat) }}
-                    >
-                      <CategoryIcon name={cat?.icon ?? "tag"} size={16} />
-                    </span>
+                    <TxnAvatar logoUrl={t.merchantLogoUrl} cat={cat} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">
                         {t.description}

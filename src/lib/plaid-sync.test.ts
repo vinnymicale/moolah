@@ -9,6 +9,7 @@ import {
   plaidDay,
   parseLoanTerm,
   monthsBetweenDays,
+  merchantBranding,
   type MatchableRule,
 } from "./plaid-sync";
 import { parseISODay } from "./dates";
@@ -248,5 +249,45 @@ describe("monthsBetweenDays", () => {
   it("returns null for a payoff date at or before origination", () => {
     expect(monthsBetweenDays(plaidDay("2026-01-01"), plaidDay("2026-01-01"))).toBeNull();
     expect(monthsBetweenDays(plaidDay("2026-01-01"), plaidDay("2020-01-01"))).toBeNull();
+  });
+});
+
+describe("merchantBranding", () => {
+  const cp = (over: Record<string, unknown>) => ({ name: "X", type: "merchant", website: null, logo_url: null, ...over });
+
+  it("uses the transaction's own logo and website", () => {
+    expect(
+      merchantBranding({ logo_url: "https://logos.example/a.png", website: "starbucks.com", counterparties: [] }),
+    ).toEqual({ merchantLogoUrl: "https://logos.example/a.png", merchantWebsite: "starbucks.com" });
+  });
+
+  it("falls back to a merchant counterparty, preferring it over other types", () => {
+    expect(
+      merchantBranding({
+        logo_url: null,
+        website: null,
+        counterparties: [
+          cp({ type: "payment_terminal", logo_url: "https://logos.example/square.png", website: "squareup.com" }),
+          cp({ type: "merchant", logo_url: "https://logos.example/cafe.png", website: "cafe.com" }),
+        ],
+      }),
+    ).toEqual({ merchantLogoUrl: "https://logos.example/cafe.png", merchantWebsite: "cafe.com" });
+  });
+
+  it("uses any counterparty with branding when there is no merchant", () => {
+    expect(
+      merchantBranding({
+        counterparties: [cp({ type: "payment_app", logo_url: "https://logos.example/venmo.png", website: "venmo.com" })],
+      }),
+    ).toEqual({ merchantLogoUrl: "https://logos.example/venmo.png", merchantWebsite: "venmo.com" });
+  });
+
+  it("drops non-https logo urls", () => {
+    expect(merchantBranding({ logo_url: "javascript:alert(1)", website: null }).merchantLogoUrl).toBeNull();
+    expect(merchantBranding({ logo_url: "http://logos.example/a.png" }).merchantLogoUrl).toBeNull();
+  });
+
+  it("returns nulls when Plaid sends nothing", () => {
+    expect(merchantBranding({})).toEqual({ merchantLogoUrl: null, merchantWebsite: null });
   });
 });
