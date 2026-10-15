@@ -40,7 +40,7 @@ export function DayEventsModal({
           return (
             <button
               key={due.accountId}
-              onClick={() => { onCcDue(due); onClose(); }}
+              onClick={() => onCcDue(due)}
               className="flex w-full items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-left hover:bg-warning/20"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning/20 text-warning">
@@ -65,7 +65,7 @@ export function DayEventsModal({
           return (
             <button
               key={e.id}
-              onClick={() => { onEvent(e); onClose(); }}
+              onClick={() => onEvent(e)}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface2 ${e.isVirtual ? "opacity-60" : ""}`}
             >
               <span
